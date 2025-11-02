@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { useState } from "react";
-import { Clock, CheckCircle, AlertCircle, Database, User, X } from "lucide-react";
+import { Clock, CheckCircle, AlertCircle, Database, User, X, ChevronDown, ChevronUp } from "lucide-react";
 import { Race, Candidate, Party, getFieldValue, isFieldOverridden, FieldOverride, revertOverride } from "../types/election";
 import { InlineTextEdit, InlineNumberEdit, InlineSelectEdit, InlineBooleanEdit } from "./InlineEditField";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -71,6 +71,7 @@ const getPartyColor = (partyCode: string, parties?: Party[]): string => {
 
 export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
   const [editingImageCandidate, setEditingImageCandidate] = useState<string | null>(null);
+  const [showAllCandidates, setShowAllCandidates] = useState(false);
   
   const statusValue = getFieldValue(race.status);
   const titleValue = getFieldValue(race.title);
@@ -344,6 +345,10 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
     return bVotes - aVotes;
   });
 
+  // Show only first 3 candidates when collapsed
+  const visibleCandidates = showAllCandidates ? sortedCandidates : sortedCandidates.slice(0, 3);
+  const hasMoreCandidates = sortedCandidates.length > 3;
+
   // Check if race has any overrides
   const hasOverrides = isFieldOverridden(race.title) || 
                       isFieldOverridden(race.office) ||
@@ -480,7 +485,7 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-2">
-          {sortedCandidates.map((candidate) => {
+          {visibleCandidates.map((candidate) => {
             const candidateName = getFieldValue(candidate.name);
             const candidateParty = getFieldValue(candidate.party);
             const candidateVotes = getFieldValue(candidate.votes);
@@ -622,6 +627,30 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
               </div>
             );
           })}
+          
+          {/* Expand/Collapse Button */}
+          {hasMoreCandidates && (
+            <div className="flex justify-center pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowAllCandidates(!showAllCandidates)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {showAllCandidates ? (
+                  <>
+                    <ChevronUp className="h-4 w-4 mr-1" />
+                    Show Less
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-4 w-4 mr-1" />
+                    Show {sortedCandidates.length - 3} More
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </div>
         <div className="pt-2 border-t text-sm text-muted-foreground">
           <div className="flex justify-between">
