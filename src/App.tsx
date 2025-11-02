@@ -11,6 +11,7 @@ import { FeedsDashboardWithSupabase } from "./components/FeedsDashboardWithSupab
 import { AgentsDashboard } from "./components/AgentsDashboard";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
+import { MediaLibrary } from "./components/MediaLibrary";
 import { electionData as importedElectionData, initializeElectionData, isElectionDataLoading } from "./data/electionData";
 import { WeatherDataViewer } from "./components/WeatherDataViewer";
 import { mockFinanceData } from "./data/mockFinanceData";
@@ -27,13 +28,13 @@ import { WeatherLocationWithOverrides } from "./types/weather";
 import { NewsArticleWithOverrides } from "./types/news";
 import { Feed, FeedCategory } from "./types/feeds";
 import { Agent } from "./types/agents";
-import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2 } from "lucide-react";
+import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2, ImageIcon } from "lucide-react";
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
 import { useSportsData } from "./utils/useSportsData";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections';
+type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -451,6 +452,14 @@ export default function App() {
         <Bot className="w-4 h-4" />
         Agents
       </Button>
+      <Button
+        variant={currentView === 'media' ? 'default' : 'outline'}
+        onClick={() => handleNavigate('media')}
+        className="gap-2"
+      >
+        <ImageIcon className="w-4 h-4" />
+        Media
+      </Button>
     </div>
   );
 
@@ -644,6 +653,7 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+
       </div>
     </div>
   );
@@ -742,6 +752,12 @@ export default function App() {
         );
       case 'ai-connections':
         return <AIConnectionsDashboard />;
+      case 'media':
+        return (
+          <MediaLibrary
+            onNavigate={(view) => console.log('Navigate to:', view)}
+          />
+        );
       default:
         return renderHome();
     }

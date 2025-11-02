@@ -10,11 +10,11 @@ import {
   Users,
   Zap,
   Cloud,
+  ImageIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
-import emergentLogoLight from "figma:asset/20334eb2086a808e1c7c668081077eef8119e571.png";
-import emergentLogoDark from "../assets/3fa0a84e-77b1-44d5-a1ed-1ccef7d48f9b.png";
+import emergentLogo from "figma:asset/14eb232dfd8c5b46f028102fb55aac1720da01bb.png";
 import { User, Role, Permission } from "../types/users";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
 
@@ -54,8 +54,8 @@ export function TopMenuBar({
 
   // Branding Configuration
   const branding: BrandingConfig = {
-    logoLight: emergentLogoLight,
-    logoDark: emergentLogoDark,
+    logoLight: emergentLogo,
+    logoDark: emergentLogo,
     logoAlt: "EMERGENT",
     appIcon: (
       <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
@@ -93,6 +93,7 @@ export function TopMenuBar({
         items: [
           { id: 'agents', label: 'Agents', onClick: () => onNavigate('agents') },
           { id: 'feeds', label: 'Data Feeds', onClick: () => onNavigate('feeds') },
+          { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media') },
         ],
       },
     ],

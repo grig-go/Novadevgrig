@@ -7,8 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
 import { Upload, AlertTriangle } from "lucide-react";
 import uploadIcon from 'figma:asset/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
-import { createClient } from '@jsr/supabase__supabase-js';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 
 interface EditImageDialogProps {
   isOpen: boolean;
@@ -65,11 +64,7 @@ export function EditImageDialog({
       if (file) {
         setIsUploading(true);
         try {
-          // Initialize Supabase client
-          const supabase = createClient(
-            `https://${projectId}.supabase.co`,
-            publicAnonKey
-          );
+          // Use singleton Supabase client
 
           // Generate unique filename using timestamp and original filename
           const timestamp = Date.now();

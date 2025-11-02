@@ -797,14 +797,17 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         </div>
 
         {/* Market Summary */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-muted-foreground" />
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                  <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
                 <div>
+                  <p className="text-sm text-muted-foreground">Total Securities</p>
                   <p className="text-2xl font-semibold">{marketSummary.totalSecurities}</p>
-                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-xs text-muted-foreground">Stocks, ETFs & Crypto</p>
                 </div>
               </div>
             </CardContent>
@@ -817,73 +820,56 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
           />
 
           <Card 
-            className={`cursor-pointer transition-all ${
+            className={`cursor-pointer transition-all hover:shadow-md ${
               backendOverrideCount > 0 
-                ? 'hover:border-amber-600 hover:shadow-md' 
-                : 'hover:border-muted-foreground/50'
+                ? 'hover:border-amber-600' 
+                : ''
             }`}
             onClick={handleOpenOverridesDialog}
           >
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Database className={`w-4 h-4 ${
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className={`p-3 rounded-lg ${
                   backendOverrideCount > 0 
-                    ? 'text-amber-600' 
-                    : 'text-muted-foreground'
-                }`} />
-                <div>
-                  <p className={`text-2xl font-semibold ${
+                    ? 'bg-amber-100 dark:bg-amber-900/20' 
+                    : 'bg-gray-100 dark:bg-gray-900/20'
+                }`}>
+                  <Database className={`w-6 h-6 ${
                     backendOverrideCount > 0 
-                      ? 'text-amber-600' 
-                      : ''
-                  }`}>
+                      ? 'text-amber-600 dark:text-amber-400' 
+                      : 'text-gray-600 dark:text-gray-400'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Data Overrides</p>
+                  <p className="text-2xl font-semibold">
                     {backendOverrideCount}
                   </p>
-                  <p className="text-xs text-muted-foreground">Overrides</p>
+                  <p className="text-xs text-muted-foreground">
+                    {backendOverrideCount > 0 ? 'Custom names set' : 'No changes made'}
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Rss className="w-4 h-4 text-purple-600" />
-                <div className="flex-1">
-                  <p className="text-2xl font-semibold text-purple-600">
+          <Card 
+            className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+            onClick={onNavigateToFeeds}
+          >
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                  <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Data Providers</p>
+                  <p className="text-2xl font-semibold">
                     {providerStats?.activeProviders || 0}/{providerStats?.totalProviders || 0}
                   </p>
-                  <p className="text-xs text-muted-foreground">Data Providers Active</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {providers.map(provider => (
-                      <Badge 
-                        key={provider.id}
-                        variant={provider.status === 'active' ? "default" : "secondary"} 
-                        className="text-xs px-1.5 py-0 flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => handleOpenProviderDialog(provider)}
-                      >
-                        {provider.status === 'active' ? (
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                        ) : (
-                          <AlertCircle className="w-2.5 h-2.5" />
-                        )}
-                        {provider.name}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 mt-3">
-                    {onNavigateToFeeds && (
-                      <Button
-                        onClick={onNavigateToFeeds}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        <Rss className="w-3 h-3 mr-1" />
-                        View All
-                      </Button>
-                    )}
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {providerStats?.activeProviders || 0} active
+                  </p>
                 </div>
               </div>
             </CardContent>

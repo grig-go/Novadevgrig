@@ -8,8 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
 import { CandidateProfile, Party } from "../types/election";
 import { Plus, X, Upload } from "lucide-react";
-import { createClient } from '@jsr/supabase__supabase-js';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 
 interface EditCandidateDialogProps {
   candidate: CandidateProfile;
@@ -142,11 +141,7 @@ export function EditCandidateDialog({ candidate, parties, open, onOpenChange, on
       if (file) {
         setIsUploading(true);
         try {
-          // Initialize Supabase client
-          const supabase = createClient(
-            `https://${projectId}.supabase.co`,
-            publicAnonKey
-          );
+          // Use singleton Supabase client
 
           // Generate unique filename using timestamp and original filename
           const timestamp = Date.now();

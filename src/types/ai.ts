@@ -92,6 +92,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
   supportsVideo: boolean;
   defaultModel?: string;
   requiresSecret?: boolean;
+  supportsDynamicModels?: boolean; // Can fetch models via API
 }> = {
   claude: {
     displayName: 'Anthropic Claude',
@@ -101,6 +102,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'claude-3-5-sonnet-20241022',
     requiresSecret: false,
+    supportsDynamicModels: true,
   },
   openai: {
     displayName: 'OpenAI',
@@ -110,6 +112,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'gpt-4o',
     requiresSecret: false,
+    supportsDynamicModels: true,
   },
   gemini: {
     displayName: 'Google Gemini',
@@ -119,6 +122,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: true,
     defaultModel: 'gemini-2.0-flash-exp',
     requiresSecret: false,
+    supportsDynamicModels: true,
   },
   mistral: {
     displayName: 'Mistral AI',
@@ -128,6 +132,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'mistral-large-latest',
     requiresSecret: false,
+    supportsDynamicModels: true,
   },
   cohere: {
     displayName: 'Cohere',
@@ -137,6 +142,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'command-r-plus',
     requiresSecret: false,
+    supportsDynamicModels: true,
   },
   stability: {
     displayName: 'Stability AI',
@@ -146,6 +152,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'stable-diffusion-xl-1024-v1-0',
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
   midjourney: {
     displayName: 'Midjourney',
@@ -153,6 +160,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsImage: true,
     supportsVideo: false,
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
   dalle: {
     displayName: 'DALL-E',
@@ -162,6 +170,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: false,
     defaultModel: 'dall-e-3',
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
   runway: {
     displayName: 'Runway',
@@ -171,6 +180,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsVideo: true,
     defaultModel: 'gen-3',
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
   pika: {
     displayName: 'Pika',
@@ -178,6 +188,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsImage: false,
     supportsVideo: true,
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
   custom: {
     displayName: 'Custom Provider',
@@ -185,6 +196,7 @@ export const AI_PROVIDER_METADATA: Record<AIProviderName, {
     supportsImage: true,
     supportsVideo: true,
     requiresSecret: false,
+    supportsDynamicModels: false,
   },
 };
 
@@ -244,3 +256,10 @@ export const STABILITY_MODELS: AIModel[] = [
     capabilities: ['image'],
   },
 ];
+
+// Helper to get all providers that support dynamic model fetching
+export const getProvidersWithDynamicModels = (): AIProviderName[] => {
+  return Object.entries(AI_PROVIDER_METADATA)
+    .filter(([_, metadata]) => metadata.supportsDynamicModels === true)
+    .map(([name, _]) => name as AIProviderName);
+};

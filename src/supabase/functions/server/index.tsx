@@ -1197,12 +1197,20 @@ app.post("/make-server-cbef71cf/ai-providers/fetch-models", async (c) => {
           return { name: "DALL-E 3", description: "Latest image generation" };
         } else if (modelId.includes("dall-e-2")) {
           return { name: "DALL-E 2", description: "Image generation" };
+        } else if (modelId.includes("whisper")) {
+          return { name: modelId, description: "Speech to text" };
+        } else if (modelId.includes("tts")) {
+          return { name: modelId, description: "Text to speech" };
+        } else if (modelId.includes("embedding")) {
+          return { name: modelId, description: "Text embeddings" };
+        } else if (modelId.includes("davinci") || modelId.includes("curie") || modelId.includes("babbage") || modelId.includes("ada")) {
+          return { name: modelId, description: "Legacy model" };
         }
         return { name: modelId, description: "" };
       };
       
       models = (data?.data ?? [])
-        .filter((m: any) => typeof m?.id === "string" && (m.id.includes("gpt") || m.id.includes("dall-e")))
+        .filter((m: any) => typeof m?.id === "string")
         .map((m: any) => {
           const info = getModelInfo(m.id);
           return { 
@@ -1230,10 +1238,8 @@ app.post("/make-server-cbef71cf/ai-providers/fetch-models", async (c) => {
       // Map and enhance model information
       const allModels = (data?.models ?? [])
         .filter((m: any) => {
-          // Only include generative models (not embedding models)
-          return typeof m?.name === "string" && 
-                 m.name.includes("gemini") && 
-                 m.supportedGenerationMethods?.includes("generateContent");
+          // Only include models with valid names
+          return typeof m?.name === "string";
         })
         .map((m: any) => {
           const modelId = String(m.name).replace("models/", "");
@@ -1249,11 +1255,15 @@ app.post("/make-server-cbef71cf/ai-providers/fetch-models", async (c) => {
             description = "Advanced reasoning and multimodal model";
           } else if (modelId.includes("1.5-flash")) {
             description = "Fast and efficient multimodal model";
+          } else if (modelId.includes("embedding")) {
+            description = description || "Text embedding model";
           } else if (!description && m.supportedGenerationMethods) {
             // Create description from capabilities
             const capabilities = [];
-            if (m.supportedGenerationMethods.includes("generateContent")) capabilities.push("multimodal");
-            description = capabilities.join(", ");
+            if (m.supportedGenerationMethods.includes("generateContent")) capabilities.push("generation");
+            if (m.supportedGenerationMethods.includes("embedContent")) capabilities.push("embedding");
+            if (m.supportedGenerationMethods.includes("countTokens")) capabilities.push("tokenization");
+            description = capabilities.join(", ") || "AI model";
           }
           
           return { 
@@ -1348,10 +1358,65 @@ app.post("/make-server-cbef71cf/ai-providers/fetch-models", async (c) => {
       break;
     }
 
+    case "cohere": {
+      const r = await fetch("https://api.cohere.com/v1/models", {
+        headers: { 
+          Authorization: `Bearer ${apiKey}`, 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+      });
+      if (!r.ok) {
+        const t = await r.text();
+        return c.json({ ok:false, error:"COHERE_BAD_STATUS", detail:`${r.status}: ${t}` }, 502);
+      }
+      const data = await r.json();
+      
+      // Helper function to get friendly descriptions
+      const getCohereInfo = (modelName: string) => {
+        if (modelName.includes("command-r-plus")) {
+          return { description: "Most powerful model for complex tasks, multilingual" };
+        } else if (modelName.includes("command-r")) {
+          return { description: "Balanced model for retrieval and generation" };
+        } else if (modelName.includes("command-light")) {
+          return { description: "Faster, smaller model for simple tasks" };
+        } else if (modelName.includes("command")) {
+          return { description: "General-purpose text generation" };
+        } else if (modelName.includes("embed")) {
+          return { description: "Text embedding model" };
+        } else if (modelName.includes("rerank")) {
+          return { description: "Document reranking model" };
+        }
+        return { description: "" };
+      };
+      
+      models = (data?.models ?? [])
+        .filter((m: any) => {
+          // Only include models with valid names
+          return typeof m?.name === "string";
+        })
+        .map((m: any) => {
+          const info = getCohereInfo(m.name);
+          return { 
+            id: m.name, 
+            name: m.name,
+            description: info.description,
+            type: "text",
+            contextLength: m.context_length
+          };
+        })
+        .filter((m: any, index: number, self: any[]) => 
+          self.findIndex((t: any) => t.id === m.id) === index
+        );
+      break;
+    }
+
     default:
       return c.json({ ok:false, error:"UNSUPPORTED_PROVIDER", detail: providerName }, 400);
   }
 
+  console.log(`✅ Returning ${models.length} models for provider: ${providerName}`);
+  console.log(`📋 Model IDs:`, models.map(m => m.id));
   return c.json({ ok:true, models });
 });
 
@@ -1480,12 +1545,30 @@ app.delete("/make-server-cbef71cf/weather-locations/:id", async (c) => {
   try {
     const id = c.req.param("id");
     
-    console.log(`Deleting weather location: ${id}`);
+    console.log(`🗑️ DELETE request received for weather location: ${id} (type: ${typeof id})`);
     
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    
+    // Check if location exists first
+    const { data: existingLocation, error: checkError } = await supabase
+      .from("weather_locations")
+      .select("id, name")
+      .eq("id", id)
+      .single();
+    
+    if (checkError) {
+      if (checkError.code === 'PGRST116') {
+        console.error(`🗑️ Location not found: ${id}`);
+        return c.json({ error: "Location not found", details: `No location exists with id: ${id}` }, 404);
+      }
+      console.error("🗑️ Error checking location:", checkError);
+      return c.json({ error: "Database error", details: checkError.message }, 500);
+    }
+    
+    console.log(`🗑️ Found location to delete:`, existingLocation);
     
     // Delete from weather_locations table (CASCADE will handle child tables)
     const { error } = await supabase
@@ -1494,11 +1577,11 @@ app.delete("/make-server-cbef71cf/weather-locations/:id", async (c) => {
       .eq("id", id);
     
     if (error) {
-      console.error("Error deleting weather location:", error);
+      console.error("🗑️ Error deleting weather location:", error);
       return c.json({ error: "Failed to delete weather location", details: error.message }, 500);
     }
     
-    console.log(`✓ Deleted weather location and all associated data: ${id}`);
+    console.log(`✅ Successfully deleted weather location and all associated data: ${id} (${existingLocation.name})`);
     
     return c.json({ success: true });
   } catch (error) {

@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { WeatherLocationWithOverrides, WeatherView } from "../types/weather";
+import { WeatherLocationWithOverrides, WeatherView, getFieldValue } from "../types/weather";
 import { 
   Search, 
   Filter, 
@@ -65,30 +65,37 @@ export function WeatherFilters({
 
     // Search filter
     if (searchQuery.trim()) {
-      filtered = filtered.filter(location =>
-        location.location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        location.location.admin1.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        location.location.country.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = filtered.filter(location => {
+        const name = getFieldValue(location.location.name) || '';
+        const admin1 = getFieldValue(location.location.admin1) || '';
+        const country = getFieldValue(location.location.country) || '';
+        
+        return name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               admin1.toLowerCase().includes(searchQuery.toLowerCase()) ||
+               country.toLowerCase().includes(searchQuery.toLowerCase());
+      });
     }
 
     // Country filter
     if (selectedCountry !== "all") {
       filtered = filtered.filter(location => 
-        location.location.country === selectedCountry
+        getFieldValue(location.location.country) === selectedCountry
       );
     }
 
     // State filter
     if (selectedState !== "all") {
       filtered = filtered.filter(location => 
-        location.location.admin1 === selectedState
+        getFieldValue(location.location.admin1) === selectedState
       );
     }
 
     // Temperature range filter
     if (temperatureRange !== "all") {
-      const temp = (location: WeatherLocationWithOverrides) => location.data.current.temperature.value;
+      const temp = (location: WeatherLocationWithOverrides) => {
+        const tempValue = location.data.current.temperature.value;
+        return typeof tempValue === 'number' ? tempValue : getFieldValue(tempValue);
+      };
       switch (temperatureRange) {
         case "cold":
           filtered = filtered.filter(location => temp(location) < 32);
@@ -140,8 +147,8 @@ export function WeatherFilters({
   };
 
   // Get unique countries and states for filter dropdowns
-  const countries = Array.from(new Set(locations.map(loc => loc.location.country))).sort();
-  const states = Array.from(new Set(locations.map(loc => loc.location.admin1))).sort();
+  const countries = Array.from(new Set(locations.map(loc => getFieldValue(loc.location.country)))).filter(Boolean).sort();
+  const states = Array.from(new Set(locations.map(loc => getFieldValue(loc.location.admin1)))).filter(Boolean).sort();
 
   // Get statistics
   const totalLocations = locations.length;

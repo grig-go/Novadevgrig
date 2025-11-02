@@ -47,9 +47,9 @@ import {
   Loader2,
   Pencil
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-import { createClient } from "@jsr/supabase__supabase-js";
+import { supabase } from "../utils/supabase/client";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 
 // Categories for display
 type ProviderCategory = "weather" | "sports" | "news" | "finance";
@@ -312,11 +312,7 @@ export function FeedsDashboardWithSupabase({
         configObj.leagues = editFormData.selectedLeagues.map(id => Number(id));
       }
 
-      // Create Supabase client
-      const supabase = createClient(
-        `https://${projectId}.supabase.co`,
-        publicAnonKey
-      );
+      // Use singleton Supabase client
 
       // Use RPC to update provider settings
       const { data, error } = await supabase.rpc('update_provider_settings_by_id', {
@@ -1106,67 +1102,7 @@ export function FeedsDashboardWithSupabase({
             >
               Cancel
             </Button>
-            <Button onClick={async () => {
-              if (!editProvider) return;
-              
-              console.log("Save button clicked. Form data:", editFormData);
-              setSaving(true);
-              try {
-                const configObj: any = { ...editProvider.config };
-                
-                if (editProvider.category === 'weather') {
-                  configObj.language = editFormData.language;
-                  configObj.units = editFormData.units;
-                } else if (editProvider.category === 'sports') {
-                  configObj.leagues = editFormData.selectedLeagues.map(id => Number(id));
-                }
-
-                const response = await fetch(
-                  `https://${projectId}.supabase.co/rest/v1/rpc/provider_update_legacy_id`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      Authorization: `Bearer ${publicAnonKey}`,
-                      apikey: publicAnonKey,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      p: {
-                        p_allow_api_key: true,
-                        p_api_key: editFormData.api_key || null,
-                        p_api_secret: editFormData.api_secret || null,
-                        p_api_version: editFormData.api_version || null,
-                        p_base_url: editFormData.base_url || null,
-                        p_config_patch: configObj,
-                        p_dashboard: editProvider.category,
-                        p_id: editProvider.id,
-                        p_is_active: editFormData.is_active
-                      }
-                    }),
-                  }
-                );
-
-                if (!response.ok) {
-                  const errorData = await response.json().catch(() => ({ error: response.statusText }));
-                  console.error("RPC save failed:", errorData);
-                  throw new Error(`Failed to save provider: ${errorData.message || errorData.error || response.statusText}`);
-                }
-
-                const data = await response.json();
-                console.log("Provider saved successfully via RPC", data);
-                toast.success("Provider updated successfully");
-                
-                setEditDialogOpen(false);
-
-                console.log("Reloading providers...");
-                await loadProviders(selectedCategory === "All" ? undefined : selectedCategory);
-              } catch (error) {
-                console.error("Error saving provider:", error);
-                toast.error(error instanceof Error ? error.message : "Failed to save provider");
-              } finally {
-                setSaving(false);
-              }
-            }} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving}>
               {saving ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />

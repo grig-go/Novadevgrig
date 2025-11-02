@@ -23,12 +23,8 @@ import {
 } from "./ui/dialog";
 import { getFilteredElectionData, clearElectionDataCache } from "../data/electionData";
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
-import { createClient } from '@jsr/supabase__supabase-js';
-import { projectId,  publicAnonKey, currentElectionYear } from '../utils/supabase/info';
-
-// Initialize Supabase client
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const supabase = createClient(supabaseUrl, publicAnonKey);
+import { supabase } from '../utils/supabase/client';
+import { currentElectionYear } from '../utils/supabase/info';
 
 interface ElectionDashboardProps {
   races: Race[];

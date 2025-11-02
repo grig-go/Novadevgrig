@@ -60,9 +60,9 @@ export function WeatherDashboard({
   
   // Overrides dialog state
   const [overridesDialogOpen, setOverridesDialogOpen] = useState(false);
-  const [overrides, setOverrides] = useState<Array<{ id: number; name: string; custom_name: string; lat: number; lon: number }>>([]);
+  const [overrides, setOverrides] = useState<Array<{ id: string; name: string; custom_name: string; lat: number; lon: number; admin1?: string; country?: string }>>([]);
   const [loadingOverrides, setLoadingOverrides] = useState(false);
-  const [removingOverride, setRemovingOverride] = useState<number | null>(null);
+  const [removingOverride, setRemovingOverride] = useState<string | null>(null);
   
   // Use localStorage for sticky pagination that survives re-renders and refreshes
   const [currentPage, setCurrentPage] = useLocalStorage("weather-dashboard-page", 1);
@@ -223,28 +223,39 @@ export function WeatherDashboard({
 
   const handleDeleteLocation = async (locationId: string, locationName: string) => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${locationId}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-          },
-        }
-      );
+      console.log(`🗑️ Attempting to delete weather location: ${locationId} (${locationName})`);
+      
+      const url = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${locationId}`;
+      console.log(`🗑️ DELETE URL: ${url}`);
+      
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      });
 
+      console.log(`🗑️ Delete response status: ${response.status}`);
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to delete location");
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { error: await response.text() };
+        }
+        console.error("🗑️ Delete failed:", errorData);
+        throw new Error(errorData.error || errorData.details || "Failed to delete location");
       }
 
       // Show success toast
       toast.success(`Deleted ${locationName}`);
+      console.log(`✅ Successfully deleted location: ${locationId}`);
       
       // Refresh weather data
       await refreshWeatherData();
     } catch (error) {
-      console.error("Error deleting location:", error);
+      console.error("❌ Error deleting location:", error);
       toast.error(
         <div className="space-y-1">
           <div className="font-semibold">❌ Delete Failed</div>
@@ -282,33 +293,41 @@ export function WeatherDashboard({
     setLoadingOverrides(true);
     
     try {
-      // Fetch all weather locations with custom names from weather_locations table
+      console.log('🔍 Fetching custom name overrides...');
+      
+      // Fetch all weather locations from backend API
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/weather_locations?select=id,name,custom_name,lat,lon&custom_name=not.is.null`,
+        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
           },
         }
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch overrides: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch overrides: ${response.status} ${errorText}`);
       }
 
-      const data = await response.json();
-      setOverrides(data || []);
-      console.log(`📋 Loaded ${data.length} custom name overrides`);
+      const result = await response.json();
+      const allLocations = result.locations || [];
+      
+      // Filter to only locations with custom_name
+      const locationsWithCustomNames = allLocations.filter((loc: any) => loc.custom_name);
+      
+      setOverrides(locationsWithCustomNames);
+      console.log(`📋 Loaded ${locationsWithCustomNames.length} custom name overrides from ${allLocations.length} total locations`);
     } catch (error) {
-      console.error("Error fetching overrides:", error);
-      toast.error("Failed to load overrides");
+      console.error("❌ Error fetching overrides:", error);
+      toast.error(`Failed to load overrides: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setOverrides([]); // Clear on error
     } finally {
       setLoadingOverrides(false);
     }
   };
 
-  const handleRemoveOverride = async (locationId: number) => {
+  const handleRemoveOverride = async (locationId: string) => {
     setRemovingOverride(locationId);
     
     try {
@@ -477,16 +496,16 @@ export function WeatherDashboard({
   }, [locations, weatherProviders]);
 
   const renderSummaryCards = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded">
-              <Thermometer className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+              <Thermometer className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground mb-1">Number of Locations</p>
-              <p className="text-2xl mb-0.5">{stats.totalLocations}</p>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Locations</p>
+              <p className="text-2xl font-semibold">{stats.totalLocations}</p>
               <p className="text-xs text-muted-foreground">Monitoring sites</p>
             </div>
           </div>
@@ -494,29 +513,29 @@ export function WeatherDashboard({
       </Card>
 
       <Card 
-        className={`cursor-pointer transition-all ${
+        className={`cursor-pointer transition-all hover:shadow-md ${
           stats.locationsWithOverrides > 0 
-            ? 'hover:border-amber-600 hover:shadow-md' 
-            : 'hover:border-muted-foreground/50'
+            ? 'hover:border-amber-600' 
+            : ''
         }`}
         onClick={handleOpenOverridesDialog}
       >
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className={`p-2 rounded ${
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-lg ${
               stats.locationsWithOverrides > 0 
                 ? 'bg-amber-100 dark:bg-amber-900/20' 
                 : 'bg-gray-100 dark:bg-gray-900/20'
             }`}>
-              <Database className={`w-5 h-5 ${
+              <Database className={`w-6 h-6 ${
                 stats.locationsWithOverrides > 0 
                   ? 'text-amber-600 dark:text-amber-400' 
                   : 'text-gray-600 dark:text-gray-400'
               }`} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground mb-1">Data Overrides</p>
-              <p className="text-2xl mb-0.5">{stats.locationsWithOverrides}</p>
+            <div>
+              <p className="text-sm text-muted-foreground">Data Overrides</p>
+              <p className="text-2xl font-semibold">{stats.locationsWithOverrides}</p>
               <p className="text-xs text-muted-foreground">
                 {stats.locationsWithOverrides > 0 
                   ? `${stats.locationsWithOverrides} location${stats.locationsWithOverrides !== 1 ? 's' : ''} modified` 
@@ -534,21 +553,21 @@ export function WeatherDashboard({
         onClick={() => setShowAIInsights(!showAIInsights)}
       />
 
-      <Card>
-        <CardContent className="p-4">
-          <div 
-            className={onNavigateToFeeds ? "flex items-start gap-3 cursor-pointer" : "flex items-start gap-3"}
-            onClick={onNavigateToFeeds}
-          >
-            <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded">
-              <Wind className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+      <Card 
+        className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+        onClick={onNavigateToFeeds}
+      >
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+              <Wind className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground mb-1">Data Providers</p>
-              <p className="text-2xl mb-0.5">{stats.providers.length}</p>
-              <Badge variant="secondary" className="text-xs">
+            <div>
+              <p className="text-sm text-muted-foreground">Data Providers</p>
+              <p className="text-2xl font-semibold">{stats.providers.length}</p>
+              <p className="text-xs text-muted-foreground">
                 {stats.providers[0] || 'No provider'}
-              </Badge>
+              </p>
             </div>
           </div>
         </CardContent>
@@ -818,50 +837,65 @@ export function WeatherDashboard({
                 </Card>
 
                 {/* Overrides List */}
-                {overrides.map((override) => (
-                  <Card key={override.id} className="hover:border-amber-300 transition-colors">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              {override.lat.toFixed(4)}, {override.lon.toFixed(4)}
-                            </Badge>
+                {overrides.map((override) => {
+                  return (
+                    <Card key={override.id} className="hover:border-amber-300 transition-colors">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant="outline" className="text-xs">
+                                {override.name}
+                              </Badge>
+                              {override.admin1 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {override.admin1}
+                                </Badge>
+                              )}
+                              {override.country && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {override.country}
+                                </Badge>
+                              )}
+                              <Badge variant="outline" className="text-xs text-muted-foreground">
+                                {override.lat.toFixed(4)}, {override.lon.toFixed(4)}
+                              </Badge>
+                            </div>
+                            
+                            <div className="space-y-1 text-sm">
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-xs text-muted-foreground">Original:</span>
+                                <span className="text-muted-foreground line-through">
+                                  {override.name}
+                                </span>
+                              </div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-xs text-muted-foreground">Custom:</span>
+                                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                                  {override.custom_name}
+                                </span>
+                              </div>
+                            </div>
                           </div>
                           
-                          <div className="space-y-1 text-sm">
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-xs text-muted-foreground">Original:</span>
-                              <span className="text-muted-foreground line-through">
-                                {override.name}
-                              </span>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <span className="text-xs text-muted-foreground">Custom:</span>
-                              <span className="font-semibold text-amber-700 dark:text-amber-400">
-                                {override.custom_name}
-                              </span>
-                            </div>
-                          </div>
+                          <Button
+                            onClick={() => handleRemoveOverride(override.id)}
+                            variant="ghost"
+                            size="sm"
+                            disabled={removingOverride === override.id}
+                            className="hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/20"
+                          >
+                            {removingOverride === override.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <X className="w-4 h-4" />
+                            )}
+                          </Button>
                         </div>
-                        
-                        <Button
-                          onClick={() => handleRemoveOverride(override.id)}
-                          variant="ghost"
-                          size="sm"
-                          disabled={removingOverride === override.id}
-                          className="hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/20"
-                        >
-                          {removingOverride === override.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <X className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>

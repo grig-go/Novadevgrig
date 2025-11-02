@@ -1,10 +1,6 @@
-import { createClient } from '@jsr/supabase__supabase-js';
 import { ElectionData, Race, Candidate, CandidateProfile, Party, createOverride } from '../types/election';
-import { projectId, publicAnonKey, currentElectionYear } from '../utils/supabase/info';
-
-// Initialize Supabase client
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const supabase = createClient(supabaseUrl, publicAnonKey);
+import { currentElectionYear } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 
 // State name mapping
 const stateNames: Record<string, string> = {

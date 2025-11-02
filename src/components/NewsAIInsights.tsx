@@ -137,30 +137,32 @@ export function NewsAIInsights({
     return (
       <>
         <Card className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]" onClick={onClick}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              {loadingInsights ? (
-                <>
-                  <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded animate-pulse">
-                    <Loader2 className="w-5 h-5 text-purple-600 dark:text-purple-400 animate-spin" />
-                  </div>
-                  <div>
-                    <p className="text-2xl text-purple-600">...</p>
-                    <p className="text-xs text-muted-foreground">Loading...</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded">
-                    <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground mb-1">AI Insights</p>
-                    <p className="text-2xl mb-0.5 text-purple-600">{savedInsights.length}</p>
-                    <p className="text-xs text-muted-foreground">Saved analyses</p>
-                  </div>
-                </>
-              )}
+          <CardContent className="p-6">
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                {loadingInsights ? (
+                  <>
+                    <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg animate-pulse">
+                      <Loader2 className="w-6 h-6 text-purple-600 dark:text-purple-400 animate-spin" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">AI Insights</p>
+                      <p className="text-2xl font-semibold">...</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                      <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">AI Insights</p>
+                      <p className="text-2xl font-semibold">{savedInsights.length}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Saved analyses</p>
             </div>
           </CardContent>
         </Card>

@@ -1,9 +1,4 @@
-import { createClient } from '@jsr/supabase__supabase-js';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-
-// Initialize Supabase client
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const supabase = createClient(supabaseUrl, publicAnonKey);
+import { supabase } from '../utils/supabase/client';
 
 // Types for BOP data
 export interface BOPPartyResult {

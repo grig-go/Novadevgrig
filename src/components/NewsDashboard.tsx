@@ -334,14 +334,19 @@ export function NewsDashboard({
       </div>
 
       {/* Summary Statistics (KPIs) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Newspaper className="w-4 h-4 text-muted-foreground" />
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <Newspaper className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
               <div>
-                <p className="text-2xl">{loadingArticles ? '...' : articles.length}</p>
-                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-sm text-muted-foreground">Total Articles</p>
+                <p className="text-2xl font-semibold">{loadingArticles ? '...' : articles.length}</p>
+                <p className="text-xs text-muted-foreground">
+                  {loadingArticles ? 'Loading...' : 'From all sources'}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -354,50 +359,39 @@ export function NewsDashboard({
         />
 
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-muted-foreground" />
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                <Database className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
               <div>
-                <p className="text-2xl">{useStoredArticles ? 'Stored' : 'Live'}</p>
-                <p className="text-xs text-muted-foreground">Mode</p>
+                <p className="text-sm text-muted-foreground">Data Mode</p>
+                <p className="text-2xl font-semibold">{useStoredArticles ? 'Stored' : 'Live'}</p>
+                <p className="text-xs text-muted-foreground">
+                  {useStoredArticles ? 'From database' : 'Real-time fetch'}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              <Rss className="w-4 h-4 text-blue-600" />
-              <div className="flex-1">
-                <p className="text-2xl text-blue-600">
+        <Card 
+          className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+          onClick={onNavigateToFeeds}
+        >
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Data Providers</p>
+                <p className="text-2xl font-semibold">
                   {availableProviders.filter(p => p.is_active).length}/{availableProviders.length}
                 </p>
-                <p className="text-xs text-muted-foreground">Active</p>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {availableProviders.filter(p => p.is_active).map(provider => (
-                    <Badge 
-                      key={provider.id}
-                      variant="default" 
-                      className="text-xs px-1.5 py-0"
-                    >
-                      {provider.type.toUpperCase()}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2 mt-3">
-                  {onNavigateToFeeds && (
-                    <Button
-                      onClick={onNavigateToFeeds}
-                      variant="outline"
-                      size="sm"
-                      className="text-xs"
-                    >
-                      <Rss className="w-3 h-3 mr-1" />
-                      View All
-                    </Button>
-                  )}
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  {availableProviders.filter(p => p.is_active).length} active
+                </p>
               </div>
             </div>
           </CardContent>

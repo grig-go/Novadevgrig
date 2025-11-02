@@ -412,26 +412,33 @@ export function WeatherAIInsights({
 
   if (compact) {
     return (
-      <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={onClick}>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2">
-            {loadingInsights ? (
-              <>
-                <Loader2 className="w-4 h-4 text-purple-600 dark:text-purple-400 animate-spin" />
-                <div>
-                  <p className="text-2xl font-semibold text-purple-600">...</p>
-                  <p className="text-xs text-muted-foreground">Loading...</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <div>
-                  <p className="text-2xl font-semibold text-purple-600">{savedInsights.length}</p>
-                  <p className="text-xs text-muted-foreground">Saved Insights</p>
-                </div>
-              </>
-            )}
+      <Card className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]" onClick={onClick}>
+        <CardContent className="p-6">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              {loadingInsights ? (
+                <>
+                  <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg animate-pulse">
+                    <Loader2 className="w-6 h-6 text-purple-600 dark:text-purple-400 animate-spin" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">AI Insights</p>
+                    <p className="text-2xl font-semibold">...</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                    <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">AI Insights</p>
+                    <p className="text-2xl font-semibold">{savedInsights.length}</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">Saved analyses</p>
           </div>
         </CardContent>
       </Card>

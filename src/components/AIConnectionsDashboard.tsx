@@ -42,6 +42,7 @@ import {
   Loader2,
   RefreshCw,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   Zap,
   Video,
@@ -63,6 +64,7 @@ import {
   AIModel,
   DALLE_MODELS,
   STABILITY_MODELS,
+  getProvidersWithDynamicModels,
 } from "../types/ai";
 
 export function AIConnectionsDashboard() {
@@ -742,19 +744,28 @@ export function AIConnectionsDashboard() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
       const data = await response.json();
+      console.log('✅ Full API Response:', data);
+      
+      // Check if the backend returned an error
+      if (!data.ok) {
+        throw new Error(data.error || 'Failed to fetch models');
+      }
+      
       console.log('✅ Models fetched successfully:', {
         count: data.models?.length || 0,
-        models: data.models?.map((m: any) => ({ id: m.id, name: m.name })) || []
+        firstFiveModels: data.models?.slice(0, 5).map((m: any) => ({ id: m.id, name: m.name })) || [],
+        allModelIds: data.models?.map((m: any) => m.id) || []
       });
       setAvailableModels(data.models || []);
     } catch (error) {
       console.error("❌ Error fetching models:", error);
-      toast.error("Failed to fetch available models");
+      console.error("❌ Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        providerName,
+        hasApiKey: !!apiKey
+      });
+      toast.error(`Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}`);
       // Fall back to hardcoded models if available
       const hardcodedModels = getHardcodedModels(providerName);
       console.log('📦 Falling back to hardcoded models:', hardcodedModels.length);
@@ -901,42 +912,67 @@ export function AIConnectionsDashboard() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Total Providers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl">{providers.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Active</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl text-green-600">
-              {providers.filter(p => p.enabled).length}
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total Providers</p>
+                <p className="text-2xl font-semibold">{providers.length}</p>
+                <p className="text-xs text-muted-foreground">AI Connections</p>
+              </div>
             </div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Text Models</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl text-blue-600">
-              {providers.filter(p => p.type === "text" || p.type === "multimodal").length}
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Active</p>
+                <p className="text-2xl font-semibold">{providers.filter(p => p.enabled).length}</p>
+                <p className="text-xs text-muted-foreground">Enabled Providers</p>
+              </div>
             </div>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Image Models</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl text-purple-600">
-              {providers.filter(p => p.type === "image" || p.type === "multimodal").length}
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Text Models</p>
+                <p className="text-2xl font-semibold">
+                  {providers.filter(p => p.type === "text" || p.type === "multimodal").length}
+                </p>
+                <p className="text-xs text-muted-foreground">Text & Multimodal</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
+                <ImageIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Image Models</p>
+                <p className="text-2xl font-semibold">
+                  {providers.filter(p => p.type === "image" || p.type === "multimodal").length}
+                </p>
+                <p className="text-xs text-muted-foreground">Image & Multimodal</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1143,17 +1179,23 @@ export function AIConnectionsDashboard() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between mb-1">
                 <Label htmlFor="model">Model</Label>
-                {formData.apiKey && ['openai', 'claude', 'gemini', 'mistral', 'cohere'].includes(formData.providerName) && (
+                {AI_PROVIDER_METADATA[formData.providerName]?.supportsDynamicModels && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => fetchAvailableModels(formData.providerName, formData.apiKey)}
-                    disabled={loadingModels}
+                    onClick={() => {
+                      if (!formData.apiKey) {
+                        toast.error("Please enter an API key first");
+                        return;
+                      }
+                      fetchAvailableModels(formData.providerName, formData.apiKey);
+                    }}
+                    disabled={loadingModels || !formData.apiKey}
                     className="h-7 text-xs gap-1.5"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingModels ? 'animate-spin' : ''}`} />
-                    Fetch Models
+                    Fetch Latest Models
                   </Button>
                 )}
               </div>
@@ -1163,28 +1205,33 @@ export function AIConnectionsDashboard() {
                   Loading models...
                 </div>
               ) : availableModels.length > 0 ? (
-                <Select
-                  value={formData.model}
-                  onValueChange={(value) => setFormData({ ...formData, model: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[400px]">
-                    {availableModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex flex-col py-1">
-                          <span className="font-medium">{model.name}</span>
-                          {model.description && (
-                            <span className="text-xs text-muted-foreground mt-0.5">
-                              {model.description}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={formData.model}
+                    onValueChange={(value) => setFormData({ ...formData, model: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[400px]">
+                      {availableModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          <div className="flex flex-col py-1">
+                            <span className="font-medium">{model.name}</span>
+                            {model.description && (
+                              <span className="text-xs text-muted-foreground mt-0.5">
+                                {model.description}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
+                  </p>
+                </>
               ) : (
                 <Input
                   id="model"
@@ -1355,7 +1402,7 @@ export function AIConnectionsDashboard() {
 
       {/* Edit Provider Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit AI Provider</DialogTitle>
             <DialogDescription>
@@ -1488,7 +1535,7 @@ export function AIConnectionsDashboard() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between mb-1">
                 <Label htmlFor="edit-model">Model</Label>
-                {['openai', 'claude', 'gemini', 'mistral'].includes(formData.providerName) && (
+                {AI_PROVIDER_METADATA[formData.providerName]?.supportsDynamicModels && (
                   <Button
                     type="button"
                     variant="outline"
@@ -1527,28 +1574,33 @@ export function AIConnectionsDashboard() {
                   Loading models...
                 </div>
               ) : availableModels.length > 0 ? (
-                <Select
-                  value={formData.model}
-                  onValueChange={(value) => setFormData({ ...formData, model: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[400px]">
-                    {availableModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex flex-col py-1">
-                          <span className="font-medium">{model.name}</span>
-                          {model.description && (
-                            <span className="text-xs text-muted-foreground mt-0.5">
-                              {model.description}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <>
+                  <Select
+                    value={formData.model}
+                    onValueChange={(value) => setFormData({ ...formData, model: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[400px]">
+                      {availableModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          <div className="flex flex-col py-1">
+                            <span className="font-medium">{model.name}</span>
+                            {model.description && (
+                              <span className="text-xs text-muted-foreground mt-0.5">
+                                {model.description}
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
+                  </p>
+                </>
               ) : (
                 <Input
                   id="edit-model"

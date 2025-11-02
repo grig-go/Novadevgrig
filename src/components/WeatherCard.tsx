@@ -4,6 +4,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { InlineTextEdit } from "./InlineEditField";
 import { WeatherLocationWithOverrides, WeatherView, getFieldValue, isFieldOverridden } from "../types/weather";
@@ -98,6 +99,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const [backendDataOpen, setBackendDataOpen] = useState(false);
   // State for refresh loading
   const [refreshing, setRefreshing] = useState(false);
+  // State for delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   // State for alerts collapsible (collapsed by default)
   const [alertsOpen, setAlertsOpen] = useState(false);
   
@@ -246,15 +249,19 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   };
 
   const handleDelete = () => {
-    const locationName = getFieldValue(location.location.name);
-    
     if (onDelete) {
-      if (true || window.confirm(`Are you sure you want to delete ${locationName}?\n\nThis will remove all data including:\n• Current weather\n• Air quality\n• Hourly forecasts\n• Daily forecasts\n• Weather alerts`)) {
-        onDelete(location.location.id, locationName);
-      }
+      setDeleteDialogOpen(true);
     } else {
       toast.error("Delete function not available");
     }
+  };
+  
+  const confirmDelete = () => {
+    const locationName = getFieldValue(location.location.name);
+    if (onDelete) {
+      onDelete(location.location.id, locationName);
+    }
+    setDeleteDialogOpen(false);
   };
 
   const handleViewBackendData = () => {
@@ -407,6 +414,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -461,6 +495,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -523,6 +584,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -611,6 +699,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -835,6 +950,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -995,6 +1137,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>
     );
   }
@@ -1012,6 +1181,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete {locationNameValue}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>This will remove all data including:</p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Current weather</li>
+                <li>Air quality</li>
+                <li>Hourly forecasts</li>
+                <li>Daily forecasts</li>
+                <li>Weather alerts</li>
+              </ul>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

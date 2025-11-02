@@ -31,6 +31,7 @@ import {
   LucideIcon,
 } from "lucide-react";
 import { useState, ReactNode } from "react";
+import emergentLogo from "figma:asset/14eb232dfd8c5b46f028102fb55aac1720da01bb.png";
 
 /**
  * Component version - increment when making breaking changes
@@ -153,9 +154,9 @@ export function SharedTopMenuBar({
             onClick={branding.onLogoClick}
           >
             <img 
-              src={darkMode ? branding.logoLight : branding.logoDark} 
+              src={emergentLogo} 
               alt={branding.logoAlt} 
-              className="h-6" 
+              className={`h-6 ${darkMode ? 'invert' : ''}`}
             />
             {branding.appIcon}
             <span className="font-semibold text-lg">{branding.appName}</span>
