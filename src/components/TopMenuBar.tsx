@@ -1,0 +1,201 @@
+import {
+  LayoutGrid,
+  Wrench,
+  Settings,
+  HelpCircle,
+  User as UserIcon,
+  LogOut,
+  FileText,
+  MessageSquare,
+  Users,
+  Zap,
+  Cloud,
+} from "lucide-react";
+import { useState } from "react";
+import { AccountSettingsDialog } from "./AccountSettingsDialog";
+import emergentLogoLight from "figma:asset/20334eb2086a808e1c7c668081077eef8119e571.png";
+import emergentLogoDark from "../assets/3fa0a84e-77b1-44d5-a1ed-1ccef7d48f9b.png";
+import { User, Role, Permission } from "../types/users";
+import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
+
+interface TopMenuBarProps {
+  onNavigate: (view: string) => void;
+  currentUser?: User;
+  roles?: Role[];
+  permissions?: Permission[];
+  onUpdateUser?: (updatedUser: Partial<User>) => void;
+}
+
+export function TopMenuBar({ 
+  onNavigate, 
+  currentUser, 
+  roles = [], 
+  permissions = [],
+  onUpdateUser 
+}: TopMenuBarProps) {
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    document.documentElement.classList.toggle('dark');
+  };
+
+  const handleUpdateUser = (updatedUser: Partial<User>) => {
+    if (onUpdateUser) {
+      onUpdateUser(updatedUser);
+    }
+  };
+
+  // Branding Configuration
+  const branding: BrandingConfig = {
+    logoLight: emergentLogoLight,
+    logoDark: emergentLogoDark,
+    logoAlt: "EMERGENT",
+    appIcon: (
+      <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+        <span className="text-white font-semibold text-sm">N</span>
+      </div>
+    ),
+    appName: "Nova",
+    onLogoClick: () => onNavigate('home'),
+  };
+
+  // Apps Menu Configuration
+  const appsMenu: MenuDropdown = {
+    id: 'apps',
+    label: 'Apps',
+    icon: LayoutGrid,
+    sections: [
+      {
+        items: [
+          { id: 'nova', label: 'Nova', onClick: () => onNavigate('home') },
+          { id: 'pulsar', label: 'Pulsar', disabled: true },
+          { id: 'fusion', label: 'Fusion', disabled: true },
+          { id: 'quasar', label: 'Quasar', disabled: true },
+        ],
+      },
+    ],
+  };
+
+  // Tools Menu Configuration
+  const toolsMenu: MenuDropdown = {
+    id: 'tools',
+    label: 'Tools',
+    icon: Wrench,
+    sections: [
+      {
+        items: [
+          { id: 'agents', label: 'Agents', onClick: () => onNavigate('agents') },
+          { id: 'feeds', label: 'Data Feeds', onClick: () => onNavigate('feeds') },
+        ],
+      },
+    ],
+  };
+
+  // Settings Menu Configuration
+  const settingsMenu: MenuDropdown = {
+    id: 'settings',
+    label: 'Settings',
+    icon: Settings,
+    sections: [
+      {
+        label: 'Preferences',
+        items: [
+          { id: 'dark-mode-toggle', label: 'Dark Mode' }, // Special ID for dark mode
+        ],
+      },
+      {
+        items: [
+          { 
+            id: 'account-settings', 
+            label: 'Account Settings', 
+            icon: UserIcon,
+            onClick: () => setShowAccountSettings(true) 
+          },
+          { 
+            id: 'users-groups', 
+            label: 'Users and Groups', 
+            icon: Users,
+            onClick: () => onNavigate('users-groups') 
+          },
+          { 
+            id: 'dashboard-prefs', 
+            label: 'Dashboard Preferences', 
+            icon: Settings,
+            disabled: true 
+          },
+          { 
+            id: 'ai-connections', 
+            label: 'AI Connections', 
+            icon: Zap,
+            onClick: () => onNavigate('ai-connections') 
+          },
+        ],
+      },
+      {
+        items: [
+          { 
+            id: 'sign-out', 
+            label: 'Sign Out', 
+            icon: LogOut,
+            variant: 'destructive' as const 
+          },
+        ],
+      },
+    ],
+  };
+
+  // Help Menu Configuration
+  const helpMenu: MenuDropdown = {
+    id: 'help',
+    label: 'Help',
+    icon: HelpCircle,
+    sections: [
+      {
+        label: 'Support',
+        items: [
+          { id: 'docs', label: 'Documentation', icon: FileText, disabled: true },
+          { id: 'support', label: 'Contact Support', icon: MessageSquare, disabled: true },
+        ],
+      },
+      {
+        items: [
+          { id: 'whats-new', label: "What's New", icon: HelpCircle, disabled: true },
+          { id: 'status', label: 'Status Page', icon: HelpCircle, disabled: true },
+        ],
+      },
+    ],
+  };
+
+  return (
+    <SharedTopMenuBar
+      branding={branding}
+      menus={{
+        apps: appsMenu,
+        tools: toolsMenu,
+        settings: settingsMenu,
+        help: helpMenu,
+      }}
+      darkMode={darkMode}
+      onDarkModeToggle={toggleDarkMode}
+      accountSettingsDialog={
+        currentUser ? (
+          <AccountSettingsDialog
+            open={showAccountSettings}
+            onOpenChange={setShowAccountSettings}
+            currentUser={currentUser}
+            roles={roles}
+            permissions={permissions}
+            onSave={handleUpdateUser}
+          />
+        ) : undefined
+      }
+    />
+  );
+}
