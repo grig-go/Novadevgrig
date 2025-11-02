@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { copyToClipboard } from "../utils/clipboard";
 import {
   AIProvider,
   AIProviderWithMaskedKey,
@@ -632,9 +633,13 @@ export function AIConnectionsDashboard() {
     }
   };
 
-  const handleCopyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
+  const handleCopyToClipboard = async (text: string, label: string) => {
+    const success = await copyToClipboard(text);
+    if (success) {
+      toast.success(`${label} copied to clipboard`);
+    } else {
+      toast.error(`Failed to copy ${label} to clipboard`);
+    }
   };
 
   const handleProviderNameChange = (value: AIProviderName) => {

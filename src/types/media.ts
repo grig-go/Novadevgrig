@@ -2,7 +2,15 @@
 
 export type MediaType = 'image' | 'video' | 'audio' | '3d';
 export type MediaSource = 'ai-generated' | 'user-uploaded';
-export type SyncStatus = 'synced' | 'pending' | 'error';
+export type SyncStatus = 'synced' | 'pending' | 'error' | 'paused' | 'none';
+
+export interface SystemDistribution {
+  system_name: string;
+  system_type: string;
+  path: string;
+  status: SyncStatus;
+  last_sync?: string;
+}
 
 export interface MediaAsset {
   id: string;
@@ -27,13 +35,7 @@ export interface MediaAsset {
   usage_count: number;
   sync_status: SyncStatus;
   last_synced?: string; // ISO date
-}
-
-export interface SystemDistribution {
-  system_name: string;
-  path: string;
-  status: SyncStatus;
-  last_sync?: string;
+  distribution?: SystemDistribution[];
 }
 
 export interface MediaFilters {

@@ -50,6 +50,7 @@ import {
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { copyToClipboard as copyTextToClipboard } from "../utils/clipboard";
 
 // Categories for display
 type ProviderCategory = "weather" | "sports" | "news" | "finance";
@@ -501,9 +502,13 @@ export function FeedsDashboardWithSupabase({
     setDebugDialogOpen(true);
   };
 
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
+  const copyToClipboard = async (text: string, label: string) => {
+    const success = await copyTextToClipboard(text);
+    if (success) {
+      toast.success(`${label} copied to clipboard`);
+    } else {
+      toast.error(`Failed to copy ${label} to clipboard`);
+    }
   };
 
   // No client-side filtering needed - RPC already filters by category
