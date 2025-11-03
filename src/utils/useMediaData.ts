@@ -107,7 +107,7 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
         file_type: asset.media_type as MediaType,
         file_size: asset.size || 0,
         dimensions: asset.dimensions,
-        source: asset.created_by?.startsWith('ai:') ? 'ai-generated' as MediaSource : 'user-uploaded' as MediaSource,
+        source: (asset.created_by?.startsWith('ai:') || asset.created_by === 'AI') ? 'ai-generated' as MediaSource : 'user-uploaded' as MediaSource,
         ai_model_used: asset.ai_model_used,
         created_by: asset.created_by,
         created_at: asset.created_at,

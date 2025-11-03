@@ -1323,8 +1323,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
               setAiImagePrompt('');
               setGeneratedImageUrl(null);
             }} 
-            className="gap-2"
-            variant="outline"
+            className="gap-2 bg-black text-white hover:bg-black/90"
           >
             <Brain className="w-4 h-4" />
             Gen Image

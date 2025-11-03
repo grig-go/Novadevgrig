@@ -47,7 +47,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const [selectedRaceType, setSelectedRaceType] = useState((parseInt(currentElectionYear) % 4) ? 'SENATE' : 'PRESIDENTIAL');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedState, setSelectedState] = useState((parseInt(currentElectionYear) % 4) ? 'all' : 'National');
-  const [selectedYear, setSelectedYear] = useState(String(currentElectionYear));
+  const [selectedYear, setSelectedYear] = useState('2024');
   const [showOverridesDialog, setShowOverridesDialog] = useState(false);
   const [showAIInsights, setShowAIInsights] = useState(false);
 
