@@ -32,6 +32,8 @@ import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2, ImageIcon } f
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
 import { useSportsData } from "./utils/useSportsData";
+import { useNewsFeed } from "./utils/useNewsFeed";
+import { useNewsProviders } from "./utils/useNewsProviders";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
 type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media';
@@ -74,6 +76,63 @@ export default function App() {
   const { stats: weatherStats } = useWeatherData();
   const { stats: financeStats } = useFinanceData();
   const { stats: sportsStats } = useSportsData();
+  
+  // Fetch news data (stored articles from database)
+  const [newsStats, setNewsStats] = useState({ articlesCount: 0, providersCount: 0, loading: true, error: null as string | null });
+  
+  useEffect(() => {
+    let mounted = true;
+    
+    const fetchNewsStats = async () => {
+      try {
+        // Fetch stored articles count
+        const articlesResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-articles/stored?limit=1000`,
+          {
+            headers: {
+              'Authorization': `Bearer ${publicAnonKey}`,
+              'Cache-Control': 'no-cache'
+            }
+          }
+        );
+        
+        // Fetch active providers count
+        const providersResponse = await fetch(
+          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,is_active&category=eq.news&is_active=eq.true`,
+          {
+            headers: {
+              'Authorization': `Bearer ${publicAnonKey}`,
+              'apikey': publicAnonKey,
+            }
+          }
+        );
+        
+        if (!mounted) return;
+        
+        let articlesCount = 0;
+        let providersCount = 0;
+        
+        if (articlesResponse.ok) {
+          const articlesData = await articlesResponse.json();
+          articlesCount = articlesData.articles?.length || 0;
+        }
+        
+        if (providersResponse.ok) {
+          const providersData = await providersResponse.json();
+          providersCount = providersData.length || 0;
+        }
+        
+        setNewsStats({ articlesCount, providersCount, loading: false, error: null });
+      } catch (err) {
+        if (!mounted) return;
+        console.error('Error fetching news stats:', err);
+        setNewsStats({ articlesCount: 0, providersCount: 0, loading: false, error: String(err) });
+      }
+    };
+    
+    fetchNewsStats();
+    return () => { mounted = false; };
+  }, []);
 
   const handleUpdateRace = (updatedRace: Race) => {
     setElectionData(prev => ({
@@ -614,13 +673,49 @@ export default function App() {
             </p>
             <div className="flex items-center gap-6 pt-4 border-t">
               <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Live data</span>
+                {newsStats.loading ? (
+                  <>
+                    <span className="text-2xl font-semibold">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </span>
+                    <span className="text-xs text-muted-foreground">Loading...</span>
+                  </>
+                ) : newsStats.error ? (
+                  <>
+                    <span className="text-2xl font-semibold text-orange-500">!</span>
+                    <span className="text-xs text-muted-foreground">Error</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl font-semibold">{newsStats.articlesCount}</span>
+                    <span className="text-xs text-muted-foreground">articles</span>
+                  </>
+                )}
               </div>
               <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Multi-provider</span>
+                {newsStats.loading ? (
+                  <>
+                    <span className="text-2xl font-semibold">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    </span>
+                    <span className="text-xs text-muted-foreground">Loading...</span>
+                  </>
+                ) : newsStats.error ? (
+                  <>
+                    <span className="text-2xl font-semibold text-orange-500">!</span>
+                    <span className="text-xs text-muted-foreground">Error</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl font-semibold">{newsStats.providersCount}</span>
+                    <span className="text-xs text-muted-foreground">providers</span>
+                  </>
+                )}
               </div>
               <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Real-time</span>
+                <span className="text-sm text-muted-foreground">
+                  {newsStats.loading ? "Loading..." : newsStats.error ? "Error" : "Stored"}
+                </span>
               </div>
             </div>
           </CardContent>
