@@ -4371,6 +4371,219 @@ app.get("/make-server-cbef71cf/ai-providers", async (c) => {
   }
 });
 
+// Generate image with AI provider
+app.post("/make-server-cbef71cf/ai-providers/generate-image", async (c) => {
+  try {
+    const body = await safeJson(c);
+    const { providerId, prompt, dashboard } = body;
+
+    if (!providerId || !prompt) {
+      return jsonErr(c, 400, 'AI_IMAGE_INVALID_INPUT', 'providerId and prompt are required');
+    }
+
+    // Get the AI provider from database
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: provider, error } = await supabase
+      .from("ai_providers")
+      .select("*")
+      .eq("id", providerId)
+      .single();
+
+    if (error || !provider) {
+      return jsonErr(c, 404, 'AI_PROVIDER_NOT_FOUND', error?.message);
+    }
+
+    if (!provider.enabled) {
+      return jsonErr(c, 400, 'AI_PROVIDER_DISABLED', 'This AI provider is disabled');
+    }
+
+    console.log(`🎨 Generating image with ${provider.provider_name} for dashboard: ${dashboard}`);
+
+    let imageUrl = '';
+
+    // Handle different image generation providers
+    if (provider.provider_name === 'dalle' || (provider.provider_name === 'openai' && provider.type === 'image')) {
+      // OpenAI DALL-E API
+      const response = await fetch(`${provider.endpoint || 'https://api.openai.com/v1'}/images/generations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${provider.api_key}`,
+        },
+        body: JSON.stringify({
+          model: provider.model || 'dall-e-3',
+          prompt: prompt,
+          n: 1,
+          size: '1024x1024',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('DALL-E API error:', errorData);
+        return jsonErr(c, response.status, 'DALLE_API_ERROR', errorData.error?.message || 'DALL-E API error');
+      }
+
+      const data = await response.json();
+      imageUrl = data.data[0]?.url || '';
+
+    } else if (provider.provider_name === 'stability') {
+      // Stability AI API
+      const response = await fetch(`${provider.endpoint || 'https://api.stability.ai/v1'}/generation/${provider.model || 'stable-diffusion-xl-1024-v1-0'}/text-to-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${provider.api_key}`,
+        },
+        body: JSON.stringify({
+          text_prompts: [
+            {
+              text: prompt,
+              weight: 1,
+            },
+          ],
+          cfg_scale: 7,
+          height: 1024,
+          width: 1024,
+          steps: 30,
+          samples: 1,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Stability AI API error:', errorData);
+        return jsonErr(c, response.status, 'STABILITY_API_ERROR', errorData.message || 'Stability AI API error');
+      }
+
+      const data = await response.json();
+      // Stability AI returns base64 images
+      if (data.artifacts && data.artifacts[0]) {
+        imageUrl = `data:image/png;base64,${data.artifacts[0].base64}`;
+      }
+
+    } else if (provider.provider_name === 'gemini') {
+      // Google AI Studio (Gemini) Image Generation
+      // Uses simple API key authentication (not Vertex AI)
+      
+      // Get the model from the provider's model column
+      // Common models: gemini-2.0-flash-image-exp-001, imagen-3.0-generate-001, gemini-2.0-flash-exp
+      const imageModel = provider.model;
+      
+      if (!imageModel) {
+        return jsonErr(c, 400, 'MISSING_MODEL', 'Model name is required for image generation. Set the model field in the AI provider.');
+      }
+      
+      // Use the generativelanguage API (Google AI Studio), not Vertex AI
+      const geminiEndpoint = `${provider.endpoint || 'https://generativelanguage.googleapis.com/v1beta'}/models/${imageModel}:generateContent?key=${provider.api_key}`;
+      
+      console.log(`🎨 Calling Google AI Studio (Gemini) image generation`);
+      console.log(`   Model: ${imageModel}`);
+      console.log(`   Endpoint: ${geminiEndpoint.replace(provider.api_key, 'API_KEY_HIDDEN')}`);
+      
+      const response = await fetch(geminiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            temperature: provider.temperature || 0.7,
+            topK: provider.config?.topK || 40,
+            topP: provider.top_p || 0.95,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Gemini API error:', errorText);
+        
+        let errorMessage = errorText;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorText;
+        } catch (e) {
+          // Keep original error text
+        }
+        
+        // Provide helpful error messages
+        if (response.status === 404) {
+          errorMessage = `404 Not Found - Model "${imageModel}" not found. Try using "gemini-2.0-flash-exp" or check if image generation is supported.`;
+        } else if (response.status === 400) {
+          errorMessage = `400 Bad Request - ${errorMessage}. Check if the model supports image generation.`;
+        } else if (response.status === 403 || response.status === 401) {
+          errorMessage = `${response.status} Authentication Error - Check that your API key is valid and has permission to use this model.`;
+        }
+        
+        return jsonErr(c, response.status, 'GEMINI_API_ERROR', errorMessage);
+      }
+
+      const data = await response.json();
+      console.log('Gemini API response:', JSON.stringify(data, null, 2));
+      
+      // Gemini returns image data in candidates[0].content.parts[0].inline_data.data
+      // or candidates[0].content.parts[].inline_data for multiple parts
+      if (data.candidates && data.candidates[0]?.content?.parts) {
+        const parts = data.candidates[0].content.parts;
+        
+        // Find the first part with inline_data (image)
+        for (const part of parts) {
+          if (part.inline_data?.data) {
+            // The data is already base64 encoded
+            const mimeType = part.inline_data.mime_type || 'image/png';
+            imageUrl = `data:${mimeType};base64,${part.inline_data.data}`;
+            console.log(`✅ Found image in response (${mimeType})`);
+            break;
+          }
+        }
+      }
+      
+      if (!imageUrl) {
+        // Check if the response contains text instead of an image
+        if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+          const textResponse = data.candidates[0].content.parts[0].text;
+          return jsonErr(c, 400, 'GEMINI_NO_IMAGE', `Model returned text instead of image. The model "${imageModel}" may not support image generation. Response: ${textResponse.substring(0, 200)}`);
+        }
+        return jsonErr(c, 500, 'GEMINI_NO_IMAGE', `Gemini did not return an image. Check if model "${imageModel}" supports image generation. Response: ` + JSON.stringify(data));
+      }
+
+    } else {
+      return jsonErr(c, 400, 'UNSUPPORTED_PROVIDER', `Image generation not supported for provider: ${provider.provider_name}`);
+    }
+
+    if (!imageUrl) {
+      return jsonErr(c, 500, 'IMAGE_GENERATION_FAILED', 'No image URL returned from provider');
+    }
+
+    console.log(`✅ Image generated successfully with ${provider.provider_name}`);
+
+    return c.json({
+      ok: true,
+      imageUrl,
+      provider: provider.name,
+      model: provider.model,
+    });
+
+  } catch (error) {
+    console.error("Error in AI image generation:", error);
+    return jsonErr(c, 500, 'AI_IMAGE_GENERATION_FAILED', error);
+  }
+});
+
 // Create AI provider
 app.post("/make-server-cbef71cf/ai-providers", async (c) => {
   try {

@@ -93,6 +93,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [showSystemDropdown, setShowSystemDropdown] = useState(false);
   const [loadingSystems, setLoadingSystems] = useState(false);
   const [assigningSystem, setAssigningSystem] = useState(false);
+  const [distributions, setDistributions] = useState<any[]>([]);
+  const [loadingDistributions, setLoadingDistributions] = useState(false);
+
+  // AI Image Generation states
+  const [showAIImageDialog, setShowAIImageDialog] = useState(false);
+  const [aiImagePrompt, setAiImagePrompt] = useState('');
+  const [selectedAIProvider, setSelectedAIProvider] = useState<string>('');
+  const [aiImageProviders, setAiImageProviders] = useState<any[]>([]);
+  const [loadingAIProviders, setLoadingAIProviders] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  
+  // URL copying state
+  const [copyingURL, setCopyingURL] = useState(false);
 
   // Derive unique AI models and creators from assets
   const uniqueAIModels = useMemo(() => {
@@ -125,6 +139,15 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     clearSelection();
   }, [searchQuery, selectedType, selectedSource, selectedAIModel, selectedCreator, selectedSyncStatus, showArchived]);
 
+  // Fetch distributions when selectedAsset changes
+  useEffect(() => {
+    if (selectedAsset) {
+      fetchDistributions(selectedAsset.id);
+    } else {
+      setDistributions([]);
+    }
+  }, [selectedAsset?.id]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -139,6 +162,51 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showSystemDropdown]);
+
+  // Load AI image providers assigned to media-library
+  useEffect(() => {
+    const loadAIProviders = async () => {
+      try {
+        setLoadingAIProviders(true);
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to load AI providers');
+        }
+
+        const data = await response.json();
+        
+        // Find providers assigned to media-library dashboard with imageProvider enabled
+        const mediaLibraryProviders = data.providers?.filter((p: any) =>
+          p.enabled && p.dashboardAssignments?.some((d: any) => 
+            d.dashboard === 'media-library' && d.imageProvider
+          )
+        ) || [];
+
+        setAiImageProviders(mediaLibraryProviders);
+        
+        // Auto-select first provider if available
+        if (mediaLibraryProviders.length > 0 && !selectedAIProvider) {
+          setSelectedAIProvider(mediaLibraryProviders[0].id);
+        }
+        
+        console.log(`Loaded ${mediaLibraryProviders.length} AI image providers for Media Library`);
+      } catch (error) {
+        console.error('Error loading AI providers:', error);
+      } finally {
+        setLoadingAIProviders(false);
+      }
+    };
+
+    loadAIProviders();
+  }, []);
 
   // Filter and sort assets
   const filteredAssets = useMemo(() => {
@@ -290,6 +358,46 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     }
   };
 
+  const handleCopyURL = async (assetId: string) => {
+    try {
+      setCopyingURL(true);
+      console.log('🔗 Fetching public URL for asset:', assetId);
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/media-library/${assetId}/signed-url`,
+        {
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to get URL: ${response.status}`);
+      }
+
+      const { signedUrl } = await response.json();
+      
+      const copySuccess = await copyToClipboard(signedUrl);
+      
+      if (copySuccess) {
+        toast.success("Public URL copied to clipboard");
+        console.log('✅ Public URL copied:', signedUrl);
+      } else {
+        // If clipboard copy failed, show the URL in a prompt as fallback
+        console.warn('⚠️ Clipboard copy failed, showing prompt fallback');
+        prompt('Copy this URL manually:', signedUrl);
+        toast.info("Please copy the URL from the dialog");
+      }
+    } catch (error) {
+      console.error('❌ Error copying URL:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to copy URL");
+    } finally {
+      setCopyingURL(false);
+    }
+  };
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -413,12 +521,375 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     }
   };
 
-  const handleCopyURL = async (url: string) => {
-    const success = await copyToClipboard(url);
-    if (success) {
-      toast.success("URL copied to clipboard");
-    } else {
-      toast.error("Failed to copy URL to clipboard");
+  const handleGenerateAIImage = async () => {
+    if (!aiImagePrompt.trim()) {
+      toast.error("Please enter a prompt");
+      return;
+    }
+
+    if (!selectedAIProvider) {
+      toast.error("Please select an AI provider");
+      return;
+    }
+
+    try {
+      setGeneratingImage(true);
+      setGeneratedImageUrl(null);
+
+      console.log('🎨 HARDCODED GEMINI TEST: Generating AI image with prompt:', aiImagePrompt);
+
+      // Step 1: Get raw API key using the existing /reveal endpoint (same as AI Connections)
+      console.log('🔑 Step 1: Fetching API key from backend...');
+      console.log(`   • Provider ID: ${selectedAIProvider}`);
+      
+      const revealResponse = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (!revealResponse.ok) {
+        const errorText = await revealResponse.text();
+        console.error('❌ Failed to reveal API key:', errorText);
+        throw new Error(`Failed to retrieve API credentials: ${revealResponse.status}`);
+      }
+
+      const { apiKey, apiSecret } = await revealResponse.json();
+      
+      if (!apiKey) {
+        throw new Error('No API key configured for this provider');
+      }
+      
+      console.log('✅ API key retrieved successfully');
+
+      // Step 2: Call Gemini API directly using hardcoded endpoint
+      console.log('🌐 Step 2: Calling Gemini 2.5 Flash Image API directly...');
+      const geminiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
+      console.log(`   • Endpoint: ${geminiEndpoint}`);
+      console.log(`   • Prompt: "${aiImagePrompt}"`);
+
+      const geminiResponse = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: aiImagePrompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseModalities: ["IMAGE"],
+            imageConfig: {
+              aspectRatio: "1:1"
+            }
+          }
+        }),
+      });
+
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error('❌ Gemini API error:', errorText);
+        throw new Error(`Gemini API error: ${geminiResponse.status} - ${errorText.slice(0, 200)}`);
+      }
+
+      const geminiData = await geminiResponse.json();
+      console.log('✅ Gemini response received');
+      console.log('🔍 Full Gemini response:', JSON.stringify(geminiData, null, 2));
+
+      // Step 3: Extract base64 image from response
+      console.log('📸 Step 3: Extracting image data...');
+      const firstCandidate = geminiData.candidates?.[0];
+      
+      if (!firstCandidate?.content?.parts?.length) {
+        console.error('❌ No candidates or parts found. Full response:', geminiData);
+        throw new Error('No image data in Gemini response');
+      }
+
+      const imagePart = firstCandidate.content.parts.find((p: any) => p.inlineData);
+      
+      if (!imagePart?.inlineData?.data) {
+        throw new Error('No inline image data found in response');
+      }
+
+      const base64Image = imagePart.inlineData.data;
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      
+      // Convert base64 to data URL
+      const dataUrl = `data:${mimeType};base64,${base64Image}`;
+      console.log(`✅ Image extracted (${mimeType}, ${base64Image.length} bytes)`);
+
+      setGeneratedImageUrl(dataUrl);
+      toast.success(`Image generated with Gemini 2.5 Flash Image`);
+      
+    } catch (error) {
+      console.error('❌ Error in hardcoded Gemini test:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Gemini Test Error: ${errorMessage}`);
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
+  const handleAddGeneratedImage = async () => {
+    if (!generatedImageUrl) {
+      toast.error("No generated image to add");
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      // Convert data URL to blob using fetch
+      const response = await fetch(generatedImageUrl);
+      const blob = await response.blob();
+      
+      // Create a File object from the blob
+      const fileName = `ai-generated-${Date.now()}.png`;
+      const file = new File([blob], fileName, { type: blob.type });
+
+      // Upload to backend using same structure as handleUpload
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", aiImagePrompt.slice(0, 100) || fileName);
+      formData.append("description", `AI Generated: ${aiImagePrompt}`);
+      formData.append("tags", JSON.stringify(['ai-generated', 'image']));
+      
+      // Determine media type from file (same logic as handleUpload)
+      const fileType = file.type;
+      const mediaType = fileType.startsWith('image') 
+        ? 'image' 
+        : fileType.startsWith('video') 
+        ? 'video' 
+        : fileType.startsWith('audio') 
+        ? 'audio' 
+        : 'image';
+      
+      formData.append("media_type", mediaType);
+      formData.append("created_by", "AI");
+      
+      // Get provider info for ai_model_used
+      const provider = aiImageProviders.find(p => p.id === selectedAIProvider);
+      if (provider?.model) {
+        formData.append("ai_model_used", provider.model);
+      }
+
+      console.log('📤 Uploading AI-generated image to backend...');
+      const result = await uploadAsset(formData);
+      
+      setIsUploading(false);
+
+      if (result.success) {
+        toast.success("AI-generated image added to library");
+        setShowAIImageDialog(false);
+        setAiImagePrompt('');
+        setGeneratedImageUrl(null);
+      } else {
+        toast.error(result.error || "Failed to add image to library");
+      }
+    } catch (error) {
+      setIsUploading(false);
+      console.error('❌ Error adding generated image:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to add image: ${errorMessage}`);
+    }
+  };
+
+  const handleDebugProvider = async () => {
+    if (!selectedAIProvider) {
+      toast.error("No AI provider selected");
+      return;
+    }
+
+    const startTime = Date.now();
+    console.log('\n🔍 ========================================');
+    console.log('🔍 AI PROVIDER DEBUG TEST STARTED');
+    console.log('🔍 ========================================\n');
+
+    try {
+      setGeneratingImage(true);
+      
+      // Step 0: Check server health
+      console.log('💓 Step 0: Checking Server Health...');
+      try {
+        const healthUrl = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/health`;
+        console.log(`   • Health Check URL: ${healthUrl}`);
+        const healthResponse = await fetch(healthUrl, {
+          headers: { Authorization: `Bearer ${publicAnonKey}` },
+        });
+        
+        if (healthResponse.ok) {
+          const healthData = await healthResponse.json();
+          console.log('✅ Server is running!');
+          console.log(`   • Status: ${healthData.status}`);
+          console.log(`   • Build: ${healthData.build}`);
+        } else {
+          console.error(`❌ Server health check failed: ${healthResponse.status} ${healthResponse.statusText}`);
+          toast.error(`Server not responding (HTTP ${healthResponse.status}). The backend function may not be deployed.`, { duration: 8000 });
+          return;
+        }
+      } catch (healthError) {
+        console.error('❌ Server health check error:', healthError);
+        toast.error(`Cannot reach backend server. Check console for details.`, { duration: 8000 });
+        return;
+      }
+      
+      // Step 1: Get provider details
+      console.log('\n📋 Step 1: Fetching Provider Details...');
+      const provider = aiImageProviders.find(p => p.id === selectedAIProvider);
+      
+      if (!provider) {
+        const errorMsg = `❌ Provider not found in local cache. Selected ID: ${selectedAIProvider}`;
+        console.error(errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
+
+      console.log('✅ Provider found in cache:');
+      console.log(`   • Name: ${provider.name}`);
+      console.log(`   • ID: ${provider.id}`);
+      console.log(`   • Provider Type: ${provider.provider_name}`);
+      console.log(`   • Model: ${provider.model}`);
+      console.log(`   • Endpoint: ${provider.endpoint || 'default'}`);
+      console.log(`   • Enabled: ${provider.enabled}`);
+      console.log(`   • Dashboard Assignments:`, JSON.stringify(provider.dashboardAssignments, null, 2));
+
+      toast.info(`Testing ${provider.name} with model: ${provider.model}`, { duration: 3000 });
+
+      // Step 2: Prepare the test request
+      const testPrompt = "A simple red circle on white background";
+      console.log('\n📤 Step 2: Preparing Test Request...');
+      console.log(`   • Test Prompt: "${testPrompt}"`);
+      console.log(`   • Dashboard: media-library`);
+      console.log(`   • Endpoint: https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/generate-image`);
+
+      const requestBody = {
+        providerId: selectedAIProvider,
+        prompt: testPrompt,
+        dashboard: 'media-library',
+      };
+      console.log('   • Request Body:', JSON.stringify(requestBody, null, 2));
+
+      // Step 3: Make the API call
+      console.log('\n🌐 Step 3: Calling Backend API...');
+      const requestStartTime = Date.now();
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/generate-image`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      const requestDuration = Date.now() - requestStartTime;
+      console.log(`⏱️  Request completed in ${requestDuration}ms`);
+      console.log(`   • Status Code: ${response.status} ${response.statusText}`);
+      console.log(`   • Headers:`, Object.fromEntries(response.headers.entries()));
+
+      // Step 4: Parse response
+      console.log('\n📥 Step 4: Parsing Response...');
+      const responseText = await response.text();
+      console.log(`   • Response Length: ${responseText.length} bytes`);
+      console.log(`   • Raw Response (first 500 chars): ${responseText.slice(0, 500)}`);
+
+      if (!response.ok) {
+        let errorData: any;
+        try {
+          errorData = JSON.parse(responseText);
+          console.error('❌ ERROR Response:', JSON.stringify(errorData, null, 2));
+        } catch (e) {
+          console.error('❌ Failed to parse error response as JSON');
+          console.error('   Raw error text:', responseText);
+        }
+        
+        const errorMsg = errorData?.error || errorData?.details || `HTTP ${response.status}: ${responseText.slice(0, 200)}`;
+        toast.error(`Debug Test Failed: ${errorMsg}`, { duration: 10000 });
+        throw new Error(errorMsg);
+      }
+
+      // Step 5: Process success response
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+        console.log('✅ SUCCESS Response:', JSON.stringify(data, null, 2));
+      } catch (e) {
+        console.error('❌ Failed to parse success response as JSON');
+        console.error('   Raw response:', responseText);
+        throw new Error(`Invalid response format: ${responseText.slice(0, 200)}`);
+      }
+
+      // Step 6: Validate image
+      console.log('\n🖼️  Step 6: Validating Generated Image...');
+      if (!data.imageUrl) {
+        const errorMsg = '❌ No imageUrl in response';
+        console.error(errorMsg);
+        toast.error(errorMsg);
+        return;
+      }
+
+      console.log(`✅ Image URL received: ${data.imageUrl.slice(0, 100)}...`);
+      console.log(`   • Provider Used: ${data.provider || 'unknown'}`);
+      console.log(`   • Image Type: ${data.imageUrl.startsWith('data:') ? 'Base64 Data URI' : 'Remote URL'}`);
+
+      // Step 7: Test image loading
+      console.log('\n📦 Step 7: Testing Image Load...');
+      const imgTest = new Image();
+      imgTest.onload = () => {
+        console.log('✅ Image loaded successfully');
+        console.log(`   • Dimensions: ${imgTest.width}x${imgTest.height}px`);
+      };
+      imgTest.onerror = () => {
+        console.error('❌ Image failed to load');
+      };
+      imgTest.src = data.imageUrl;
+
+      // Final summary
+      const totalDuration = Date.now() - startTime;
+      console.log('\n✅ ========================================');
+      console.log('✅ DEBUG TEST COMPLETED SUCCESSFULLY');
+      console.log('✅ ========================================');
+      console.log(`   • Total Duration: ${totalDuration}ms`);
+      console.log(`   • Provider: ${provider.name}`);
+      console.log(`   • Model: ${provider.model}`);
+      console.log(`   • Provider Type: ${provider.provider_name}`);
+      console.log(`   • Status: SUCCESS ✓`);
+      console.log('========================================\n');
+
+      toast.success(
+        `✅ Debug Test Passed!\n\nProvider: ${provider.name}\nModel: ${provider.model}\nDuration: ${totalDuration}ms\n\nCheck console for full details.`,
+        { duration: 8000 }
+      );
+
+      // Optionally set the generated image to display
+      setGeneratedImageUrl(data.imageUrl);
+      
+    } catch (error) {
+      const totalDuration = Date.now() - startTime;
+      console.error('\n❌ ========================================');
+      console.error('❌ DEBUG TEST FAILED');
+      console.error('❌ ========================================');
+      console.error(`   • Error: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`   • Duration: ${totalDuration}ms`);
+      console.error('========================================\n');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Debug Test Failed: ${errorMessage}\n\nCheck console for details.`, { duration: 10000 });
+    } finally {
+      setGeneratingImage(false);
     }
   };
 
@@ -556,9 +1027,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     try {
       setLoadingSystems(true);
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/media-library`;
-
-      const response = await fetch(`${baseUrl}/systems`, {
+      console.log("🔍 Fetching systems from media-library/systems endpoint...");
+      
+      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/systems`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
           "Content-Type": "application/json",
@@ -566,15 +1037,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Response not OK:", response.status, errorText);
         throw new Error(`Failed to fetch systems: ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log("📦 Systems API response:", result);
+      
+      // The media-library endpoint returns { data: [...] } directly, no success flag
       setAvailableSystems(result.data || []);
       setShowSystemDropdown(true);
-      console.log(`✅ Loaded ${result.data?.length || 0} systems`);
+      console.log(`✅ Loaded ${result.data?.length || 0} systems:`, result.data);
     } catch (error) {
-      console.error("Error fetching systems:", error);
+      console.error("💥 Error fetching systems:", error);
       toast.error("Failed to load systems");
     } finally {
       setLoadingSystems(false);
@@ -586,9 +1062,11 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     try {
       setAssigningSystem(true);
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/media-library`;
+      console.log("📌 Assigning system:", systemId, "to media:", selectedAsset.id);
+      
+      const system = availableSystems.find(s => s.id === systemId);
 
-      const response = await fetch(`${baseUrl}/distribute`, {
+      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -602,23 +1080,63 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Assignment failed:", errorData);
         throw new Error(errorData.error || `Failed to assign system: ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log("✅ Assignment result:", result);
 
-      if (result.success > 0) {
-        toast.success("System assigned successfully");
+      if (result.success && result.success > 0) {
+        toast.success(`Assigned to ${system?.name || 'system'}`);
         setShowSystemDropdown(false);
-        refresh(); // Refresh the asset data to show the new distribution
+        
+        // Refresh distributions for the current asset
+        if (selectedAsset) {
+          fetchDistributions(selectedAsset.id);
+        }
+      } else if (result.errors && result.errors.length > 0) {
+        toast.error(`Failed: ${result.errors[0]}`);
       } else {
-        toast.error(`Failed to assign system: ${result.errors.join(", ")}`);
+        toast.error("Failed to assign system");
       }
     } catch (error) {
-      console.error("Error assigning system:", error);
+      console.error("💥 Error assigning system:", error);
       toast.error(error instanceof Error ? error.message : "Failed to assign system");
     } finally {
       setAssigningSystem(false);
+    }
+  };
+
+  const fetchDistributions = async (mediaAssetId: string) => {
+    try {
+      setLoadingDistributions(true);
+      console.log("🔍 Fetching distributions for media asset:", mediaAssetId);
+      
+      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute?media_asset_id=${mediaAssetId}`, {
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Failed to fetch distributions:", response.status, errorText);
+        throw new Error(`Failed to fetch distributions: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log("📦 Distributions API response:", result);
+      
+      setDistributions(result.data || []);
+      console.log(`✅ Loaded ${result.data?.length || 0} distributions`);
+    } catch (error) {
+      console.error("💥 Error fetching distributions:", error);
+      // Don't show error toast, just log it
+      setDistributions([]);
+    } finally {
+      setLoadingDistributions(false);
     }
   };
 
@@ -626,9 +1144,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     if (!confirm("Remove this system distribution?")) return;
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/media-library`;
-
-      const response = await fetch(`${baseUrl}/distribute/${distributionId}`, {
+      console.log("🗑️  Removing distribution:", distributionId);
+      
+      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute/${distributionId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
@@ -638,13 +1156,21 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Removal failed:", errorData);
         throw new Error(errorData.error || `Failed to remove distribution: ${response.statusText}`);
       }
 
+      const result = await response.json();
+      console.log("✅ Removal result:", result);
+      
       toast.success("Distribution removed");
-      refresh(); // Refresh the asset data
+      
+      // Refresh distributions for the current asset
+      if (selectedAsset) {
+        fetchDistributions(selectedAsset.id);
+      }
     } catch (error) {
-      console.error("Error removing distribution:", error);
+      console.error("💥 Error removing distribution:", error);
       toast.error(error instanceof Error ? error.message : "Failed to remove distribution");
     }
   };
@@ -790,6 +1316,18 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
           </Button>
           <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
             {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid3x3 className="w-4 h-4" />}
+          </Button>
+          <Button 
+            onClick={() => {
+              setShowAIImageDialog(true);
+              setAiImagePrompt('');
+              setGeneratedImageUrl(null);
+            }} 
+            className="gap-2"
+            variant="outline"
+          >
+            <Brain className="w-4 h-4" />
+            Gen Image
           </Button>
           <Button onClick={() => setShowUploadDialog(true)} className="gap-2">
             <Upload className="w-4 h-4" />
@@ -1207,7 +1745,10 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       {/* Media Detail Dialog */}
       {selectedAsset && (
         <Dialog open={!!selectedAsset} onOpenChange={() => setSelectedAsset(null)}>
-          <DialogContent className="!max-w-[875px] max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogContent 
+            className="max-h-[90vh] overflow-hidden flex flex-col"
+            style={{ width: '60vw', maxWidth: '60vw' }}
+          >
             <DialogHeader>
               <DialogTitle>{selectedAsset.name}</DialogTitle>
               <DialogDescription>
@@ -1404,10 +1945,13 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                                   <div className="text-center py-6 text-muted-foreground text-sm">
                                     <Server className="w-8 h-8 mx-auto mb-2 opacity-50" />
                                     <p>No systems available</p>
+                                    <p className="text-xs mt-2">Check console for details</p>
                                   </div>
                                 ) : (
                                   <div className="space-y-1">
-                                    {availableSystems.map((system) => (
+                                    {availableSystems.map((system) => {
+                                      console.log("🎨 Rendering system in dropdown:", system);
+                                      return (
                                       <button
                                         key={system.id}
                                         onClick={() => handleAssignSystem(system.id)}
@@ -1417,7 +1961,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                                         <div className="flex items-start gap-3">
                                           <Server className="w-4 h-4 mt-0.5 text-muted-foreground" />
                                           <div className="flex-1 min-w-0">
-                                            <div className="font-medium text-sm">{system.name}</div>
+                                            <div className="font-medium text-sm">{system.name || system.file_name || 'Unknown'}</div>
                                             {system.description && (
                                               <div className="text-xs text-muted-foreground truncate">
                                                 {system.description}
@@ -1436,7 +1980,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                                           </div>
                                         </div>
                                       </button>
-                                    ))}
+                                    );
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -1447,22 +1992,27 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                     </div>
                   </div>
 
-                  {selectedAsset.distribution && selectedAsset.distribution.length > 0 ? (
+                  {loadingDistributions ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p className="text-sm">Loading distributions...</p>
+                    </div>
+                  ) : distributions.length > 0 ? (
                     <div className="border rounded-lg">
                       <Table>
                         <TableHeader>
                           <TableRow>
                             <TableHead>System</TableHead>
                             <TableHead>IP Address</TableHead>
-                            <TableHead>Directory</TableHead>
+                            <TableHead>Path</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Last Sync</TableHead>
                             <TableHead className="w-[100px]">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {selectedAsset.distribution.map((dist: any, idx: number) => (
-                            <TableRow key={idx}>
+                          {distributions.map((dist: any) => (
+                            <TableRow key={dist.id}>
                               <TableCell>
                                 <div className="flex items-center gap-2">
                                   <Server className="w-4 h-4 text-muted-foreground" />
@@ -1520,9 +2070,18 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
             <DialogFooter className="gap-2">
               <div className="flex items-center gap-2 mr-auto">
-                <Button variant="outline" size="sm" onClick={() => handleCopyURL(selectedAsset.file_url)}>
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copy URL
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => handleCopyURL(selectedAsset.id)}
+                  disabled={copyingURL}
+                >
+                  {copyingURL ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Copy className="w-4 h-4 mr-2" />
+                  )}
+                  {copyingURL ? "Getting URL..." : "Copy URL"}
                 </Button>
                 <Button 
                   variant="outline" 
@@ -1700,6 +2259,151 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
               {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
               {isUploading ? 'Uploading...' : 'Upload'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Image Generation Dialog */}
+      <Dialog open={showAIImageDialog} onOpenChange={setShowAIImageDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col" style={{ maxWidth: '800px' }}>
+          <DialogHeader className="flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-purple-600" />
+              <DialogTitle>AI Image Generator</DialogTitle>
+            </div>
+            <DialogDescription>
+              Generate images using AI and add them to your media library
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 -mx-6 px-6">
+            <div className="space-y-4 pr-4">
+            {/* AI Provider Selection */}
+            <div className="space-y-2">
+              <Label>AI Provider</Label>
+              {loadingAIProviders ? (
+                <div className="flex items-center gap-2 p-3 border rounded-lg">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm text-muted-foreground">Loading AI providers...</span>
+                </div>
+              ) : aiImageProviders.length === 0 ? (
+                <div className="p-4 border border-yellow-200 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    No AI image providers configured for Media Library. Please configure one in AI Connections dashboard.
+                  </p>
+                </div>
+              ) : (
+                <Select value={selectedAIProvider} onValueChange={setSelectedAIProvider}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an AI provider" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {aiImageProviders.map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        <div className="flex items-center gap-2">
+                          <Brain className="w-4 h-4 text-purple-600" />
+                          <span>{provider.name}</span>
+                          {provider.model && (
+                            <span className="text-xs text-muted-foreground">
+                              ({provider.model})
+                            </span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            {/* Prompt Input */}
+            <div className="space-y-2">
+              <Label htmlFor="ai-prompt">Prompt</Label>
+              <Textarea
+                id="ai-prompt"
+                placeholder="Describe the image you want to generate... (e.g., 'A futuristic sports stadium at sunset with LED lights')"
+                value={aiImagePrompt}
+                onChange={(e) => setAiImagePrompt(e.target.value)}
+                rows={4}
+                disabled={aiImageProviders.length === 0}
+              />
+            </div>
+
+              {/* Generated Image Preview */}
+              {generatedImageUrl && (
+                <div className="space-y-2">
+                  <Label>Generated Image</Label>
+                  <div className="border rounded-lg p-4 bg-muted/20">
+                    <img 
+                      src={generatedImageUrl} 
+                      alt="AI Generated" 
+                      className="w-full max-h-[400px] object-contain rounded mx-auto"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter className="gap-2 flex-shrink-0">
+            <div className="flex items-center justify-between w-full">
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleDebugProvider}
+                disabled={generatingImage || isUploading || !selectedAIProvider}
+                className="gap-2"
+              >
+                <Server className="w-4 h-4" />
+                Debug Provider
+              </Button>
+              
+              <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => {
+                    setShowAIImageDialog(false);
+                    setAiImagePrompt('');
+                    setGeneratedImageUrl(null);
+                  }}
+                  disabled={generatingImage || isUploading}
+                >
+                  Cancel
+                </Button>
+                
+                {!generatedImageUrl ? (
+                  <Button 
+                    onClick={handleGenerateAIImage}
+                    disabled={generatingImage || !aiImagePrompt.trim() || !selectedAIProvider}
+                    className="gap-2"
+                  >
+                    {generatingImage && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {generatingImage ? 'Generating...' : 'Generate Image'}
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setGeneratedImageUrl(null);
+                        setAiImagePrompt('');
+                      }}
+                      disabled={isUploading}
+                    >
+                      Generate Another
+                    </Button>
+                    <Button 
+                      onClick={handleAddGeneratedImage}
+                      disabled={isUploading}
+                      className="gap-2"
+                    >
+                      {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {isUploading ? 'Adding to Library...' : 'Add to Library'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

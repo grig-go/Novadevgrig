@@ -20,10 +20,10 @@ export type AIProviderName =
   | 'pika'
   | 'custom';
 
-export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar' | 'fusion' | 'feeds' | 'ai-connections';
+export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar' | 'fusion' | 'feeds' | 'ai-connections' | 'media-library';
 
 // Dashboards that support AI provider assignments
-export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar' | 'fusion';
+export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar' | 'fusion' | 'media-library';
 
 export interface DashboardAssignment {
   dashboard: AssignableDashboardType;
@@ -212,6 +212,7 @@ export const DASHBOARD_LABELS: Record<DashboardType, string> = {
   fusion: 'Fusion',
   feeds: 'Data Feeds',
   'ai-connections': 'AI Connections',
+  'media-library': 'Media Library',
 };
 
 // Labels for dashboards that support AI assignments
@@ -224,6 +225,7 @@ export const ASSIGNABLE_DASHBOARD_LABELS: Record<AssignableDashboardType, string
   agents: 'Agents',
   pulsar: 'Pulsar',
   fusion: 'Fusion',
+  'media-library': 'Media Library',
 };
 
 // Hardcoded model lists for image providers without API endpoints

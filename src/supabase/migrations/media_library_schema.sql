@@ -62,7 +62,10 @@ CREATE TABLE IF NOT EXISTS systems (
   name TEXT NOT NULL UNIQUE,
   system_type TEXT NOT NULL, -- 'unreal', 'pixara', 'broadcast', 'archive', 'cloud', etc.
   description TEXT,
-  connection_info JSONB, -- Connection details (paths, URLs, credentials, etc.)
+  ip_address TEXT, -- IP address or hostname of the system
+  port INTEGER, -- Port number for the system
+  channel TEXT, -- Channel or mount point (e.g., 'channel1', 'graphics', etc.)
+  connection_info JSONB, -- Additional connection details (paths, URLs, credentials, etc.)
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
@@ -171,7 +174,7 @@ CREATE TRIGGER update_media_distribution_updated_at
 -- =====================================================
 -- Uncomment to add sample systems
 
--- INSERT INTO systems (name, system_type, description, connection_info) VALUES
+-- INSERT INTO systems (name, system_type, description, ip_address, port, channel, connection_info) VALUES
 --   ('Unreal Stage A', 'unreal', 'Unreal Engine production stage', '{"path": "D:\\Media\\Stadiums"}'),
 --   ('Pixara Node 3', 'pixara', 'Pixara render node', '{"path": "/mnt/render/cache"}'),
 --   ('Sports Production A', 'broadcast', 'Sports production server', '{"path": "/mnt/sports/portraits"}'),

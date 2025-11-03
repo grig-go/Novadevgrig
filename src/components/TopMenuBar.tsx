@@ -11,6 +11,8 @@ import {
   Zap,
   Cloud,
   ImageIcon,
+  Bot,
+  Rss,
 } from "lucide-react";
 import { useState } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -91,8 +93,8 @@ export function TopMenuBar({
     sections: [
       {
         items: [
-          { id: 'agents', label: 'Agents', onClick: () => onNavigate('agents') },
-          { id: 'feeds', label: 'Data Feeds', onClick: () => onNavigate('feeds') },
+          { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents') },
+          { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds') },
           { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media') },
         ],
       },
