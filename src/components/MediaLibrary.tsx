@@ -12,7 +12,7 @@ import {
   Image as ImageIcon, Video, Music, Box, Brain, User, 
   CheckCircle2, Clock, AlertCircle, Copy, Download, 
   Trash2, Edit, Tag, HardDrive, FolderOpen, X, FileText, Loader2,
-  Pause, XCircle, Plus
+  Pause, XCircle, Plus, Server
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Label } from "./ui/label";
