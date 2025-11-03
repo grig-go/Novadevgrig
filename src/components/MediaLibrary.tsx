@@ -12,7 +12,7 @@ import {
   Image as ImageIcon, Video, Music, Box, Brain, User, 
   CheckCircle2, Clock, AlertCircle, Copy, Download, 
   Trash2, Edit, Tag, HardDrive, FolderOpen, X, FileText, Loader2,
-  Pause, XCircle, Plus, Server
+  Pause, XCircle, Plus
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Label } from "./ui/label";
@@ -104,6 +104,10 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [loadingAIProviders, setLoadingAIProviders] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  
+  // Image editing states - store the base64 data for revisions
+  const [generatedImageBase64, setGeneratedImageBase64] = useState<string | null>(null);
+  const [generatedImageMimeType, setGeneratedImageMimeType] = useState<string>('image/png');
   
   // URL copying state
   const [copyingURL, setCopyingURL] = useState(false);
@@ -628,6 +632,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       const dataUrl = `data:${mimeType};base64,${base64Image}`;
       console.log(`✅ Image extracted (${mimeType}, ${base64Image.length} bytes)`);
 
+      // Store the base64 data for potential editing
+      setGeneratedImageBase64(base64Image);
+      setGeneratedImageMimeType(mimeType);
       setGeneratedImageUrl(dataUrl);
       toast.success(`Image generated with Gemini 2.5 Flash Image`);
       
@@ -635,6 +642,143 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       console.error('❌ Error in hardcoded Gemini test:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       toast.error(`Gemini Test Error: ${errorMessage}`);
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
+
+  const handleEditImage = async () => {
+    if (!aiImagePrompt.trim()) {
+      toast.error("Please enter a revision prompt");
+      return;
+    }
+
+    if (!generatedImageBase64) {
+      toast.error("No image available to edit");
+      return;
+    }
+
+    if (!selectedAIProvider) {
+      toast.error("Please select an AI provider");
+      return;
+    }
+
+    try {
+      setGeneratingImage(true);
+      console.log('✏️ EDITING IMAGE: Sending image back with revision prompt:', aiImagePrompt);
+
+      // Step 1: Get raw API key
+      console.log('🔑 Step 1: Fetching API key from backend...');
+      const revealResponse = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      if (!revealResponse.ok) {
+        const errorText = await revealResponse.text();
+        console.error('❌ Failed to reveal API key:', errorText);
+        throw new Error(`Failed to retrieve API credentials: ${revealResponse.status}`);
+      }
+
+      const { apiKey } = await revealResponse.json();
+      
+      if (!apiKey) {
+        throw new Error('No API key configured for this provider');
+      }
+      
+      console.log('✅ API key retrieved successfully');
+
+      // Step 2: Call Gemini API with the image + revision prompt
+      console.log('🌐 Step 2: Calling Gemini API with image and revision prompt...');
+      const geminiEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
+      console.log(`   • Endpoint: ${geminiEndpoint}`);
+      console.log(`   • Revision Prompt: "${aiImagePrompt}"`);
+      console.log(`   • Image Size: ${generatedImageBase64.length} bytes`);
+      console.log(`   • MIME Type: ${generatedImageMimeType}`);
+
+      const geminiResponse = await fetch(`${geminiEndpoint}?key=${apiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                // First send the image
+                {
+                  inlineData: {
+                    mimeType: generatedImageMimeType,
+                    data: generatedImageBase64,
+                  }
+                },
+                // Then send the revision instruction
+                {
+                  text: aiImagePrompt
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseModalities: ["IMAGE"],
+            imageConfig: {
+              aspectRatio: "1:1"
+            }
+          }
+        }),
+      });
+
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error('❌ Gemini API error:', errorText);
+        throw new Error(`Gemini API error: ${geminiResponse.status} - ${errorText.slice(0, 200)}`);
+      }
+
+      const geminiData = await geminiResponse.json();
+      console.log('✅ Gemini response received');
+      console.log('🔍 Full Gemini edit response:', JSON.stringify(geminiData, null, 2));
+
+      // Step 3: Extract the revised image from response
+      console.log('📸 Step 3: Extracting revised image data...');
+      const firstCandidate = geminiData.candidates?.[0];
+      
+      if (!firstCandidate?.content?.parts?.length) {
+        console.error('❌ No candidates or parts found. Full response:', geminiData);
+        throw new Error('No image data in Gemini response');
+      }
+
+      const imagePart = firstCandidate.content.parts.find((p: any) => p.inlineData);
+      
+      if (!imagePart?.inlineData?.data) {
+        throw new Error('No inline image data found in response');
+      }
+
+      const base64Image = imagePart.inlineData.data;
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      
+      // Convert base64 to data URL
+      const dataUrl = `data:${mimeType};base64,${base64Image}`;
+      console.log(`✅ Revised image extracted (${mimeType}, ${base64Image.length} bytes)`);
+
+      // Update with the new revised image
+      setGeneratedImageBase64(base64Image);
+      setGeneratedImageMimeType(mimeType);
+      setGeneratedImageUrl(dataUrl);
+      
+      // Clear the prompt for next edit
+      setAiImagePrompt('');
+      
+      toast.success(`Image revised successfully!`);
+      
+    } catch (error) {
+      console.error('❌ Error editing image:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Edit Error: ${errorMessage}`);
     } finally {
       setGeneratingImage(false);
     }
@@ -704,194 +848,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     }
   };
 
-  const handleDebugProvider = async () => {
-    if (!selectedAIProvider) {
-      toast.error("No AI provider selected");
-      return;
-    }
 
-    const startTime = Date.now();
-    console.log('\n🔍 ========================================');
-    console.log('🔍 AI PROVIDER DEBUG TEST STARTED');
-    console.log('🔍 ========================================\n');
-
-    try {
-      setGeneratingImage(true);
-      
-      // Step 0: Check server health
-      console.log('💓 Step 0: Checking Server Health...');
-      try {
-        const healthUrl = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/health`;
-        console.log(`   • Health Check URL: ${healthUrl}`);
-        const healthResponse = await fetch(healthUrl, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        });
-        
-        if (healthResponse.ok) {
-          const healthData = await healthResponse.json();
-          console.log('✅ Server is running!');
-          console.log(`   • Status: ${healthData.status}`);
-          console.log(`   • Build: ${healthData.build}`);
-        } else {
-          console.error(`❌ Server health check failed: ${healthResponse.status} ${healthResponse.statusText}`);
-          toast.error(`Server not responding (HTTP ${healthResponse.status}). The backend function may not be deployed.`, { duration: 8000 });
-          return;
-        }
-      } catch (healthError) {
-        console.error('❌ Server health check error:', healthError);
-        toast.error(`Cannot reach backend server. Check console for details.`, { duration: 8000 });
-        return;
-      }
-      
-      // Step 1: Get provider details
-      console.log('\n📋 Step 1: Fetching Provider Details...');
-      const provider = aiImageProviders.find(p => p.id === selectedAIProvider);
-      
-      if (!provider) {
-        const errorMsg = `❌ Provider not found in local cache. Selected ID: ${selectedAIProvider}`;
-        console.error(errorMsg);
-        toast.error(errorMsg);
-        return;
-      }
-
-      console.log('✅ Provider found in cache:');
-      console.log(`   • Name: ${provider.name}`);
-      console.log(`   • ID: ${provider.id}`);
-      console.log(`   • Provider Type: ${provider.provider_name}`);
-      console.log(`   • Model: ${provider.model}`);
-      console.log(`   • Endpoint: ${provider.endpoint || 'default'}`);
-      console.log(`   • Enabled: ${provider.enabled}`);
-      console.log(`   • Dashboard Assignments:`, JSON.stringify(provider.dashboardAssignments, null, 2));
-
-      toast.info(`Testing ${provider.name} with model: ${provider.model}`, { duration: 3000 });
-
-      // Step 2: Prepare the test request
-      const testPrompt = "A simple red circle on white background";
-      console.log('\n📤 Step 2: Preparing Test Request...');
-      console.log(`   • Test Prompt: "${testPrompt}"`);
-      console.log(`   • Dashboard: media-library`);
-      console.log(`   • Endpoint: https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/generate-image`);
-
-      const requestBody = {
-        providerId: selectedAIProvider,
-        prompt: testPrompt,
-        dashboard: 'media-library',
-      };
-      console.log('   • Request Body:', JSON.stringify(requestBody, null, 2));
-
-      // Step 3: Make the API call
-      console.log('\n🌐 Step 3: Calling Backend API...');
-      const requestStartTime = Date.now();
-      
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/generate-image`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
-
-      const requestDuration = Date.now() - requestStartTime;
-      console.log(`⏱️  Request completed in ${requestDuration}ms`);
-      console.log(`   • Status Code: ${response.status} ${response.statusText}`);
-      console.log(`   • Headers:`, Object.fromEntries(response.headers.entries()));
-
-      // Step 4: Parse response
-      console.log('\n📥 Step 4: Parsing Response...');
-      const responseText = await response.text();
-      console.log(`   • Response Length: ${responseText.length} bytes`);
-      console.log(`   • Raw Response (first 500 chars): ${responseText.slice(0, 500)}`);
-
-      if (!response.ok) {
-        let errorData: any;
-        try {
-          errorData = JSON.parse(responseText);
-          console.error('❌ ERROR Response:', JSON.stringify(errorData, null, 2));
-        } catch (e) {
-          console.error('❌ Failed to parse error response as JSON');
-          console.error('   Raw error text:', responseText);
-        }
-        
-        const errorMsg = errorData?.error || errorData?.details || `HTTP ${response.status}: ${responseText.slice(0, 200)}`;
-        toast.error(`Debug Test Failed: ${errorMsg}`, { duration: 10000 });
-        throw new Error(errorMsg);
-      }
-
-      // Step 5: Process success response
-      let data: any;
-      try {
-        data = JSON.parse(responseText);
-        console.log('✅ SUCCESS Response:', JSON.stringify(data, null, 2));
-      } catch (e) {
-        console.error('❌ Failed to parse success response as JSON');
-        console.error('   Raw response:', responseText);
-        throw new Error(`Invalid response format: ${responseText.slice(0, 200)}`);
-      }
-
-      // Step 6: Validate image
-      console.log('\n🖼️  Step 6: Validating Generated Image...');
-      if (!data.imageUrl) {
-        const errorMsg = '❌ No imageUrl in response';
-        console.error(errorMsg);
-        toast.error(errorMsg);
-        return;
-      }
-
-      console.log(`✅ Image URL received: ${data.imageUrl.slice(0, 100)}...`);
-      console.log(`   • Provider Used: ${data.provider || 'unknown'}`);
-      console.log(`   • Image Type: ${data.imageUrl.startsWith('data:') ? 'Base64 Data URI' : 'Remote URL'}`);
-
-      // Step 7: Test image loading
-      console.log('\n📦 Step 7: Testing Image Load...');
-      const imgTest = new Image();
-      imgTest.onload = () => {
-        console.log('✅ Image loaded successfully');
-        console.log(`   • Dimensions: ${imgTest.width}x${imgTest.height}px`);
-      };
-      imgTest.onerror = () => {
-        console.error('❌ Image failed to load');
-      };
-      imgTest.src = data.imageUrl;
-
-      // Final summary
-      const totalDuration = Date.now() - startTime;
-      console.log('\n✅ ========================================');
-      console.log('✅ DEBUG TEST COMPLETED SUCCESSFULLY');
-      console.log('✅ ========================================');
-      console.log(`   • Total Duration: ${totalDuration}ms`);
-      console.log(`   • Provider: ${provider.name}`);
-      console.log(`   • Model: ${provider.model}`);
-      console.log(`   • Provider Type: ${provider.provider_name}`);
-      console.log(`   • Status: SUCCESS ✓`);
-      console.log('========================================\n');
-
-      toast.success(
-        `✅ Debug Test Passed!\n\nProvider: ${provider.name}\nModel: ${provider.model}\nDuration: ${totalDuration}ms\n\nCheck console for full details.`,
-        { duration: 8000 }
-      );
-
-      // Optionally set the generated image to display
-      setGeneratedImageUrl(data.imageUrl);
-      
-    } catch (error) {
-      const totalDuration = Date.now() - startTime;
-      console.error('\n❌ ========================================');
-      console.error('❌ DEBUG TEST FAILED');
-      console.error('❌ ========================================');
-      console.error(`   • Error: ${error instanceof Error ? error.message : String(error)}`);
-      console.error(`   • Duration: ${totalDuration}ms`);
-      console.error('========================================\n');
-      
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      toast.error(`Debug Test Failed: ${errorMessage}\n\nCheck console for details.`, { duration: 10000 });
-    } finally {
-      setGeneratingImage(false);
-    }
-  };
 
   const handleDelete = async (id: string) => {
     const result = await deleteAsset(id);
@@ -2332,12 +2289,19 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
               {generatedImageUrl && (
                 <div className="space-y-2">
                   <Label>Generated Image</Label>
-                  <div className="border rounded-lg p-4 bg-muted/20">
+                  <div className="border rounded-lg p-4 bg-muted/20 relative">
                     <img 
                       src={generatedImageUrl} 
                       alt="AI Generated" 
                       className="w-full max-h-[400px] object-contain rounded mx-auto"
                     />
+                    {/* Loading overlay when editing */}
+                    {generatingImage && (
+                      <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="w-12 h-12 animate-spin text-white" />
+                        <p className="text-white text-sm font-medium">Revising image...</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -2346,24 +2310,14 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
           <DialogFooter className="gap-2 flex-shrink-0">
             <div className="flex items-center justify-between w-full">
-              <Button 
-                variant="outline"
-                size="sm"
-                onClick={handleDebugProvider}
-                disabled={generatingImage || isUploading || !selectedAIProvider}
-                className="gap-2"
-              >
-                <Server className="w-4 h-4" />
-                Debug Provider
-              </Button>
-              
-              <div className="flex gap-2">
+              <div className="flex gap-2 ml-auto">
                 <Button 
                   variant="ghost" 
                   onClick={() => {
                     setShowAIImageDialog(false);
                     setAiImagePrompt('');
                     setGeneratedImageUrl(null);
+                    setGeneratedImageBase64(null);
                   }}
                   disabled={generatingImage || isUploading}
                 >
@@ -2385,15 +2339,25 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                       variant="outline"
                       onClick={() => {
                         setGeneratedImageUrl(null);
+                        setGeneratedImageBase64(null);
                         setAiImagePrompt('');
                       }}
-                      disabled={isUploading}
+                      disabled={isUploading || generatingImage}
                     >
                       Generate Another
                     </Button>
                     <Button 
+                      variant="outline"
+                      onClick={handleEditImage}
+                      disabled={isUploading || generatingImage || !generatedImageBase64 || !aiImagePrompt.trim()}
+                      className="gap-2"
+                    >
+                      <Edit className="w-4 h-4" />
+                      Edit Image
+                    </Button>
+                    <Button 
                       onClick={handleAddGeneratedImage}
-                      disabled={isUploading}
+                      disabled={isUploading || generatingImage}
                       className="gap-2"
                     >
                       {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
