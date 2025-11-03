@@ -220,7 +220,7 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       <div className="flex items-center gap-2">
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="default" className="gap-2">
+            <Button variant="default" className="gap-2" disabled>
               <Plus className="w-4 h-4" />
               Add League
             </Button>

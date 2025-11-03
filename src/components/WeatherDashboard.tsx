@@ -577,17 +577,7 @@ export function WeatherDashboard({
 
 
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <p className="text-muted-foreground">Loading weather data...</p>
-          <p className="text-xs text-muted-foreground">Fetching from weather provider...</p>
-        </div>
-      </div>
-    );
-  }
+  // Don't block the entire page while loading - show the dashboard with loading states
 
   // Show helpful message when no locations are configured
   if (locations.length === 0 && !loading) {
@@ -642,7 +632,14 @@ export function WeatherDashboard({
             Weather Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
-            Monitor conditions across {stats.totalLocations} locations with real-time data and forecasts
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Loading weather data...
+              </span>
+            ) : (
+              `Monitor conditions across ${stats.totalLocations} locations with real-time data and forecasts`
+            )}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -654,11 +651,11 @@ export function WeatherDashboard({
               variant="outline"
               size="sm"
               onClick={handleRefresh}
-              disabled={refreshing}
+              disabled={refreshing || loading}
               className="gap-2"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Refreshing...' : 'Refresh'}
+              <RefreshCw className={`w-4 h-4 ${refreshing || loading ? 'animate-spin' : ''}`} />
+              {refreshing || loading ? 'Loading...' : 'Refresh'}
             </Button>
             <WeatherLocationSearch 
               onAddLocation={handleAddLocation}
@@ -668,7 +665,19 @@ export function WeatherDashboard({
         </div>
       </div>
 
-      {renderSummaryCards()}
+      {loading && locations.length === 0 ? (
+        <Card>
+          <CardContent className="p-12 text-center">
+            <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-4 animate-spin" />
+            <h3 className="mb-2">Loading Weather Data</h3>
+            <p className="text-muted-foreground">
+              Fetching data from weather provider...
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        renderSummaryCards()
+      )}
 
       {/* AI Insights Section - Always rendered for dialog access */}
       {showAIInsights && (
