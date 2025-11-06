@@ -12,6 +12,7 @@ import { AgentsDashboard } from "./components/AgentsDashboard";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { MediaLibrary } from "./components/MediaLibrary";
+import { ChannelsPage } from "./components/ChannelsPage";
 import { electionData as importedElectionData, initializeElectionData, isElectionDataLoading } from "./data/electionData";
 import { WeatherDataViewer } from "./components/WeatherDataViewer";
 import { mockFinanceData } from "./data/mockFinanceData";
@@ -36,7 +37,7 @@ import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media';
+type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -852,6 +853,10 @@ export default function App() {
           <MediaLibrary
             onNavigate={(view) => console.log('Navigate to:', view)}
           />
+        );
+      case 'channels':
+        return (
+          <ChannelsPage />
         );
       default:
         return renderHome();

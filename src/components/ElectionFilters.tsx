@@ -9,7 +9,7 @@ import { Textarea } from "./ui/textarea";
 import { Slider } from "./ui/slider";
 import { Label } from "./ui/label";
 import { Race, getFieldValue } from "../types/election";
-import { currentElectionYear } from '../utils/supabase/info';
+import { currentElectionYear } from '../utils/constants';
 import { 
   Search, 
   Filter,

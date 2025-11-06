@@ -1,5 +1,5 @@
 import { ElectionData, Race, Candidate, CandidateProfile, Party, createOverride } from '../types/election';
-import { currentElectionYear } from '../utils/supabase/info';
+import { currentElectionYear } from '../utils/constants';
 import { supabase } from '../utils/supabase/client';
 
 // State name mapping

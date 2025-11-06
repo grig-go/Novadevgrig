@@ -315,7 +315,21 @@ serve(async (req)=>{
       const timestamp = Date.now();
       const fileExt = file.name.split(".").pop();
       const fileName = `${timestamp}_${crypto.randomUUID()}.${fileExt}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file, {
+      
+      // Determine subfolder based on media type
+      let subfolder = 'images'; // default
+      if (mediaType === 'video') {
+        subfolder = 'videos';
+      } else if (mediaType === 'audio') {
+        subfolder = 'audio';
+      } else if (mediaType === 'image') {
+        subfolder = 'images';
+      }
+      
+      const storagePath = `${subfolder}/${fileName}`;
+      console.log(`📁 Upload path: bucket="${bucketName}", path="${storagePath}", mediaType="${mediaType}"`);
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage.from(bucketName).upload(storagePath, file, {
         contentType: file.type,
         upsert: false
       });

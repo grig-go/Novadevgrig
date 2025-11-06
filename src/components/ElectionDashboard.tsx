@@ -24,7 +24,7 @@ import {
 import { getFilteredElectionData, clearElectionDataCache } from "../data/electionData";
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { supabase } from '../utils/supabase/client';
-import { currentElectionYear } from '../utils/supabase/info';
+import { currentElectionYear } from '../utils/constants';
 
 interface ElectionDashboardProps {
   races: Race[];
