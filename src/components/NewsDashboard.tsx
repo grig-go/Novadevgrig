@@ -12,8 +12,7 @@ import { toast } from "sonner@2.0.3";
 import { NewsDebugPanel } from "./NewsDebugPanel";
 import { NewsAIInsights } from "./NewsAIInsights";
 import { 
-  Newspaper, Globe, Database, AlertTriangle, TrendingUp, 
-  Zap, Activity, Brain, Clock, RefreshCw, Loader2, ExternalLink, Archive, Rss
+  Newspaper, Database, Clock, RefreshCw, Loader2, ExternalLink, Archive, Rss
 } from "lucide-react";
 import { Switch } from "./ui/switch";
 
@@ -28,7 +27,7 @@ export function NewsDashboard({
   const [q, setQ] = useState<string>('');
   const [country, setCountry] = useState<string>('us');
   const [language, setLanguage] = useState<string>('en');
-  const [perProviderLimit, setPerProviderLimit] = useState<number>(10); // NewsData free tier max
+  const [perProviderLimit, setPerProviderLimit] = useState<number>(10);
   const [totalLimit, setTotalLimit] = useState<number>(100);
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
   const [useStoredArticles, setUseStoredArticles] = useState<boolean>(true);
@@ -278,14 +277,6 @@ export function NewsDashboard({
     return articles.filter(a => a.provider === selectedProvider);
   }, [articles, selectedProvider]);
 
-  const getProviderColor = (provider: string) => {
-    switch (provider) {
-      case 'newsapi': return '#10b981';
-      case 'newsdata': return '#8b5cf6';
-      default: return '#6b7280';
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -408,13 +399,7 @@ export function NewsDashboard({
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Activity className="w-5 h-5" />
-            Filters & Controls
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-4 pb-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
             <div className="lg:col-span-2">
               <Label htmlFor="search">Search</Label>
@@ -502,9 +487,6 @@ export function NewsDashboard({
               />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-4">
-            Using ALL enabled News providers. Adjust filters to refine results.
-          </p>
         </CardContent>
       </Card>
 

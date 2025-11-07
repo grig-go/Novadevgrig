@@ -368,32 +368,11 @@ export default function App() {
   };
 
   const handleUpdateNewsArticle = (updatedArticle: NewsArticleWithOverrides) => {
-    setNewsData(prev => ({
-      ...prev,
-      clusters: prev.clusters.map(cluster => ({
-        ...cluster,
-        articles: cluster.articles.map(article => 
-          article.article.id === updatedArticle.article.id ? updatedArticle : article
-        )
-      })),
-      lastUpdated: new Date().toISOString()
-    }));
+    // This function is no longer used - articles are managed in the News Dashboard
   };
 
   const handleDeleteNewsArticle = (articleId: string) => {
-    setNewsData(prev => ({
-      ...prev,
-      clusters: prev.clusters.map(cluster => ({
-        ...cluster,
-        articles: cluster.articles.filter(article => 
-          article.article.id !== articleId
-        ),
-        article_count: cluster.articles.filter(article => 
-          article.article.id !== articleId
-        ).length
-      })),
-      lastUpdated: new Date().toISOString()
-    }));
+    // This function is no longer used - articles are managed in the News Dashboard
   };
 
   const handleUpdateFeed = (updatedFeed: Feed) => {

@@ -31,7 +31,6 @@ export function NewsFilters({
   const clearFilters = () => {
     onFiltersChange({
       search: '',
-      cluster: '',
       provider: 'all',
       severity: 'all',
       timeRange: 'all',
@@ -43,7 +42,6 @@ export function NewsFilters({
   const getActiveFilterCount = () => {
     let count = 0;
     if (filters.search) count++;
-    if (filters.cluster) count++;
     if (filters.provider !== 'all') count++;
     if (filters.severity !== 'all') count++;
     if (filters.timeRange !== 'all') count++;
@@ -214,26 +212,7 @@ export function NewsFilters({
           {/* Expandable filters */}
           {isExpanded && (
             <div className="space-y-4 pt-4 border-t">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>Cluster</Label>
-                  <Select value={filters.cluster} onValueChange={(value) => updateFilter('cluster', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All clusters" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">All Clusters</SelectItem>
-                      <SelectItem value="cluster_media_rights_deals">Media Rights Deals</SelectItem>
-                      <SelectItem value="cluster_venue_tech_upgrades">Venue Tech Upgrades</SelectItem>
-                      <SelectItem value="cluster_team_sales_valuations">Team Sales & Valuations</SelectItem>
-                      <SelectItem value="cluster_ai_in_newsrooms">AI in Newsrooms</SelectItem>
-                      <SelectItem value="cluster_local_nj_education_taxes">Local NJ: Schools & Taxes</SelectItem>
-                      <SelectItem value="cluster_breaking_natural_disasters">Breaking: Natural Disasters</SelectItem>
-                      <SelectItem value="cluster_breaking_geopolitics">Breaking: Geopolitics</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center space-x-2">
                   <Switch
                     id="breaking"

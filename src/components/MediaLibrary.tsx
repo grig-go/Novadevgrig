@@ -1021,12 +1021,17 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
 
   const handleDelete = async (id: string) => {
-    const result = await deleteAsset(id);
-    if (result.success) {
-      toast.success("Media deleted");
-      setSelectedAsset(null);
-    } else {
-      toast.error(result.error || "Failed to delete media");
+    try {
+      const result = await deleteAsset(id);
+      if (result.success) {
+        toast.success("Media deleted");
+        setSelectedAsset(null); // Close the dialog
+      } else {
+        toast.error(result.error || "Failed to delete media");
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error("Failed to delete media");
     }
   };
 
