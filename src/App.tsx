@@ -459,12 +459,6 @@ export default function App() {
   const renderNavigation = () => (
     <div className="flex items-center gap-2 mb-8">
       <Button
-        variant={currentView === 'home' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('home')}
-      >
-        Home
-      </Button>
-      <Button
         variant={currentView === 'election' ? 'default' : 'outline'}
         onClick={() => handleNavigate('election')}
         className="gap-2"
