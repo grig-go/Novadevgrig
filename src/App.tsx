@@ -12,6 +12,7 @@ import { AgentsDashboard } from "./components/AgentsDashboard";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { MediaLibrary } from "./components/MediaLibrary";
+import { ChannelsPage } from "./components/ChannelsPage";
 import { electionData as importedElectionData, initializeElectionData, isElectionDataLoading } from "./data/electionData";
 import { WeatherDataViewer } from "./components/WeatherDataViewer";
 import { mockFinanceData } from "./data/mockFinanceData";
@@ -36,7 +37,7 @@ import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 
-type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media';
+type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -367,32 +368,11 @@ export default function App() {
   };
 
   const handleUpdateNewsArticle = (updatedArticle: NewsArticleWithOverrides) => {
-    setNewsData(prev => ({
-      ...prev,
-      clusters: prev.clusters.map(cluster => ({
-        ...cluster,
-        articles: cluster.articles.map(article => 
-          article.article.id === updatedArticle.article.id ? updatedArticle : article
-        )
-      })),
-      lastUpdated: new Date().toISOString()
-    }));
+    // This function is no longer used - articles are managed in the News Dashboard
   };
 
   const handleDeleteNewsArticle = (articleId: string) => {
-    setNewsData(prev => ({
-      ...prev,
-      clusters: prev.clusters.map(cluster => ({
-        ...cluster,
-        articles: cluster.articles.filter(article => 
-          article.article.id !== articleId
-        ),
-        article_count: cluster.articles.filter(article => 
-          article.article.id !== articleId
-        ).length
-      })),
-      lastUpdated: new Date().toISOString()
-    }));
+    // This function is no longer used - articles are managed in the News Dashboard
   };
 
   const handleUpdateFeed = (updatedFeed: Feed) => {
@@ -457,12 +437,6 @@ export default function App() {
 
   const renderNavigation = () => (
     <div className="flex items-center gap-2 mb-8">
-      <Button
-        variant={currentView === 'home' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('home')}
-      >
-        Home
-      </Button>
       <Button
         variant={currentView === 'election' ? 'default' : 'outline'}
         onClick={() => handleNavigate('election')}
@@ -852,6 +826,10 @@ export default function App() {
           <MediaLibrary
             onNavigate={(view) => console.log('Navigate to:', view)}
           />
+        );
+      case 'channels':
+        return (
+          <ChannelsPage />
         );
       default:
         return renderHome();

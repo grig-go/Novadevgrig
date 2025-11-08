@@ -12,12 +12,14 @@ import {
   Image as ImageIcon, Video, Music, Box, Brain, User, 
   CheckCircle2, Clock, AlertCircle, Copy, Download, 
   Trash2, Edit, Tag, HardDrive, FolderOpen, X, FileText, Loader2,
-  Pause, XCircle, Plus, Server
+  Pause, XCircle, Plus, Server, Paintbrush, Save, Eraser, Sparkles,
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
+import { Slider } from "./ui/slider";
 
 import { MediaAsset, MediaType, MediaSource, SyncStatus } from "../types/media";
 import { toast } from "sonner@2.0.3";
@@ -109,8 +111,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [generatedImageBase64, setGeneratedImageBase64] = useState<string | null>(null);
   const [generatedImageMimeType, setGeneratedImageMimeType] = useState<string>('image/png');
   
+  // Drawing/mask states for image editing
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [brushSize, setBrushSize] = useState(20);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  
   // URL copying state
   const [copyingURL, setCopyingURL] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Derive unique AI models and creators from assets
   const uniqueAIModels = useMemo(() => {
@@ -141,6 +155,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   // Clear selection when filters change
   useEffect(() => {
     clearSelection();
+    setCurrentPage(1); // Reset to first page when filters change
   }, [searchQuery, selectedType, selectedSource, selectedAIModel, selectedCreator, selectedSyncStatus, showArchived]);
 
   // Fetch distributions when selectedAsset changes
@@ -269,6 +284,15 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     return filtered;
   }, [assets, searchQuery, selectedType, selectedSource, selectedAIModel, selectedCreator, selectedSyncStatus, sortBy, sortOrder]);
+
+  // Paginated assets
+  const paginatedAssets = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredAssets.slice(startIndex, endIndex);
+  }, [filteredAssets, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredAssets.length / itemsPerPage);
 
   const handleRefresh = async () => {
     await refresh();
@@ -667,6 +691,23 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       setGeneratingImage(true);
       console.log('✏️ EDITING IMAGE: Sending image back with revision prompt:', aiImagePrompt);
 
+      // Check if there's a drawing mask
+      let maskBase64 = null;
+      if (canvasRef.current && isDrawingMode) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Check if canvas has any drawing on it
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const hasDrawing = imageData.data.some(pixel => pixel !== 0);
+          if (hasDrawing) {
+            const maskDataUrl = canvas.toDataURL('image/png');
+            maskBase64 = maskDataUrl.split(',')[1]; // Get base64 part
+            console.log('🎨 Drawing mask detected and will be included');
+          }
+        }
+      }
+
       // Step 1: Get raw API key
       console.log('🔑 Step 1: Fetching API key from backend...');
       const revealResponse = await fetch(
@@ -717,9 +758,18 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                     data: generatedImageBase64,
                   }
                 },
+                // Include mask if it exists
+                ...(maskBase64 ? [{
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: maskBase64,
+                  }
+                }] : []),
                 // Then send the revision instruction
                 {
-                  text: aiImagePrompt
+                  text: maskBase64 
+                    ? `${aiImagePrompt} (Note: The second image contains hand-drawn notes/annotations indicating areas or changes I want. Please interpret these notes as guidance and remove all drawing marks from the final output image - provide a clean image without any annotations visible)` 
+                    : aiImagePrompt
                 }
               ]
             }
@@ -773,6 +823,10 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       // Clear the prompt for next edit
       setAiImagePrompt('');
       
+      // Hide the mask and exit drawing mode
+      setIsDrawingMode(false);
+      clearDrawing();
+      
       toast.success(`Image revised successfully!`);
       
     } catch (error) {
@@ -782,6 +836,122 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     } finally {
       setGeneratingImage(false);
     }
+  };
+
+  // Drawing functions for mask creation
+  const startDrawingMode = () => {
+    setIsDrawingMode(true);
+    // Initialize canvas with image dimensions on next render
+    setTimeout(() => {
+      if (canvasRef.current && imageRef.current) {
+        const canvas = canvasRef.current;
+        const img = imageRef.current;
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Clear canvas with transparent background
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // Set drawing properties
+          ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+          ctx.lineWidth = brushSize;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+        }
+      }
+    }, 100);
+  };
+
+  const clearDrawing = () => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+  };
+
+  // Function to load an existing image into AI Image Generator for editing
+  const openImageInAIEditor = async (asset: MediaAsset) => {
+    try {
+      // Fetch the image and convert to base64
+      const response = await fetch(asset.file_url);
+      const blob = await response.blob();
+      
+      // Convert blob to base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        const [header, base64Data] = dataUrl.split(',');
+        const mimeType = header.match(/:(.*?);/)?.[1] || 'image/png';
+        
+        // Set the image data
+        setGeneratedImageBase64(base64Data);
+        setGeneratedImageMimeType(mimeType);
+        setGeneratedImageUrl(dataUrl);
+        
+        // Clear any previous prompts and drawing
+        setAiImagePrompt('');
+        setIsDrawingMode(false);
+        clearDrawing();
+        
+        // Open the AI Image dialog
+        setShowAIImageDialog(true);
+        
+        toast.success('Image loaded into AI Editor');
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Error loading image into AI editor:', error);
+      toast.error('Failed to load image');
+    }
+  };
+
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setIsDrawing(true);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  };
+
+  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.lineWidth = brushSize;
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
+    setIsDrawing(false);
+  };
+
+  const handleCanvasMouseLeave = () => {
+    setIsDrawing(false);
   };
 
   const handleAddGeneratedImage = async () => {
@@ -819,7 +989,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         : 'image';
       
       formData.append("media_type", mediaType);
-      formData.append("created_by", "AI");
+      formData.append("created_by", "ai");
       
       // Get provider info for ai_model_used
       const provider = aiImageProviders.find(p => p.id === selectedAIProvider);
@@ -851,12 +1021,17 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
 
   const handleDelete = async (id: string) => {
-    const result = await deleteAsset(id);
-    if (result.success) {
-      toast.success("Media deleted");
-      setSelectedAsset(null);
-    } else {
-      toast.error(result.error || "Failed to delete media");
+    try {
+      const result = await deleteAsset(id);
+      if (result.success) {
+        toast.success("Media deleted");
+        setSelectedAsset(null); // Close the dialog
+      } else {
+        toast.error(result.error || "Failed to delete media");
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error("Failed to delete media");
     }
   };
 
@@ -1161,7 +1336,10 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   };
 
   const getSourceBadge = (asset: MediaAsset) => {
-    if (asset.source === 'ai-generated' && asset.ai_model_used) {
+    // Check if it's AI-generated by looking at created_by field or source field
+    const isAI = asset.created_by === 'ai' || asset.source === 'ai-generated';
+    
+    if (isAI && asset.ai_model_used) {
       const modelColors: Record<string, string> = {
         'Midjourney v6': 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
         'DALL·E 3': 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
@@ -1175,6 +1353,16 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         <Badge className={`${colorClass} gap-1`}>
           <Brain className="w-3 h-3" />
           {asset.ai_model_used}
+        </Badge>
+      );
+    }
+    
+    // If AI-generated but no model specified, show generic AI badge
+    if (isAI) {
+      return (
+        <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 gap-1">
+          <Brain className="w-3 h-3" />
+          AI
         </Badge>
       );
     }
@@ -1282,7 +1470,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
             }} 
             className="gap-2 bg-black text-white hover:bg-black/90"
           >
-            <Brain className="w-4 h-4" />
+            <Sparkles className="w-4 h-4" />
             Gen Image
           </Button>
           <Button onClick={() => setShowUploadDialog(true)} className="gap-2">
@@ -1312,6 +1500,23 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 <Badge variant="secondary" className="ml-1">{activeFilterCount}</Badge>
               )}
             </Button>
+            <Select 
+              value={itemsPerPage.toString()} 
+              onValueChange={(value) => {
+                setItemsPerPage(parseInt(value));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 per page</SelectItem>
+                <SelectItem value="20">20 per page</SelectItem>
+                <SelectItem value="50">50 per page</SelectItem>
+                <SelectItem value="100">100 per page</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1410,23 +1615,93 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       {/* Results Count & Selection */}
       {assets.length > 0 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            Showing {filteredAssets.length} of {assets.length} media assets
-            {selectedIds.size > 0 && (
-              <span className="ml-2 text-blue-600 dark:text-blue-400">
-                ({selectedIds.size} selected)
-              </span>
+          <div className="flex items-center gap-4">
+            {/* Pagination Controls */}
+            {filteredAssets.length > 0 && totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="w-10"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                  className="gap-2"
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             )}
+            <div className="text-sm text-muted-foreground">
+              {totalPages > 1 ? (
+                <>
+                  Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredAssets.length)} of {filteredAssets.length} assets
+                </>
+              ) : (
+                <>
+                  Showing {filteredAssets.length} of {assets.length} media assets
+                </>
+              )}
+              {selectedIds.size > 0 && (
+                <span className="ml-2 text-blue-600 dark:text-blue-400">
+                  ({selectedIds.size} selected)
+                </span>
+              )}
+            </div>
           </div>
-          {filteredAssets.length > 0 && (
+          {paginatedAssets.length > 0 && (
             <div className="flex items-center gap-2">
               <Checkbox
-                checked={selectedIds.size === filteredAssets.length && filteredAssets.length > 0}
-                onCheckedChange={handleSelectAll}
+                checked={paginatedAssets.every(asset => selectedIds.has(asset.id)) && paginatedAssets.length > 0}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    const newSelectedIds = new Set(selectedIds);
+                    paginatedAssets.forEach(asset => newSelectedIds.add(asset.id));
+                    setSelectedIds(newSelectedIds);
+                  } else {
+                    const newSelectedIds = new Set(selectedIds);
+                    paginatedAssets.forEach(asset => newSelectedIds.delete(asset.id));
+                    setSelectedIds(newSelectedIds);
+                  }
+                }}
                 id="select-all"
               />
               <Label htmlFor="select-all" className="text-sm cursor-pointer">
-                Select All
+                Select All on Page
               </Label>
             </div>
           )}
@@ -1567,7 +1842,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         </Card>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredAssets.map((asset) => (
+          {paginatedAssets.map((asset) => (
             <Card 
               key={asset.id}
               className={`overflow-hidden hover:shadow-lg transition-shadow flex flex-col h-full ${
@@ -1618,7 +1893,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 </div>
               </div>
               <CardContent className="p-3 space-y-2 flex-1 flex flex-col">
-                <p className="truncate -mt-1 text-[rgba(10,10,10,0.77)] font-bold font-[Sans_Serif_Collection]">{asset.name}</p>
+                <p className="truncate -mt-1 text-[rgba(10,10,10,0.77)] font-bold font-[Aoboshi_One]">{asset.name}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {asset.tags.slice(0, 2).map(tag => (
                     <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
@@ -1639,7 +1914,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         <Card>
           <CardContent className="p-0">
             <div className="divide-y">
-              {filteredAssets.map((asset) => (
+              {paginatedAssets.map((asset) => (
                 <div 
                   key={asset.id}
                   className={`p-4 hover:bg-muted/50 flex items-center gap-4 ${
@@ -2056,6 +2331,17 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                   <Download className="w-4 h-4 mr-2" />
                   Download
                 </Button>
+                {selectedAsset.file_type === 'image' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => openImageInAIEditor(selectedAsset)}
+                    className="gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Enhance
+                  </Button>
+                )}
               </div>
               <Button onClick={() => setSelectedAsset(null)}>
                 Save
@@ -2221,8 +2507,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
       {/* AI Image Generation Dialog */}
       <Dialog open={showAIImageDialog} onOpenChange={setShowAIImageDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col" style={{ maxWidth: '800px' }}>
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" style={{ maxWidth: '800px' }}>
+          <DialogHeader className="flex-shrink-0 pb-4">
             <div className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-purple-600" />
               <DialogTitle>AI Image Generator</DialogTitle>
@@ -2232,8 +2518,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-1 -mx-6 px-6">
-            <div className="space-y-4 pr-4">
+          <ScrollArea className="flex-1 overflow-y-auto">
+            <div className="space-y-4 pr-4 pb-4">
             {/* AI Provider Selection */}
             <div className="space-y-2">
               <Label>AI Provider</Label>
@@ -2287,14 +2573,86 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
               {/* Generated Image Preview */}
               {generatedImageUrl && (
-                <div className="space-y-2">
-                  <Label>Generated Image</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Generated Image</Label>
+                    {!isDrawingMode && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={startDrawingMode}
+                        className="gap-2"
+                        disabled={generatingImage}
+                      >
+                        <Paintbrush className="w-4 h-4" />
+                        Draw Notes
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Drawing Tools - shown when in drawing mode */}
+                  {isDrawingMode && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <div className="flex items-center gap-2 flex-1">
+                        <Label className="text-sm whitespace-nowrap">Brush Size:</Label>
+                        <Slider
+                          value={[brushSize]}
+                          onValueChange={(value) => setBrushSize(value[0])}
+                          min={5}
+                          max={50}
+                          step={5}
+                          className="flex-1"
+                        />
+                        <span className="text-sm font-medium w-8">{brushSize}px</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={clearDrawing}
+                          className="gap-2"
+                        >
+                          <Eraser className="w-4 h-4" />
+                          Clear
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => setIsDrawingMode(false)}
+                          className="gap-2"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Cancel Drawing
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="border rounded-lg p-4 bg-muted/20 relative">
-                    <img 
-                      src={generatedImageUrl} 
-                      alt="AI Generated" 
-                      className="w-full max-h-[400px] object-contain rounded mx-auto"
-                    />
+                    <div className="flex justify-center items-center">
+                      <div ref={imageContainerRef} className="relative inline-block">
+                        <img 
+                          ref={imageRef}
+                          src={generatedImageUrl} 
+                          alt="AI Generated" 
+                          className="max-h-[400px] object-contain rounded block"
+                        />
+                        {isDrawingMode && (
+                          <canvas
+                            ref={canvasRef}
+                            onMouseDown={handleCanvasMouseDown}
+                            onMouseMove={handleCanvasMouseMove}
+                            onMouseUp={handleCanvasMouseUp}
+                            onMouseLeave={handleCanvasMouseLeave}
+                            className="absolute top-0 left-0 cursor-crosshair"
+                            style={{ 
+                              width: imageRef.current?.width + 'px',
+                              height: imageRef.current?.height + 'px'
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
                     {/* Loading overlay when editing */}
                     {generatingImage && (
                       <div className="absolute inset-0 bg-black/60 rounded-lg flex flex-col items-center justify-center gap-3">
@@ -2308,7 +2666,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
             </div>
           </ScrollArea>
 
-          <DialogFooter className="gap-2 flex-shrink-0">
+          <DialogFooter className="gap-2 flex-shrink-0 pt-4 border-t mt-4">
             <div className="flex items-center justify-between w-full">
               <div className="flex gap-2 ml-auto">
                 <Button 
@@ -2318,6 +2676,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                     setAiImagePrompt('');
                     setGeneratedImageUrl(null);
                     setGeneratedImageBase64(null);
+                    setIsDrawingMode(false);
                   }}
                   disabled={generatingImage || isUploading}
                 >
@@ -2341,18 +2700,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                         setGeneratedImageUrl(null);
                         setGeneratedImageBase64(null);
                         setAiImagePrompt('');
+                        setIsDrawingMode(false);
+                        clearDrawing();
                       }}
                       disabled={isUploading || generatingImage}
                     >
                       Generate Another
                     </Button>
                     <Button 
-                      variant="outline"
+                      variant="default"
                       onClick={handleEditImage}
                       disabled={isUploading || generatingImage || !generatedImageBase64 || !aiImagePrompt.trim()}
                       className="gap-2"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Sparkles className="w-4 h-4" />
                       Edit Image
                     </Button>
                     <Button 

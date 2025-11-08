@@ -13,6 +13,7 @@ import {
   ImageIcon,
   Bot,
   Rss,
+  Tv,
 } from "lucide-react";
 import { useState } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -96,6 +97,7 @@ export function TopMenuBar({
           { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents') },
           { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds') },
           { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media') },
+          { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels') },
         ],
       },
     ],

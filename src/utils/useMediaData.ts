@@ -145,6 +145,7 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
+          apikey: publicAnonKey,
           Authorization: `Bearer ${publicAnonKey}`,
         },
         body: formData,
@@ -191,6 +192,7 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
+          apikey: publicAnonKey,
           Authorization: `Bearer ${publicAnonKey}`,
         },
         body: formData,
@@ -226,9 +228,10 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
     try {
       console.log(`🗑️ Deleting media asset: ${id}`);
 
-      const response = await fetch(`${baseUrl}/${id}`, {
+      const response = await fetch(`${baseUrl}/media/${id}`, {
         method: "DELETE",
         headers: {
+          apikey: publicAnonKey,
           Authorization: `Bearer ${publicAnonKey}`,
           "Content-Type": "application/json",
         },
