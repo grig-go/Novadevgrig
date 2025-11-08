@@ -21,6 +21,7 @@ import { mockSportsData } from "./data/mockSportsData";
 import { mockNewsData } from "./data/mockNewsData";
 import { mockFeedsData } from "./data/mockFeedsData";
 import { mockAgentsData } from "./data/mockAgentsData";
+import { supabase } from "./utils/supabase/client";
 import { mockUsersData } from "./data/mockUsersData";
 import { mockWeatherData } from "./data/mockWeatherData";
 import { Race, CandidateProfile, Party } from "./types/election";
@@ -52,6 +53,14 @@ export default function App() {
   const [agentsData, setAgentsData] = useState(mockAgentsData);
   const [usersData, setUsersData] = useState(mockUsersData);
   const [weatherData, setWeatherData] = useState(mockWeatherData);
+
+  // State for real agent stats
+  const [agentStats, setAgentStats] = useState({
+    totalAgents: 0,
+    activeAgents: 0,
+    loading: true,
+    error: null as string | null
+  });
 
   // Load election data asynchronously
   useEffect(() => {
@@ -133,6 +142,42 @@ export default function App() {
     };
     
     fetchNewsStats();
+    return () => { mounted = false; };
+  }, []);
+
+  // Fetch agent stats from Supabase
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchAgentStats = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('api_endpoints')
+          .select('id, active');
+
+        if (error) throw error;
+
+        if (mounted && data) {
+          setAgentStats({
+            totalAgents: data.length,
+            activeAgents: data.filter(agent => agent.active).length,
+            loading: false,
+            error: null
+          });
+        }
+      } catch (err) {
+        if (mounted) {
+          console.error('Error fetching agent stats:', err);
+          setAgentStats(prev => ({
+            ...prev,
+            loading: false,
+            error: String(err)
+          }));
+        }
+      }
+    };
+
+    fetchAgentStats();
     return () => { mounted = false; };
   }, []);
 
@@ -710,15 +755,25 @@ export default function App() {
             </p>
             <div className="flex items-center gap-6 pt-4 border-t">
               <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{agentsData.agents.length}</span>
+                {agentStats.loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <span className="text-2xl font-semibold">{agentStats.totalAgents}</span>
+                )}
                 <span className="text-xs text-muted-foreground">agents</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{agentsData.agents.filter(a => a.status === 'ACTIVE').length}</span>
+                {agentStats.loading ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <span className="text-2xl font-semibold">{agentStats.activeAgents}</span>
+                )}
                 <span className="text-xs text-muted-foreground">active</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">AI curation</span>
+                <span className="text-sm text-muted-foreground">
+                  {agentStats.loading ? "Loading..." : agentStats.error ? "Error" : "AI curation"}
+                </span>
               </div>
             </div>
           </CardContent>
