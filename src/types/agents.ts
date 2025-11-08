@@ -71,6 +71,10 @@ export interface Agent {
   name: string;
   description?: string;
   icon?: string;
+  slug?: string; // URL slug for the agent endpoint
+  environment?: 'production' | 'staging' | 'development'; // Deployment environment
+  autoStart?: boolean; // Auto-start after deployment
+  generateDocs?: boolean; // Generate API documentation
   // Step 2: Data Type
   dataType?: AgentDataType;
   // Step 3: Data Sources

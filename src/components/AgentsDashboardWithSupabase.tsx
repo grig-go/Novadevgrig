@@ -56,6 +56,10 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     name: endpoint.name,
     description: endpoint.description,
     icon: '📡', // Default icon
+    slug: endpoint.slug, // Include slug from database
+    environment: endpoint.schema_config?.environment || 'production',
+    autoStart: endpoint.schema_config?.autoStart !== undefined ? endpoint.schema_config.autoStart : true,
+    generateDocs: endpoint.schema_config?.generateDocs !== undefined ? endpoint.schema_config.generateDocs : true,
     format: endpoint.output_format?.toUpperCase() as 'JSON' | 'RSS' | 'ATOM' || 'JSON',
     auth: endpoint.auth_config?.type || 'none',
     requiresAuth: endpoint.auth_config?.required || false,
@@ -89,10 +93,14 @@ function convertAgentToAPIEndpoint(agent: Agent): Partial<APIEndpoint> {
 
   return {
     name: agent.name,
-    slug: agent.url?.replace('/api/', '') || agent.name.toLowerCase().replace(/\s+/g, '-'),
+    slug: agent.slug || agent.url?.replace('/api/', '') || agent.name.toLowerCase().replace(/\s+/g, '-'),
     description: agent.description,
     output_format: agent.format.toLowerCase() as 'json' | 'rss' | 'xml' | 'csv' | 'custom',
-    schema_config: {},
+    schema_config: {
+      environment: agent.environment || 'production',
+      autoStart: agent.autoStart !== undefined ? agent.autoStart : true,
+      generateDocs: agent.generateDocs !== undefined ? agent.generateDocs : true
+    },
     transform_config: {},
     relationship_config: {},
     cache_config: {
@@ -322,7 +330,7 @@ export function AgentsDashboardWithSupabase({
     setEditingAgent(undefined);
   };
 
-  const handleWizardSave = async (agent: Agent) => {
+  const handleWizardSave = async (agent: Agent, closeDialog: boolean = true) => {
     try {
       const endpointData = convertAgentToAPIEndpoint(agent);
 
@@ -335,6 +343,7 @@ export function AgentsDashboardWithSupabase({
 
         if (error) throw error;
 
+        // Always show success toast
         toast({
           title: "Success",
           description: "Agent updated successfully"
@@ -347,6 +356,7 @@ export function AgentsDashboardWithSupabase({
 
         if (error) throw error;
 
+        // Always show success toast
         toast({
           title: "Success",
           description: "Agent created successfully"
@@ -355,7 +365,11 @@ export function AgentsDashboardWithSupabase({
 
       // Reload agents list
       await loadAgents();
-      handleWizardClose();
+
+      // Only close wizard if requested
+      if (closeDialog) {
+        handleWizardClose();
+      }
     } catch (error) {
       console.error('Failed to save agent:', error);
       toast({

@@ -1,10 +1,128 @@
 
-  import { defineConfig } from 'vite';
+  import { defineConfig, loadEnv } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
+  import type { IncomingMessage, ServerResponse } from 'http';
+  import { projectId, publicAnonKey } from './src/utils/supabase/info';
 
-  export default defineConfig({
-    plugins: [react()],
+  export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, process.cwd(), '');
+
+    return {
+    plugins: [
+      react(),
+      {
+        name: 'api-proxy',
+        configureServer(server) {
+          server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next) => {
+            if (req.url?.startsWith('/api/')) {
+              const slug = req.url.replace('/api/', '').split('?')[0];
+              const queryString = req.url.includes('?') ? req.url.split('?')[1] : '';
+
+              console.log('Proxying request to:', slug);
+              console.log('Query string:', queryString);
+
+              try {
+                // Use Supabase credentials from info file
+                const supabaseUrl = `https://${projectId}.supabase.co`;
+
+                // Create headers object
+                const headers: Record<string, string> = {
+                  'Authorization': `Bearer ${publicAnonKey}`,
+                  'Accept': req.headers.accept || '*/*',
+                };
+
+                // Forward custom headers
+                const headersToSkip = ['host', 'connection', 'content-length', 'transfer-encoding'];
+                Object.entries(req.headers).forEach(([key, value]) => {
+                  if (!headersToSkip.includes(key.toLowerCase()) && typeof value === 'string') {
+                    headers[key] = value;
+                  }
+                });
+
+                // Read body if present
+                let body: Buffer | undefined = undefined;
+                if (req.method !== 'GET' && req.method !== 'HEAD') {
+                  body = await new Promise<Buffer>((resolve, reject) => {
+                    const chunks: Buffer[] = [];
+                    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+                    req.on('end', () => resolve(Buffer.concat(chunks)));
+                    req.on('error', reject);
+                  });
+
+                  if (body && body.length > 0) {
+                    headers['Content-Length'] = body.length.toString();
+                    if (!headers['Content-Type'] && !headers['content-type']) {
+                      headers['Content-Type'] = 'application/json';
+                    }
+                  }
+                }
+
+                // Construct the full URL
+                const targetUrl = `${supabaseUrl}/functions/v1/api-endpoints/${slug}${queryString ? '?' + queryString : ''}`;
+                console.log('Target URL:', targetUrl);
+
+                // Make request to Edge Function
+                const response = await fetch(targetUrl, {
+                  method: req.method || 'GET',
+                  headers,
+                  body: body as any || undefined,
+                });
+
+                console.log('Response status:', response.status);
+
+                // Get response as ArrayBuffer
+                const responseBuffer = await response.arrayBuffer();
+                const responseData = Buffer.from(responseBuffer);
+
+                // Forward response headers
+                const responseHeaders: Record<string, string> = {};
+                let hasContentLength = false;
+
+                response.headers.forEach((value, key) => {
+                  const lowerKey = key.toLowerCase();
+
+                  if (['content-encoding', 'transfer-encoding', 'connection'].includes(lowerKey)) {
+                    return;
+                  }
+
+                  if (lowerKey === 'content-length') {
+                    hasContentLength = true;
+                    responseHeaders[key] = responseData.length.toString();
+                  } else {
+                    responseHeaders[key] = value;
+                  }
+                });
+
+                if (!hasContentLength) {
+                  responseHeaders['Content-Length'] = responseData.length.toString();
+                }
+
+                // Write response
+                res.writeHead(response.status, responseHeaders);
+                res.end(responseData);
+
+              } catch (error) {
+                console.error('Proxy error:', error);
+
+                const errorResponse = JSON.stringify({
+                  error: 'Proxy error',
+                  details: error instanceof Error ? error.message : String(error),
+                });
+
+                res.writeHead(500, {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(errorResponse).toString(),
+                });
+                res.end(errorResponse);
+              }
+            } else {
+              next();
+            }
+          });
+        }
+      }
+    ],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
@@ -61,4 +179,5 @@
       port: 3000,
       open: true,
     },
-  });
+  };
+});

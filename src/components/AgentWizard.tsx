@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -8,24 +8,26 @@ import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
-import { 
-  Agent, 
-  AgentFormat, 
-  AgentStatus, 
-  AgentCacheType, 
-  AgentAuthType, 
+import {
+  Agent,
+  AgentFormat,
+  AgentStatus,
+  AgentCacheType,
+  AgentAuthType,
   AgentDataType,
   AgentDataSource,
   AgentDataRelationship,
   AgentFieldMapping,
   AgentTransform
 } from "../types/agents";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, Key } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, Key, AlertCircle } from "lucide-react";
+import { Switch } from "./ui/switch";
+import { supabase } from "../utils/supabase/client";
 
 interface AgentWizardProps {
   open: boolean;
   onClose: () => void;
-  onSave: (agent: Agent) => void;
+  onSave: (agent: Agent, closeDialog?: boolean) => void;
   editAgent?: Agent;
   availableFeeds?: Array<{ id: string; name: string; category: string }>;
 }
@@ -48,6 +50,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     name: '',
     description: '',
     icon: '🤖',
+    slug: '',
+    environment: 'production' as 'production' | 'staging' | 'development',
+    autoStart: true,
+    generateDocs: true,
     dataType: undefined,
     dataSources: [],
     relationships: [],
@@ -68,17 +74,55 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [newFixedField, setNewFixedField] = useState({ key: '', value: '' });
   const [newTransform, setNewTransform] = useState<Partial<AgentTransform>>({ type: 'filter' });
 
+  // State for fetching data sources from Supabase
+  const [availableDataSources, setAvailableDataSources] = useState<Array<{ id: string; name: string; type: string; category: string }>>([]);
+  const [loadingDataSources, setLoadingDataSources] = useState(false);
+
+  // Fetch data sources from Supabase when dialog opens or dataType changes
+  useEffect(() => {
+    if (open && formData.dataType) {
+      const fetchDataSources = async () => {
+        setLoadingDataSources(true);
+        console.log('Fetching data sources for category:', formData.dataType);
+        try {
+          const { data, error } = await supabase
+            .from('data_sources')
+            .select('id, name, type, category')
+            .eq('category', formData.dataType)
+            .order('name');
+
+          console.log('Data sources query result:', { data, error, count: data?.length });
+
+          if (error) throw error;
+          setAvailableDataSources(data || []);
+        } catch (error) {
+          console.error('Error fetching data sources:', error);
+          setAvailableDataSources([]);
+        } finally {
+          setLoadingDataSources(false);
+        }
+      };
+
+      fetchDataSources();
+    }
+  }, [open, formData.dataType]);
+
   // Update formData when editAgent changes
   useEffect(() => {
     if (editAgent && open) {
       setFormData(editAgent);
-      setCurrentStep('basic');
+      // When editing, start at the review step (Step 8) like nova-old
+      setCurrentStep('review');
     } else if (!editAgent && open) {
       // Reset to default when creating a new agent
       setFormData({
         name: '',
         description: '',
         icon: '🤖',
+        slug: '',
+        environment: 'production' as 'production' | 'staging' | 'development',
+        autoStart: true,
+        generateDocs: true,
         dataType: undefined,
         dataSources: [],
         relationships: [],
@@ -113,12 +157,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
-  const handleSave = () => {
+  const handleSave = (closeDialog: boolean = true) => {
     const newAgent: Agent = {
       id: editAgent?.id || `agent-${Date.now()}`,
       name: formData.name || 'Unnamed Agent',
       description: formData.description,
       icon: formData.icon,
+      slug: formData.slug,
+      environment: formData.environment,
+      autoStart: formData.autoStart,
+      generateDocs: formData.generateDocs,
       dataType: formData.dataType,
       dataSources: formData.dataSources || [],
       relationships: formData.relationships || [],
@@ -132,13 +180,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       requiresAuth: formData.requiresAuth,
       status: formData.status || 'ACTIVE',
       cache: formData.cache || '15M',
-      url: `https://api.nova.example/agents/${formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
+      url: `${window.location.origin}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
       created: editAgent?.created || new Date().toISOString(),
       lastRun: editAgent?.lastRun,
       runCount: editAgent?.runCount || 0
     };
-    onSave(newAgent);
-    handleClose();
+
+    // Pass closeDialog parameter to parent
+    onSave(newAgent, closeDialog);
+
+    // Only close dialog locally if requested
+    if (closeDialog) {
+      handleClose();
+    }
   };
 
   const handleClose = () => {
@@ -147,6 +201,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       name: '',
       description: '',
       icon: '🤖',
+      slug: '',
+      environment: 'production' as 'production' | 'staging' | 'development',
+      autoStart: true,
+      generateDocs: true,
       dataType: undefined,
       dataSources: [],
       relationships: [],
@@ -166,7 +224,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const isStepValid = () => {
     switch (currentStep) {
       case 'basic':
-        return formData.name && formData.name.trim().length > 0;
+        return formData.name && formData.name.trim().length > 0 &&
+               formData.slug && formData.slug.trim().length > 0;
       case 'dataType':
         return formData.dataType !== undefined;
       case 'dataSources':
@@ -187,27 +246,56 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const renderStepIndicator = () => (
-    <div className="flex items-center justify-center gap-2 mb-6">
-      {steps.map((step, index) => (
-        <div key={step} className="flex items-center gap-2">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
-            index < currentStepIndex 
-              ? 'bg-blue-600 text-white' 
-              : index === currentStepIndex 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-          }`}>
-            {index < currentStepIndex ? <Check className="w-4 h-4" /> : index + 1}
+    <div className="space-y-2">
+      {editAgent && (
+        <p className="text-xs text-center text-muted-foreground">
+          Click on any step to navigate
+        </p>
+      )}
+      <div className="flex items-center justify-center gap-2">
+        {steps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => editAgent && setCurrentStep(step)}
+              disabled={!editAgent}
+              title={editAgent ? `Go to step ${index + 1}` : index < currentStepIndex ? `Step ${index + 1} (Completed)` : ''}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
+                editAgent ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-default'
+              } ${
+                index < currentStepIndex
+                  ? 'bg-blue-600 text-white'
+                  : index === currentStepIndex
+                    ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+              }`}>
+              {index < currentStepIndex ? (
+                <>
+                  <Check className="w-4 h-4 group-hover:hidden" />
+                  <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
+                </>
+              ) : (
+                index + 1
+              )}
+            </button>
+            {index < steps.length - 1 && (
+              <div className={`w-8 h-0.5 ${
+                index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+              }`} />
+            )}
           </div>
-          {index < steps.length - 1 && (
-            <div className={`w-8 h-0.5 ${
-              index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-            }`} />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
+
+  const generateSlugFromName = (name: string) => {
+    return name.toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  };
 
   const renderBasicInfo = () => (
     <div className="space-y-4">
@@ -216,9 +304,33 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         <Input
           id="name"
           value={formData.name || ''}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          onChange={(e) => {
+            setFormData({ ...formData, name: e.target.value });
+            // Auto-generate slug if it's empty or matches the previous auto-generated slug
+            if (!formData.slug || formData.slug === generateSlugFromName(formData.name || '')) {
+              setFormData(prev => ({ ...prev, slug: generateSlugFromName(e.target.value) }));
+            }
+          }}
           placeholder="e.g., Breaking News Feed"
         />
+      </div>
+
+      <div>
+        <Label htmlFor="slug">URL Slug *</Label>
+        <div className="space-y-2">
+          <Input
+            id="slug"
+            value={formData.slug || ''}
+            onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+            placeholder="my-api-endpoint"
+          />
+          {formData.slug && (
+            <div className="bg-muted p-2 rounded text-sm">
+              <span className="text-muted-foreground">Your API will be available at:</span>{' '}
+              <code className="text-foreground">/api/{formData.slug}</code>
+            </div>
+          )}
+        </div>
       </div>
 
       <div>
@@ -285,13 +397,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   );
 
   const renderDataSources = () => {
-    const filteredFeeds = availableFeeds.filter(feed => feed.category === formData.dataType);
-    
-    const addDataSource = (feedId: string, feedName: string) => {
+    const addDataSource = (sourceId: string, sourceName: string) => {
       const newSource: AgentDataSource = {
         id: `source-${Date.now()}`,
-        name: feedName,
-        feedId,
+        name: sourceName,
+        feedId: sourceId,
         category: formData.dataType!
       };
       setFormData({
@@ -340,36 +450,47 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           </div>
         )}
 
-        {/* Available Feeds */}
+        {/* Available Data Sources from Supabase */}
         <div className="space-y-2">
           <Label>Available {formData.dataType} Sources</Label>
-          <div className="max-h-[300px] overflow-y-auto space-y-2">
-            {filteredFeeds.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
-                No feeds available for {formData.dataType}
-              </div>
-            ) : (
-              filteredFeeds.map((feed) => {
-                const isAdded = formData.dataSources?.some(s => s.feedId === feed.id);
-                return (
-                  <div
-                    key={feed.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted transition-colors"
-                  >
-                    <span className="text-sm">{feed.name}</span>
-                    <Button
-                      size="sm"
-                      variant={isAdded ? "outline" : "default"}
-                      onClick={() => isAdded ? null : addDataSource(feed.id, feed.name)}
-                      disabled={isAdded}
+          {loadingDataSources ? (
+            <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
+              Loading data sources...
+            </div>
+          ) : (
+            <div className="max-h-[300px] overflow-y-auto space-y-2">
+              {availableDataSources.length === 0 ? (
+                <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
+                  No data sources available for {formData.dataType}
+                </div>
+              ) : (
+                availableDataSources.map((source) => {
+                  const isAdded = formData.dataSources?.some(s => s.feedId === source.id);
+                  return (
+                    <div
+                      key={source.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted transition-colors"
                     >
-                      {isAdded ? 'Added' : 'Add'}
-                    </Button>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{source.name}</div>
+                        <Badge variant="outline" className="mt-1 text-xs">
+                          {source.type}
+                        </Badge>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={isAdded ? "outline" : "default"}
+                        onClick={() => isAdded ? null : addDataSource(source.id, source.name)}
+                        disabled={isAdded}
+                      >
+                        {isAdded ? 'Added' : 'Add'}
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -889,11 +1010,97 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   const renderReview = () => {
     const IconComponent = formData.dataType ? dataTypeIcons[formData.dataType] : null;
-    
+
     return (
       <div className="space-y-4">
+        {/* Deployment Settings */}
+        <div className="space-y-4">
+          <h3 className="font-medium">Deployment Settings</h3>
+
+          <div>
+            <Label htmlFor="review-name">Agent Name *</Label>
+            <Input
+              id="review-name"
+              value={formData.name || ''}
+              onChange={(e) => {
+                setFormData({ ...formData, name: e.target.value });
+                // Auto-generate slug if it's empty or matches the previous auto-generated slug
+                if (!formData.slug || formData.slug === generateSlugFromName(formData.name || '')) {
+                  setFormData(prev => ({ ...prev, slug: generateSlugFromName(e.target.value) }));
+                }
+              }}
+              placeholder="e.g., Breaking News Feed"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="review-slug">URL Slug *</Label>
+            <div className="space-y-2">
+              <Input
+                id="review-slug"
+                value={formData.slug || ''}
+                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                placeholder="my-api-endpoint"
+              />
+              {formData.slug && (
+                <div className="bg-muted p-2 rounded text-sm">
+                  <span className="text-muted-foreground">Your API will be available at:</span>{' '}
+                  <code className="text-foreground">/api/{formData.slug}</code>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="review-environment">Environment</Label>
+            <Select
+              value={formData.environment || 'production'}
+              onValueChange={(value) => setFormData({ ...formData, environment: value as 'production' | 'staging' | 'development' })}
+            >
+              <SelectTrigger id="review-environment">
+                <SelectValue placeholder="Select environment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="production">Production</SelectItem>
+                <SelectItem value="staging">Staging</SelectItem>
+                <SelectItem value="development">Development</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="review-auto-start"
+                checked={formData.autoStart !== false}
+                onCheckedChange={(checked) => setFormData({ ...formData, autoStart: checked })}
+              />
+              <Label htmlFor="review-auto-start" className="cursor-pointer">
+                Auto-start endpoint after deployment
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="review-generate-docs"
+                checked={formData.generateDocs !== false}
+                onCheckedChange={(checked) => setFormData({ ...formData, generateDocs: checked })}
+              />
+              <Label htmlFor="review-generate-docs" className="cursor-pointer">
+                Generate API documentation
+              </Label>
+            </div>
+          </div>
+        </div>
+
+        {/* Configuration Summary */}
         <Card>
           <CardContent className="p-4 space-y-4">
+            <h4 className="font-medium mb-4 flex items-center gap-2">
+              <Database className="w-4 h-4" />
+              Configuration Summary
+            </h4>
+
             {/* Basic Info */}
             <div>
               <p className="text-sm text-muted-foreground mb-2">Agent Name</p>
@@ -903,26 +1110,56 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               )}
             </div>
 
-            {/* Data Type */}
+            {/* URL Slug */}
             <div>
-              <p className="text-sm text-muted-foreground mb-2">Data Type</p>
-              <div className="flex items-center gap-2">
-                {IconComponent && <IconComponent className="w-4 h-4" />}
-                <span className="font-medium">{formData.dataType}</span>
+              <p className="text-sm text-muted-foreground mb-2">URL Slug</p>
+              <code className="text-sm bg-muted px-2 py-1 rounded">/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}</code>
+            </div>
+
+            {/* Environment & Deployment */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Environment</p>
+                <p className="font-medium capitalize">{formData.environment || 'production'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Auto-start</p>
+                <p className="font-medium">{formData.autoStart ? 'Yes' : 'No'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Generate Docs</p>
+                <p className="font-medium">{formData.generateDocs ? 'Yes' : 'No'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Status</p>
+                <p className="font-medium">{formData.status}</p>
               </div>
             </div>
 
-            {/* Data Sources */}
-            <div>
-              <p className="text-sm text-muted-foreground mb-2">Data Sources</p>
-              <div className="flex flex-wrap gap-2">
-                {formData.dataSources?.map(source => (
-                  <Badge key={source.id} variant="outline">
-                    {source.name}
-                  </Badge>
-                ))}
+            {/* Data Type */}
+            {formData.dataType && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Data Type</p>
+                <div className="flex items-center gap-2">
+                  {IconComponent && <IconComponent className="w-4 h-4" />}
+                  <span className="font-medium">{formData.dataType}</span>
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Data Sources */}
+            {formData.dataSources && formData.dataSources.length > 0 && (
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Data Sources</p>
+                <div className="flex flex-wrap gap-2">
+                  {formData.dataSources.map(source => (
+                    <Badge key={source.id} variant="outline">
+                      {source.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Relationships */}
             {formData.relationships && formData.relationships.length > 0 && (
@@ -971,15 +1208,14 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               <p className="text-sm text-muted-foreground mb-2">Security</p>
               <div className="space-y-1 text-sm">
                 <p>Authentication: {formData.requiresAuth ? formData.auth : 'None'}</p>
-                <p>Status: {formData.status}</p>
               </div>
             </div>
 
             {/* Generated URL */}
             <div>
               <p className="text-sm text-muted-foreground mb-2">Generated Endpoint</p>
-              <code className="text-xs bg-background p-2 rounded block break-all">
-                https://api.nova.example/agents/{formData.name?.toLowerCase().replace(/\s+/g, '-')}
+              <code className="text-xs bg-muted p-2 rounded block break-all">
+                {window.location.origin}/api/{formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}
               </code>
             </div>
           </CardContent>
@@ -1035,15 +1271,25 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) handleClose(); }}>
       <DialogContent className="max-w-6xl sm:max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {editAgent ? 'Edit Agent' : 'Create New Agent'}
-          </DialogTitle>
-          <DialogDescription>
-            {getStepDescription()}
-          </DialogDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <DialogTitle>
+                {editAgent ? 'Edit Agent' : 'Create New Agent'}
+              </DialogTitle>
+              <DialogDescription>
+                {getStepDescription()}
+              </DialogDescription>
+            </div>
+            {editAgent && (
+              <Button onClick={() => handleSave(false)} size="sm" className="ml-4 mr-4">
+                <Check className="w-4 h-4 mr-2" />
+                Save
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {renderStepIndicator()}

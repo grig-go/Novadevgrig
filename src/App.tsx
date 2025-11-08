@@ -38,6 +38,7 @@ import { useSportsData } from "./utils/useSportsData";
 import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
+import { Toaster } from "sonner";
 
 type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels';
 
@@ -901,9 +902,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background">
-      <TopMenuBar 
-        onNavigate={(view) => handleNavigate(view as AppView)} 
-        currentUser={usersData.users[0]} 
+      <Toaster />
+      <TopMenuBar
+        onNavigate={(view) => handleNavigate(view as AppView)}
+        currentUser={usersData.users[0]}
         roles={usersData.roles}
         permissions={usersData.permissions}
         onUpdateUser={handleUpdateUser}
