@@ -140,7 +140,7 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
     if (isFieldOverridden(race.reportingPercentage)) updateRaceField('reportingPercentage', null);
     if (isFieldOverridden(race.precincts_reporting)) updateRaceField('precincts_reporting', null);
     if (isFieldOverridden(race.status)) updateRaceField('status', null);
-    if (isFieldOverridden(race.status)) updateRaceField('totalVotes', null);
+    if (isFieldOverridden(race.totalVotes)) updateRaceField('totalVotes', null);
 
     race.candidates.map(candidate => {
       if (isFieldOverridden(candidate.name)) updateCandidateField(candidate.id, 'name', null);
