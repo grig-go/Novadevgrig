@@ -1,9 +1,45 @@
+// Database types - matching nova-old schema
+export type AgentOutputFormat = 'json' | 'xml' | 'rss' | 'csv' | 'custom';
+export type AgentAuthType = 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2' | 'custom';
+
+// UI Display types (for backward compatibility)
 export type AgentFormat = 'RSS' | 'ATOM' | 'JSON';
 export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'ERROR';
 export type AgentCacheType = 'OFF' | '5M' | '15M' | '30M' | '1H';
-export type AgentAuthType = 'none' | 'basic' | 'bearer' | 'api_key';
 export type AgentDataType = 'Elections' | 'Finance' | 'Sports' | 'Weather' | 'News';
 
+// Database schema matching api_endpoints table
+export interface APIEndpoint {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  output_format: AgentOutputFormat;
+  schema_config: Record<string, any>;
+  transform_config: Record<string, any>;
+  relationship_config: Record<string, any>;
+  cache_config: {
+    enabled: boolean;
+    ttl: number;
+  };
+  auth_config: {
+    required: boolean;
+    type: AgentAuthType;
+    config?: Record<string, any>;
+  };
+  rate_limit_config: {
+    enabled: boolean;
+    requests_per_minute: number;
+  };
+  active: boolean;
+  user_id?: string;
+  created_at: string;
+  updated_at: string;
+  // Optional relations
+  api_endpoint_sources?: any[];
+}
+
+// Legacy interface for UI compatibility (existing mock data structure)
 export interface AgentDataSource {
   id: string;
   name: string;

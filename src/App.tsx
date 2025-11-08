@@ -9,6 +9,7 @@ import { WeatherDashboard } from "./components/WeatherDashboard";
 import { NewsDashboard } from "./components/NewsDashboard";
 import { FeedsDashboardWithSupabase } from "./components/FeedsDashboardWithSupabase";
 import { AgentsDashboard } from "./components/AgentsDashboard";
+import { AgentsDashboardWithSupabase } from "./components/AgentsDashboardWithSupabase";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { MediaLibrary } from "./components/MediaLibrary";
@@ -800,13 +801,8 @@ export default function App() {
         );
       case 'agents':
         return (
-          <AgentsDashboard
-            agents={agentsData.agents}
+          <AgentsDashboardWithSupabase
             feeds={[]} // Feeds are now loaded from Supabase in the feeds dashboard
-            onAddAgent={handleAddAgent}
-            onUpdateAgent={handleUpdateAgent}
-            onDeleteAgent={handleDeleteAgent}
-            lastUpdated={agentsData.lastUpdated}
           />
         );
       case 'users-groups':
