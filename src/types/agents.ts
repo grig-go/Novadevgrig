@@ -75,8 +75,8 @@ export interface Agent {
   environment?: 'production' | 'staging' | 'development'; // Deployment environment
   autoStart?: boolean; // Auto-start after deployment
   generateDocs?: boolean; // Generate API documentation
-  // Step 2: Data Type
-  dataType?: AgentDataType;
+  // Step 2: Data Type (can select multiple categories)
+  dataType?: AgentDataType | AgentDataType[];
   // Step 3: Data Sources
   dataSources?: AgentDataSource[];
   // Step 4: Data Relationships

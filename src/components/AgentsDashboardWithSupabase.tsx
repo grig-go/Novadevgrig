@@ -51,6 +51,18 @@ interface AgentsDashboardWithSupabaseProps {
 
 // Helper function to convert APIEndpoint to Agent for UI compatibility
 function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
+  // Extract data sources from api_endpoint_sources relationship
+  const connectedDataSources = (endpoint as any).api_endpoint_sources?.map((eps: any) => ({
+    id: `source-${eps.data_source_id}`,
+    name: eps.data_source?.name || 'Unknown Source',
+    feedId: eps.data_source_id,
+    category: eps.data_source?.category
+  })) || [];
+
+  // Extract all unique categories from the data sources
+  const uniqueCategories = [...new Set(connectedDataSources.map((ds: any) => ds.category).filter(Boolean))];
+  const dataType = uniqueCategories.length > 0 ? uniqueCategories : [];
+
   return {
     id: endpoint.id,
     name: endpoint.name,
@@ -72,9 +84,9 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
       : 'OFF',
     url: `/api/${endpoint.slug}`,
     created: endpoint.created_at,
-    // Optional fields that might not be in database
-    dataType: undefined,
-    dataSources: [],
+    // Extract data type and sources from the endpoint's relationships
+    dataType: dataType as any,
+    dataSources: connectedDataSources,
     relationships: [],
     fieldMappings: [],
     transforms: []
@@ -215,8 +227,15 @@ export function AgentsDashboardWithSupabase({
 
       if (error) throw error;
 
+      console.log('Full endpoint data from Supabase:', fullEndpoint);
+      console.log('api_endpoint_sources:', (fullEndpoint as any).api_endpoint_sources);
+
       // Convert back to Agent format with full data
       const fullAgent = convertAPIEndpointToAgent(fullEndpoint);
+      console.log('Converted agent:', fullAgent);
+      console.log('Agent dataType:', fullAgent.dataType);
+      console.log('Agent dataSources:', fullAgent.dataSources);
+
       setEditingAgent(fullAgent);
       setWizardOpen(true);
     } catch (error) {

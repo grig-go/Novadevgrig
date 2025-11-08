@@ -54,7 +54,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     environment: 'production' as 'production' | 'staging' | 'development',
     autoStart: true,
     generateDocs: true,
-    dataType: undefined,
+    dataType: [],
     dataSources: [],
     relationships: [],
     format: 'JSON',
@@ -80,15 +80,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // Fetch data sources from Supabase when dialog opens or dataType changes
   useEffect(() => {
-    if (open && formData.dataType) {
+    const categories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+
+    if (open && categories.length > 0) {
       const fetchDataSources = async () => {
         setLoadingDataSources(true);
-        console.log('Fetching data sources for category:', formData.dataType);
+        console.log('Fetching data sources for categories:', categories);
         try {
           const { data, error } = await supabase
             .from('data_sources')
             .select('id, name, type, category')
-            .eq('category', formData.dataType)
+            .in('category', categories)
             .order('name');
 
           console.log('Data sources query result:', { data, error, count: data?.length });
@@ -104,6 +106,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       };
 
       fetchDataSources();
+    } else if (open) {
+      // Clear data sources if no categories selected
+      setAvailableDataSources([]);
     }
   }, [open, formData.dataType]);
 
@@ -123,7 +128,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         environment: 'production' as 'production' | 'staging' | 'development',
         autoStart: true,
         generateDocs: true,
-        dataType: undefined,
+        dataType: [],
         dataSources: [],
         relationships: [],
         format: 'JSON',
@@ -205,7 +210,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       environment: 'production' as 'production' | 'staging' | 'development',
       autoStart: true,
       generateDocs: true,
-      dataType: undefined,
+      dataType: [],
       dataSources: [],
       relationships: [],
       format: 'JSON',
@@ -227,7 +232,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return formData.name && formData.name.trim().length > 0 &&
                formData.slug && formData.slug.trim().length > 0;
       case 'dataType':
-        return formData.dataType !== undefined;
+        return Array.isArray(formData.dataType) ? formData.dataType.length > 0 : formData.dataType !== undefined;
       case 'dataSources':
         return formData.dataSources && formData.dataSources.length > 0;
       case 'relationships':
@@ -357,52 +362,78 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     </div>
   );
 
-  const renderDataType = () => (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Select the primary category of data this agent will work with
-      </p>
-      <div className="grid grid-cols-2 gap-4">
-        {dataTypeCategories.map((category) => {
-          const IconComponent = dataTypeIcons[category];
-          const isSelected = formData.dataType === category;
-          return (
-            <Card
-              key={category}
-              className={`cursor-pointer transition-all ${
-                isSelected 
-                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-950' 
-                  : 'hover:border-gray-400 dark:hover:border-gray-600'
-              }`}
-              onClick={() => setFormData({ ...formData, dataType: category })}
-            >
-              <CardContent className="p-6 flex items-center gap-3">
-                <div className={`p-3 rounded-lg ${
-                  isSelected 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-100 dark:bg-gray-800'
-                }`}>
-                  <IconComponent className="w-6 h-6" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-medium">{category}</h3>
-                </div>
-                {isSelected && <Check className="w-5 h-5 text-blue-600" />}
-              </CardContent>
-            </Card>
-          );
-        })}
+  const renderDataType = () => {
+    const selectedCategories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+
+    const toggleCategory = (category: AgentDataType) => {
+      const isSelected = selectedCategories.includes(category);
+      let newCategories: AgentDataType[];
+
+      if (isSelected) {
+        // Remove category
+        newCategories = selectedCategories.filter(c => c !== category);
+      } else {
+        // Add category
+        newCategories = [...selectedCategories, category];
+      }
+
+      setFormData({ ...formData, dataType: newCategories });
+    };
+
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Select one or more data categories (click to toggle)
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          {dataTypeCategories.map((category) => {
+            const IconComponent = dataTypeIcons[category];
+            const isSelected = selectedCategories.includes(category);
+            return (
+              <Card
+                key={category}
+                className={`cursor-pointer transition-all ${
+                  isSelected
+                    ? 'border-blue-600 bg-blue-50 dark:bg-blue-950'
+                    : 'hover:border-gray-400 dark:hover:border-gray-600'
+                }`}
+                onClick={() => toggleCategory(category)}
+              >
+                <CardContent className="p-6 flex items-center gap-3">
+                  <div className={`p-3 rounded-lg ${
+                    isSelected
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-800'
+                  }`}>
+                    <IconComponent className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-medium">{category}</h3>
+                  </div>
+                  {isSelected && <Check className="w-5 h-5 text-blue-600" />}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        {selectedCategories.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Selected {selectedCategories.length} {selectedCategories.length === 1 ? 'category' : 'categories'}: {selectedCategories.join(', ')}
+          </p>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderDataSources = () => {
-    const addDataSource = (sourceId: string, sourceName: string) => {
+    const selectedCategories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+
+    const addDataSource = (sourceId: string, sourceName: string, sourceCategory: string) => {
       const newSource: AgentDataSource = {
         id: `source-${Date.now()}`,
         name: sourceName,
         feedId: sourceId,
-        category: formData.dataType!
+        category: sourceCategory as AgentDataType
       };
       setFormData({
         ...formData,
@@ -420,7 +451,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     return (
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Select one or more data sources from the {formData.dataType} category
+          {selectedCategories.length > 0
+            ? `Select one or more data sources from: ${selectedCategories.join(', ')}`
+            : 'Please select at least one category in the previous step'}
         </p>
 
         {/* Selected Sources */}
@@ -435,7 +468,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 >
                   <div className="flex items-center gap-2">
                     <Database className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">{source.name}</span>
+                    <div>
+                      <span className="text-sm font-medium">{source.name}</span>
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {source.category}
+                      </Badge>
+                    </div>
                   </div>
                   <Button
                     variant="ghost"
@@ -452,7 +490,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         {/* Available Data Sources from Supabase */}
         <div className="space-y-2">
-          <Label>Available {formData.dataType} Sources</Label>
+          <Label>Available Sources</Label>
           {loadingDataSources ? (
             <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
               Loading data sources...
@@ -461,7 +499,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             <div className="max-h-[300px] overflow-y-auto space-y-2">
               {availableDataSources.length === 0 ? (
                 <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
-                  No data sources available for {formData.dataType}
+                  {selectedCategories.length === 0
+                    ? 'Please select at least one category in step 2'
+                    : `No data sources available for ${selectedCategories.join(', ')}`}
                 </div>
               ) : (
                 availableDataSources.map((source) => {
@@ -473,14 +513,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                     >
                       <div className="flex-1">
                         <div className="text-sm font-medium">{source.name}</div>
-                        <Badge variant="outline" className="mt-1 text-xs">
-                          {source.type}
-                        </Badge>
+                        <div className="flex gap-1 mt-1">
+                          <Badge variant="outline" className="text-xs">
+                            {source.type}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {source.category}
+                          </Badge>
+                        </div>
                       </div>
                       <Button
                         size="sm"
                         variant={isAdded ? "outline" : "default"}
-                        onClick={() => isAdded ? null : addDataSource(source.id, source.name)}
+                        onClick={() => isAdded ? null : addDataSource(source.id, source.name, source.category)}
                         disabled={isAdded}
                       >
                         {isAdded ? 'Added' : 'Add'}
