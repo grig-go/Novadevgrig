@@ -157,7 +157,13 @@ export function AgentsDashboardWithSupabase({
       setLoading(true);
       const { data, error } = await supabase
         .from('api_endpoints')
-        .select('*')
+        .select(`
+          *,
+          api_endpoint_sources (
+            *,
+            data_source:data_sources (*)
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -581,8 +587,12 @@ export function AgentsDashboardWithSupabase({
                       </div>
                     </TableCell>
                     <TableCell>
-                      {agent.dataType ? (
-                        <Badge variant="secondary">{agent.dataType}</Badge>
+                      {agent.dataType && (Array.isArray(agent.dataType) ? agent.dataType.length > 0 : agent.dataType) ? (
+                        <div className="flex flex-wrap gap-1">
+                          {(Array.isArray(agent.dataType) ? agent.dataType : [agent.dataType]).map((category, idx) => (
+                            <Badge key={idx} variant="secondary">{category}</Badge>
+                          ))}
+                        </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">-</span>
                       )}
