@@ -5,8 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { EditImageDialog } from "./EditImageDialog";
 import { Race, getFieldValue, isFieldOverridden, Candidate } from "../types/election";
 import { Crown, Building, Home, BarChart3, Camera, User } from "lucide-react";
-import uploadIcon from 'figma:asset/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
-import newImageExample from 'figma:asset/d44c4f8fd84167f69792e0ecbe2c26b82fcb83f4.png';
+import uploadIcon from '../assets/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
+import newImageExample from '../assets/d44c4f8fd84167f69792e0ecbe2c26b82fcb83f4.png';
 import { fetchBOPData, getBOPSummary, BOPData } from "../data/bopData";
 
 interface ElectionSummaryProps {

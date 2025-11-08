@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
 import { Upload, AlertTriangle } from "lucide-react";
-import uploadIcon from 'figma:asset/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
+import uploadIcon from '../assets/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
 import { supabase } from '../utils/supabase/client';
 
 interface EditImageDialogProps {
