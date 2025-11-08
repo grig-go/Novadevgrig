@@ -20,6 +20,14 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
   Plus,
   Search,
   Pencil,
@@ -29,11 +37,13 @@ import {
   MoreVertical,
   Bot,
   RefreshCw,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "../utils/supabase/client";
 import { useToast } from "./ui/use-toast";
+import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from "../utils/constants";
 
 interface AgentsDashboardWithSupabaseProps {
   feeds?: Feed[];
@@ -110,6 +120,8 @@ export function AgentsDashboardWithSupabase({
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const { toast } = useToast();
 
   // Transform feeds to format expected by AgentWizard
@@ -211,24 +223,82 @@ export function AgentsDashboardWithSupabase({
 
   const handleDuplicate = async (agent: Agent) => {
     try {
-      // Generate a unique slug
-      const timestamp = Date.now();
-      const newSlug = `${agent.url?.replace('/api/', '')}-copy-${timestamp}`;
+      // Get current user or use dev user ID
+      let userId = DEV_USER_ID;
 
+      if (!isDevelopment || !SKIP_AUTH_IN_DEV) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          toast({
+            title: "Error",
+            description: "You must be logged in to duplicate agents",
+            variant: "destructive"
+          });
+          return;
+        }
+        userId = user.id;
+      }
+
+      // First, fetch the complete endpoint data with all relationships
+      const { data: fullEndpoint, error: fetchError } = await supabase
+        .from('api_endpoints')
+        .select(`
+          *,
+          api_endpoint_sources (
+            *,
+            data_source:data_sources (*)
+          )
+        `)
+        .eq('id', agent.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Generate a unique slug by appending a timestamp
+      const timestamp = Date.now();
+      const newSlug = `${fullEndpoint.slug}-copy-${timestamp}`;
+
+      // Create the duplicated endpoint
       const duplicatedEndpoint = {
-        ...convertAgentToAPIEndpoint(agent),
-        name: `${agent.name} (Copy)`,
+        name: `${fullEndpoint.name} (Copy)`,
         slug: newSlug,
-        active: false // Start duplicates as inactive
+        description: fullEndpoint.description,
+        output_format: fullEndpoint.output_format,
+        schema_config: fullEndpoint.schema_config,
+        transform_config: fullEndpoint.transform_config,
+        relationship_config: fullEndpoint.relationship_config,
+        cache_config: fullEndpoint.cache_config,
+        auth_config: fullEndpoint.auth_config,
+        rate_limit_config: fullEndpoint.rate_limit_config,
+        active: false, // Start duplicates as inactive
+        user_id: userId
       };
 
-      const { data, error } = await supabase
+      const { data: newEndpoint, error: insertError } = await supabase
         .from('api_endpoints')
         .insert(duplicatedEndpoint)
         .select()
         .single();
 
-      if (error) throw error;
+      if (insertError) throw insertError;
+
+      // Duplicate the api_endpoint_sources relationships
+      if (fullEndpoint.api_endpoint_sources && fullEndpoint.api_endpoint_sources.length > 0) {
+        const sourceRelations = fullEndpoint.api_endpoint_sources.map((source: any) => ({
+          endpoint_id: newEndpoint.id,
+          data_source_id: source.data_source_id,
+          is_primary: source.is_primary,
+          join_config: source.join_config,
+          filter_config: source.filter_config,
+          sort_order: source.sort_order
+        }));
+
+        const { error: relationsError } = await supabase
+          .from('api_endpoint_sources')
+          .insert(sourceRelations);
+
+        if (relationsError) throw relationsError;
+      }
 
       // Reload agents list
       await loadAgents();
@@ -296,16 +366,14 @@ export function AgentsDashboardWithSupabase({
     }
   };
 
-  const handleDeleteAgent = async (agentId: string) => {
-    if (!confirm('Are you sure you want to delete this agent?')) {
-      return;
-    }
+  const handleDeleteAgent = async () => {
+    if (!selectedAgent) return;
 
     try {
       const { error } = await supabase
         .from('api_endpoints')
         .delete()
-        .eq('id', agentId);
+        .eq('id', selectedAgent.id);
 
       if (error) throw error;
 
@@ -323,7 +391,15 @@ export function AgentsDashboardWithSupabase({
         description: "Failed to delete agent",
         variant: "destructive"
       });
+    } finally {
+      setDeleteDialogOpen(false);
+      setSelectedAgent(null);
     }
+  };
+
+  const openDeleteDialog = (agent: Agent) => {
+    setSelectedAgent(agent);
+    setDeleteDialogOpen(true);
   };
 
   const toggleAgentStatus = async (agent: Agent) => {
@@ -549,7 +625,7 @@ export function AgentsDashboardWithSupabase({
                           variant="ghost"
                           size="icon"
                           className="w-8 h-8 text-destructive"
-                          onClick={() => handleDeleteAgent(agent.id)}
+                          onClick={() => openDeleteDialog(agent)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -571,6 +647,37 @@ export function AgentsDashboardWithSupabase({
         editAgent={editingAgent}
         availableFeeds={availableFeeds}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Agent</DialogTitle>
+            <DialogDescription className="pt-3">
+              Are you sure you want to delete the agent <strong>{selectedAgent?.name}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 text-destructive py-2">
+            <AlertTriangle className="w-4 h-4" />
+            <p className="text-sm">This action cannot be undone.</p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAgent}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
