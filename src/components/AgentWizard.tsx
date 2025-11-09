@@ -32,7 +32,7 @@ interface AgentWizardProps {
   availableFeeds?: Array<{ id: string; name: string; category: string }>;
 }
 
-type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'review';
+type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'review';
 
 const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News'];
 
@@ -77,6 +77,267 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   // State for fetching data sources from Supabase
   const [availableDataSources, setAvailableDataSources] = useState<Array<{ id: string; name: string; type: string; category: string }>>([]);
   const [loadingDataSources, setLoadingDataSources] = useState(false);
+
+  // State for new data sources to be created
+  const [newDataSources, setNewDataSources] = useState<any[]>([]);
+
+  // State for test connection results
+  const [testResults, setTestResults] = useState<Record<number, any>>({});
+  const [testLoading, setTestLoading] = useState<Record<number, boolean>>({});
+  const [testParams, setTestParams] = useState<Record<number, Record<string, string>>>({});
+
+  // Helper function to extract JSON fields
+  const extractJsonFields = (data: any, prefix: string = ''): string[] => {
+    const fields: string[] = [];
+
+    if (data === null || data === undefined) return fields;
+
+    if (Array.isArray(data)) {
+      if (data.length > 0 && typeof data[0] === 'object') {
+        return extractJsonFields(data[0], prefix);
+      }
+      return fields;
+    }
+
+    if (typeof data === 'object') {
+      Object.keys(data).forEach(key => {
+        const fullPath = prefix ? `${prefix}.${key}` : key;
+        fields.push(fullPath);
+
+        // Don't recurse too deep - just one level for now
+        if (!prefix && data[key] && typeof data[key] === 'object' && !Array.isArray(data[key])) {
+          const nestedFields = extractJsonFields(data[key], fullPath);
+          fields.push(...nestedFields);
+        }
+      });
+    }
+
+    return [...new Set(fields)];
+  };
+
+  // Test API connection
+  const testAPIConnection = async (index: number) => {
+    const source = newDataSources[index];
+    console.log('Testing API connection for source:', source);
+
+    if (!source.api_config?.url) {
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: false,
+          error: 'No URL configured'
+        }
+      }));
+      return;
+    }
+
+    // Check for required parameters
+    const paramMappings = source.api_config.parameter_mappings || [];
+    const requiredMappings = paramMappings.filter((m: any) => m.required);
+    const currentTestParams = testParams[index] || {};
+
+    // Validate required parameters
+    for (const mapping of requiredMappings) {
+      if (!currentTestParams[mapping.queryParam]) {
+        setTestResults(prev => ({
+          ...prev,
+          [index]: {
+            success: false,
+            error: `⚠️ Required test parameter '${mapping.queryParam}' is missing. Please provide a value above.`
+          }
+        }));
+        return;
+      }
+    }
+
+    setTestLoading(prev => ({ ...prev, [index]: true }));
+
+    try {
+      // Substitute parameters in URL
+      let testUrl = source.api_config.url;
+      for (const mapping of paramMappings) {
+        const paramValue = currentTestParams[mapping.queryParam];
+        if (paramValue) {
+          testUrl = testUrl.replace(`{${mapping.urlPlaceholder}}`, paramValue);
+        }
+      }
+
+      console.log('Testing URL:', testUrl);
+
+      // Build headers including authentication
+      const headers: Record<string, string> = { ...(source.api_config.headers || {}) };
+
+      // Add authentication headers if configured
+      if (source.api_config.auth_type === 'bearer' && source.api_config.bearer_token) {
+        headers['Authorization'] = `Bearer ${source.api_config.bearer_token}`;
+      } else if (source.api_config.auth_type === 'api_key_header' && source.api_config.api_key_header && source.api_config.api_key_value) {
+        headers[source.api_config.api_key_header] = source.api_config.api_key_value;
+      }
+
+      // Try to fetch directly, fallback to using a proxy if CORS fails
+      let response;
+      let result;
+
+      try {
+        response = await fetch(testUrl, {
+          method: source.api_config.method || 'GET',
+          headers,
+          mode: 'cors'
+        });
+        result = { data: await response.json(), status: response.status };
+      } catch (corsError) {
+        console.log('CORS failed, trying without CORS mode');
+        // If CORS fails, try without mode specification
+        try {
+          response = await fetch(testUrl, {
+            method: source.api_config.method || 'GET',
+            headers
+          });
+          result = { data: await response.json(), status: response.status };
+        } catch (fetchError) {
+          throw new Error('Failed to connect. Please check the URL and ensure CORS is enabled on the API.');
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`HTTP error ${response?.status || 'unknown'}`);
+      }
+
+      // Extract fields from the response
+      let extractedFields: string[] = [];
+      let dataToAnalyze = result.data;
+
+      // If there's a data_path, navigate to it
+      if (source.api_config.data_path) {
+        const pathParts = source.api_config.data_path.split('.');
+        let current = result.data;
+
+        for (const part of pathParts) {
+          if (current && typeof current === 'object') {
+            current = current[part];
+          }
+        }
+
+        if (current) {
+          dataToAnalyze = current;
+        }
+      }
+
+      extractedFields = extractJsonFields(dataToAnalyze);
+
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: true,
+          message: 'Connection successful!',
+          status: result.status,
+          fields: extractedFields,
+          testedUrl: testUrl
+        }
+      }));
+
+      // Store fields for later use
+      const updated = [...newDataSources];
+      updated[index] = {
+        ...updated[index],
+        fields: extractedFields,
+        sample_data: Array.isArray(dataToAnalyze) ? dataToAnalyze.slice(0, 5) : [dataToAnalyze]
+      };
+      setNewDataSources(updated);
+
+    } catch (error) {
+      console.error('Test connection error:', error);
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: false,
+          error: error instanceof Error ? error.message : 'Connection failed'
+        }
+      }));
+    } finally {
+      setTestLoading(prev => ({ ...prev, [index]: false }));
+    }
+  };
+
+  // Test RSS feed
+  const testRSSFeed = async (index: number) => {
+    const source = newDataSources[index];
+    if (!source.rss_config?.url) {
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: false,
+          error: 'No RSS URL configured'
+        }
+      }));
+      return;
+    }
+
+    setTestLoading(prev => ({ ...prev, [index]: true }));
+
+    try {
+      // Try to fetch RSS feed
+      let response;
+      let result;
+
+      try {
+        response = await fetch(source.rss_config.url, {
+          method: 'GET',
+          mode: 'cors'
+        });
+        const text = await response.text();
+        result = { data: text, status: response.status };
+      } catch (corsError) {
+        console.log('CORS failed, trying without CORS mode');
+        try {
+          response = await fetch(source.rss_config.url, {
+            method: 'GET'
+          });
+          const text = await response.text();
+          result = { data: text, status: response.status };
+        } catch (fetchError) {
+          throw new Error('Failed to load RSS feed. Please check the URL and ensure CORS is enabled.');
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`HTTP error ${response?.status || 'unknown'}`);
+      }
+
+      // Standard RSS fields
+      const extractedFields = ['title', 'description', 'link', 'pubDate', 'guid', 'author', 'category'];
+
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: true,
+          message: 'RSS feed validated!',
+          status: result.status,
+          fields: extractedFields
+        }
+      }));
+
+      // Store fields for later use
+      const updated = [...newDataSources];
+      updated[index] = {
+        ...updated[index],
+        fields: extractedFields
+      };
+      setNewDataSources(updated);
+
+    } catch (error) {
+      console.error('RSS test error:', error);
+      setTestResults(prev => ({
+        ...prev,
+        [index]: {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to load RSS feed'
+        }
+      }));
+    } finally {
+      setTestLoading(prev => ({ ...prev, [index]: false }));
+    }
+  };
 
   // Fetch data sources from Supabase when dialog opens or dataType changes
   useEffect(() => {
@@ -145,7 +406,18 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [editAgent, open]);
 
-  const steps: WizardStep[] = ['basic', 'dataType', 'dataSources', 'relationships', 'outputFormat', 'transformations', 'security', 'review'];
+  // Dynamic steps - include configureNewSources only if there are new sources to configure
+  const steps: WizardStep[] = [
+    'basic',
+    'dataType',
+    'dataSources',
+    ...(newDataSources.filter(ds => ds.name && ds.type).length > 0 ? ['configureNewSources' as WizardStep] : []),
+    'relationships',
+    'outputFormat',
+    'transformations',
+    'security',
+    'review'
+  ];
   const currentStepIndex = steps.indexOf(currentStep);
 
   const handleNext = () => {
@@ -162,7 +434,60 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
-  const handleSave = (closeDialog: boolean = true) => {
+  const handleSave = async (closeDialog: boolean = true) => {
+    // First, save new data sources to the database
+    const savedDataSourceIds: string[] = [];
+
+    if (newDataSources.filter(ds => ds.name && ds.type).length > 0) {
+      console.log('Saving new data sources to database...');
+
+      for (const newSource of newDataSources.filter(ds => ds.name && ds.type)) {
+        try {
+          const { data, error } = await supabase
+            .from('data_sources')
+            .insert({
+              name: newSource.name,
+              type: newSource.type,
+              category: newSource.category || null,
+              api_config: newSource.api_config || null,
+              rss_config: newSource.rss_config || null,
+              file_config: newSource.file_config || null,
+              database_config: newSource.database_config || null
+            })
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error saving data source:', error);
+            throw error;
+          }
+
+          if (data) {
+            console.log('Saved data source:', data);
+            savedDataSourceIds.push(data.id);
+
+            // Add to formData.dataSources so it's included in the agent
+            const newAgentSource: AgentDataSource = {
+              id: `source-${Date.now()}-${savedDataSourceIds.length}`,
+              name: data.name,
+              feedId: data.id,
+              category: data.category as AgentDataType
+            };
+
+            setFormData(prev => ({
+              ...prev,
+              dataSources: [...(prev.dataSources || []), newAgentSource]
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to save new data source:', error);
+          // Continue with other sources even if one fails
+        }
+      }
+
+      console.log(`Saved ${savedDataSourceIds.length} new data sources`);
+    }
+
     const newAgent: Agent = {
       id: editAgent?.id || `agent-${Date.now()}`,
       name: formData.name || 'Unnamed Agent',
@@ -223,6 +548,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       status: 'ACTIVE',
       cache: '15M'
     });
+    setNewDataSources([]); // Clear new data sources
     onClose();
   };
 
@@ -234,7 +560,29 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       case 'dataType':
         return Array.isArray(formData.dataType) ? formData.dataType.length > 0 : formData.dataType !== undefined;
       case 'dataSources':
-        return formData.dataSources && formData.dataSources.length > 0;
+        // Valid if there are existing selected sources OR new sources to create
+        return (formData.dataSources && formData.dataSources.length > 0) ||
+               newDataSources.filter(ds => ds.name && ds.type).length > 0;
+      case 'configureNewSources':
+        // All new data sources must have required fields based on their type
+        return newDataSources.filter(ds => ds.name && ds.type).every(ds => {
+          if (ds.type === 'api') {
+            return ds.api_config?.url;
+          } else if (ds.type === 'rss') {
+            return ds.rss_config?.url;
+          } else if (ds.type === 'file') {
+            // File source validation depends on source type
+            if (ds.file_config?.source === 'url') {
+              return ds.file_config?.url;
+            }
+            // For upload and path, we just need the source field
+            return ds.file_config?.source;
+          } else if (ds.type === 'database') {
+            // Database just needs dbType selected
+            return ds.database_config?.dbType;
+          }
+          return false;
+        });
       case 'relationships':
         return true; // Optional step
       case 'outputFormat':
@@ -536,6 +884,749 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               )}
             </div>
           )}
+        </div>
+
+        {/* Create New Data Sources */}
+        <div className="space-y-2 mt-6">
+          <div className="flex items-center justify-between">
+            <Label>Create New Data Sources</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setNewDataSources([...newDataSources, { name: '', type: '', category: selectedCategories[0] || '' }]);
+              }}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Source
+            </Button>
+          </div>
+
+          {newDataSources.length > 0 ? (
+            <div className="space-y-3">
+              {newDataSources.map((source, index) => (
+                <Card key={index} className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label>Name <span className="text-red-500">*</span></Label>
+                            <Input
+                              value={source.name}
+                              onChange={(e) => {
+                                const updated = [...newDataSources];
+                                updated[index] = { ...updated[index], name: e.target.value };
+                                setNewDataSources(updated);
+                              }}
+                              placeholder="e.g., My Custom API"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Type <span className="text-red-500">*</span></Label>
+                            <Select
+                              value={source.type}
+                              onValueChange={(value) => {
+                                const updated = [...newDataSources];
+                                const typeConfig: any = { type: value };
+                                if (value === 'api') {
+                                  typeConfig.api_config = { method: 'GET', auth_type: 'none', headers: {} };
+                                } else if (value === 'database') {
+                                  typeConfig.database_config = { connections: {} };
+                                } else if (value === 'file') {
+                                  typeConfig.file_config = { source: 'url', format: 'csv' };
+                                } else if (value === 'rss') {
+                                  typeConfig.rss_config = {};
+                                }
+                                updated[index] = { ...updated[index], ...typeConfig };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="api">REST API</SelectItem>
+                                <SelectItem value="database">Database</SelectItem>
+                                <SelectItem value="file">File</SelectItem>
+                                <SelectItem value="rss">RSS Feed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Category</Label>
+                          <Select
+                            value={source.category}
+                            onValueChange={(value) => {
+                              const updated = [...newDataSources];
+                              updated[index] = { ...updated[index], category: value };
+                              setNewDataSources(updated);
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {dataTypeCategories.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {source.type && (
+                          <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <p className="text-xs text-blue-700 dark:text-blue-300">
+                              <AlertCircle className="w-3 h-3 inline mr-1" />
+                              You'll configure the details of this {source.type} source in the next step.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setNewDataSources(newDataSources.filter((_, i) => i !== index));
+                        }}
+                        className="ml-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 text-center text-sm text-muted-foreground bg-muted rounded-lg">
+              No new data sources. Click "Add New Source" to create one.
+            </div>
+          )}
+        </div>
+
+        {/* Summary */}
+        {(formData.dataSources && formData.dataSources.length > 0) || newDataSources.filter(ds => ds.name && ds.type).length > 0 ? (
+          <Card className="p-4 bg-muted mt-4">
+            <div className="flex items-center gap-3 text-sm">
+              <Database className="w-4 h-4" />
+              <strong>Summary:</strong>
+              <Badge variant="default">
+                {formData.dataSources?.length || 0} existing selected
+              </Badge>
+              <Badge variant="secondary">
+                {newDataSources.filter(ds => ds.name && ds.type).length} new configured
+              </Badge>
+              <Badge variant="outline">
+                {(formData.dataSources?.length || 0) + newDataSources.filter(ds => ds.name && ds.type).length} total sources
+              </Badge>
+            </div>
+          </Card>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderConfigureNewSources = () => {
+    const validNewSources = newDataSources.filter(ds => ds.name && ds.type);
+
+    if (validNewSources.length === 0) {
+      return (
+        <div className="p-8 text-center">
+          <p className="text-muted-foreground">No new data sources to configure.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-muted-foreground">
+          Configure the connection details for each new data source. These sources will be saved to your database.
+        </p>
+
+        {validNewSources.map((source, index) => {
+          const actualIndex = newDataSources.indexOf(source);
+
+          return (
+            <Card key={index} className="p-4">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Database className="w-5 h-5" />
+                  <h3 className="font-semibold">{source.name}</h3>
+                  <Badge variant="outline">{source.type}</Badge>
+                  {source.category && <Badge variant="secondary">{source.category}</Badge>}
+                </div>
+
+                {/* API Configuration */}
+                {source.type === 'api' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>API URL <span className="text-red-500">*</span></Label>
+                      <Input
+                        value={source.api_config?.url || ''}
+                        onChange={(e) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            api_config: { ...updated[actualIndex].api_config, url: e.target.value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                        placeholder="https://api.example.com/v1/data"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>HTTP Method</Label>
+                        <Select
+                          value={source.api_config?.method || 'GET'}
+                          onValueChange={(value) => {
+                            const updated = [...newDataSources];
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              api_config: { ...updated[actualIndex].api_config, method: value }
+                            };
+                            setNewDataSources(updated);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="GET">GET</SelectItem>
+                            <SelectItem value="POST">POST</SelectItem>
+                            <SelectItem value="PUT">PUT</SelectItem>
+                            <SelectItem value="PATCH">PATCH</SelectItem>
+                            <SelectItem value="DELETE">DELETE</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Authentication Type</Label>
+                        <Select
+                          value={source.api_config?.auth_type || 'none'}
+                          onValueChange={(value) => {
+                            const updated = [...newDataSources];
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              api_config: { ...updated[actualIndex].api_config, auth_type: value }
+                            };
+                            setNewDataSources(updated);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No Authentication</SelectItem>
+                            <SelectItem value="basic">Basic Auth</SelectItem>
+                            <SelectItem value="bearer">Bearer Token</SelectItem>
+                            <SelectItem value="api_key_header">API Key (Header)</SelectItem>
+                            <SelectItem value="api_key_query">API Key (Query)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {source.api_config?.auth_type === 'bearer' && (
+                      <div className="space-y-2">
+                        <Label>Bearer Token</Label>
+                        <Input
+                          type="password"
+                          value={source.api_config?.bearer_token || ''}
+                          onChange={(e) => {
+                            const updated = [...newDataSources];
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              api_config: { ...updated[actualIndex].api_config, bearer_token: e.target.value }
+                            };
+                            setNewDataSources(updated);
+                          }}
+                          placeholder="Your bearer token"
+                        />
+                      </div>
+                    )}
+
+                    {source.api_config?.auth_type === 'api_key_header' && (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label>API Key Header Name</Label>
+                          <Input
+                            value={source.api_config?.api_key_header || 'X-API-Key'}
+                            onChange={(e) => {
+                              const updated = [...newDataSources];
+                              updated[actualIndex] = {
+                                ...updated[actualIndex],
+                                api_config: { ...updated[actualIndex].api_config, api_key_header: e.target.value }
+                              };
+                              setNewDataSources(updated);
+                            }}
+                            placeholder="X-API-Key"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>API Key Value</Label>
+                          <Input
+                            type="password"
+                            value={source.api_config?.api_key_value || ''}
+                            onChange={(e) => {
+                              const updated = [...newDataSources];
+                              updated[actualIndex] = {
+                                ...updated[actualIndex],
+                                api_config: { ...updated[actualIndex].api_config, api_key_value: e.target.value }
+                              };
+                              setNewDataSources(updated);
+                            }}
+                            placeholder="Your API key"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>Data Path (optional)</Label>
+                      <Input
+                        value={source.api_config?.data_path || ''}
+                        onChange={(e) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            api_config: { ...updated[actualIndex].api_config, data_path: e.target.value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                        placeholder="data.items"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        JSON path to the array of items (e.g., 'data.items' or 'results')
+                      </p>
+                    </div>
+
+                    {/* Dynamic URL Parameters Section */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label>Dynamic URL Parameters</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Map query parameters from your endpoint URL to placeholders in this data source URL
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const updated = [...newDataSources];
+                            const newMapping = { queryParam: '', urlPlaceholder: '', required: false };
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              api_config: {
+                                ...updated[actualIndex].api_config,
+                                parameter_mappings: [...(updated[actualIndex].api_config?.parameter_mappings || []), newMapping]
+                              }
+                            };
+                            setNewDataSources(updated);
+                          }}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Add Parameter
+                        </Button>
+                      </div>
+
+                      {source.api_config?.parameter_mappings?.length > 0 && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
+                            <AlertCircle className="w-3 h-3 inline mr-1" />
+                            <strong>Example:</strong> If your URL is <code>http://api.com/races/{'{raceId}'}</code>,
+                            add a mapping where placeholder is "raceId" and query param is "id".
+                            Then calling <code>/api/your-endpoint?id=ND_393</code> will fetch from <code>http://api.com/races/ND_393</code>
+                          </p>
+                        </div>
+                      )}
+
+                      {source.api_config?.parameter_mappings?.map((mapping: any, mappingIndex: number) => (
+                        <Card key={mappingIndex} className="p-3 relative">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const updated = [...newDataSources];
+                              const newMappings = updated[actualIndex].api_config.parameter_mappings.filter((_: any, i: number) => i !== mappingIndex);
+                              updated[actualIndex] = {
+                                ...updated[actualIndex],
+                                api_config: { ...updated[actualIndex].api_config, parameter_mappings: newMappings }
+                              };
+                              setNewDataSources(updated);
+                            }}
+                            className="absolute top-2 right-2"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                          <div className="grid grid-cols-3 gap-2 pr-8">
+                            <div className="space-y-2">
+                              <Label className="text-xs">Query Parameter</Label>
+                              <Input
+                                value={mapping.queryParam || ''}
+                                onChange={(e) => {
+                                  const updated = [...newDataSources];
+                                  const newMappings = [...(updated[actualIndex].api_config.parameter_mappings || [])];
+                                  newMappings[mappingIndex] = { ...mapping, queryParam: e.target.value };
+                                  updated[actualIndex] = {
+                                    ...updated[actualIndex],
+                                    api_config: { ...updated[actualIndex].api_config, parameter_mappings: newMappings }
+                                  };
+                                  setNewDataSources(updated);
+                                }}
+                                placeholder="id"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">URL Placeholder</Label>
+                              <Input
+                                value={mapping.urlPlaceholder || ''}
+                                onChange={(e) => {
+                                  const updated = [...newDataSources];
+                                  const newMappings = [...(updated[actualIndex].api_config.parameter_mappings || [])];
+                                  newMappings[mappingIndex] = { ...mapping, urlPlaceholder: e.target.value };
+                                  updated[actualIndex] = {
+                                    ...updated[actualIndex],
+                                    api_config: { ...updated[actualIndex].api_config, parameter_mappings: newMappings }
+                                  };
+                                  setNewDataSources(updated);
+                                }}
+                                placeholder="raceId"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="text-xs">Required?</Label>
+                              <div className="flex items-center h-9">
+                                <input
+                                  type="checkbox"
+                                  checked={mapping.required || false}
+                                  onChange={(e) => {
+                                    const updated = [...newDataSources];
+                                    const newMappings = [...(updated[actualIndex].api_config.parameter_mappings || [])];
+                                    newMappings[mappingIndex] = { ...mapping, required: e.target.checked };
+                                    updated[actualIndex] = {
+                                      ...updated[actualIndex],
+                                      api_config: { ...updated[actualIndex].api_config, parameter_mappings: newMappings }
+                                    };
+                                    setNewDataSources(updated);
+                                  }}
+                                  className="w-4 h-4"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+
+                    {/* Test Parameters Section for APIs with dynamic parameters */}
+                    {source.api_config?.parameter_mappings && source.api_config.parameter_mappings.length > 0 && (
+                      <div className="space-y-3 pt-3 border-t">
+                        <div>
+                          <Label>Test Parameters</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Provide values for parameters to test the connection
+                          </p>
+                        </div>
+
+                        <div className="p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                          <p className="text-xs text-yellow-700 dark:text-yellow-300">
+                            <AlertCircle className="w-3 h-3 inline mr-1" />
+                            This data source uses dynamic parameters. Provide test values below to discover fields.
+                          </p>
+                        </div>
+
+                        {source.api_config.parameter_mappings.map((mapping: any, mappingIdx: number) => (
+                          <div key={mappingIdx} className="space-y-2">
+                            <Label className="text-sm">
+                              {mapping.queryParam}
+                              {mapping.required && <span className="text-red-500 ml-1">*</span>}
+                              {mapping.required && <span className="text-xs text-muted-foreground ml-2">(required)</span>}
+                            </Label>
+                            <Input
+                              value={testParams[actualIndex]?.[mapping.queryParam] || ''}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                setTestParams((prev: Record<number, Record<string, string>>) => ({
+                                  ...prev,
+                                  [actualIndex]: {
+                                    ...prev[actualIndex],
+                                    [mapping.queryParam]: e.target.value
+                                  }
+                                }));
+                              }}
+                              placeholder={`e.g., value for {${mapping.urlPlaceholder}}`}
+                              className={mapping.required && !testParams[actualIndex]?.[mapping.queryParam] ? 'border-red-500' : ''}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Test Connection Button for API */}
+                    <div className="pt-3 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={() => testAPIConnection(actualIndex)}
+                        disabled={!source.api_config?.url || testLoading[actualIndex]}
+                      >
+                        {testLoading[actualIndex] ? 'Testing...' : 'Test Connection'}
+                      </Button>
+
+                      {testResults[actualIndex] && (
+                        <div className={`mt-3 p-3 rounded-lg border ${
+                          testResults[actualIndex].success
+                            ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
+                            : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                        }`}>
+                          <p className={`text-sm font-medium ${
+                            testResults[actualIndex].success
+                              ? 'text-green-700 dark:text-green-300'
+                              : 'text-red-700 dark:text-red-300'
+                          }`}>
+                            {testResults[actualIndex].success ? '✓' : '✗'}
+                            {' '}
+                            {testResults[actualIndex].success ? testResults[actualIndex].message : (testResults[actualIndex].error || testResults[actualIndex].message)}
+                          </p>
+                          {testResults[actualIndex].fields && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Found {testResults[actualIndex].fields.length} fields:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {testResults[actualIndex].fields.map((field: string) => (
+                                  <Badge key={field} variant="secondary" className="text-xs">
+                                    {field}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* RSS Configuration */}
+                {source.type === 'rss' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>RSS Feed URL <span className="text-red-500">*</span></Label>
+                      <Input
+                        value={source.rss_config?.url || ''}
+                        onChange={(e) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            rss_config: { ...updated[actualIndex].rss_config, url: e.target.value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                        placeholder="https://example.com/feed.xml"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Update Frequency</Label>
+                      <Select
+                        value={source.rss_config?.update_frequency || '15min'}
+                        onValueChange={(value) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            rss_config: { ...updated[actualIndex].rss_config, update_frequency: value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5min">Every 5 minutes</SelectItem>
+                          <SelectItem value="15min">Every 15 minutes</SelectItem>
+                          <SelectItem value="30min">Every 30 minutes</SelectItem>
+                          <SelectItem value="1hour">Every hour</SelectItem>
+                          <SelectItem value="6hours">Every 6 hours</SelectItem>
+                          <SelectItem value="daily">Daily</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Test RSS Feed Button */}
+                    <div className="pt-3 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={() => testRSSFeed(actualIndex)}
+                        disabled={!source.rss_config?.url || testLoading[actualIndex]}
+                      >
+                        {testLoading[actualIndex] ? 'Testing...' : 'Test RSS Feed'}
+                      </Button>
+
+                      {testResults[actualIndex] && (
+                        <div className={`mt-3 p-3 rounded-lg border ${
+                          testResults[actualIndex].success
+                            ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800'
+                            : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                        }`}>
+                          <p className={`text-sm font-medium ${
+                            testResults[actualIndex].success
+                              ? 'text-green-700 dark:text-green-300'
+                              : 'text-red-700 dark:text-red-300'
+                          }`}>
+                            {testResults[actualIndex].success ? '✓' : '✗'}
+                            {' '}
+                            {testResults[actualIndex].success ? testResults[actualIndex].message : (testResults[actualIndex].error || testResults[actualIndex].message)}
+                          </p>
+                          {testResults[actualIndex].fields && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Available RSS fields:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {testResults[actualIndex].fields.map((field: string) => (
+                                  <Badge key={field} variant="secondary" className="text-xs">
+                                    {field}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* File Configuration */}
+                {source.type === 'file' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>File Source</Label>
+                      <Select
+                        value={source.file_config?.source || 'url'}
+                        onValueChange={(value) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            file_config: { ...updated[actualIndex].file_config, source: value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="url">URL</SelectItem>
+                          <SelectItem value="upload">Upload</SelectItem>
+                          <SelectItem value="path">Server Path</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {source.file_config?.source === 'url' && (
+                      <div className="space-y-2">
+                        <Label>File URL <span className="text-red-500">*</span></Label>
+                        <Input
+                          value={source.file_config?.url || ''}
+                          onChange={(e) => {
+                            const updated = [...newDataSources];
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              file_config: { ...updated[actualIndex].file_config, url: e.target.value }
+                            };
+                            setNewDataSources(updated);
+                          }}
+                          placeholder="https://example.com/data.csv"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>File Format</Label>
+                      <Select
+                        value={source.file_config?.format || 'csv'}
+                        onValueChange={(value) => {
+                          const updated = [...newDataSources];
+                          updated[actualIndex] = {
+                            ...updated[actualIndex],
+                            file_config: { ...updated[actualIndex].file_config, format: value }
+                          };
+                          setNewDataSources(updated);
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="csv">CSV</SelectItem>
+                          <SelectItem value="json">JSON</SelectItem>
+                          <SelectItem value="xml">XML</SelectItem>
+                          <SelectItem value="excel">Excel (XLSX)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Database Configuration */}
+                {source.type === 'database' && (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Database Type</Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {['mysql', 'postgresql', 'mssql'].map(dbType => (
+                          <Card
+                            key={dbType}
+                            className={`p-4 cursor-pointer transition-colors ${
+                              source.database_config?.dbType === dbType
+                                ? 'border-primary bg-primary/5'
+                                : 'hover:bg-muted'
+                            }`}
+                            onClick={() => {
+                              const updated = [...newDataSources];
+                              updated[actualIndex] = {
+                                ...updated[actualIndex],
+                                database_config: { ...updated[actualIndex].database_config, dbType }
+                              };
+                              setNewDataSources(updated);
+                            }}
+                          >
+                            <div className="text-center">
+                              <Database className="w-6 h-6 mx-auto mb-2" />
+                              <div className="text-sm font-medium">
+                                {dbType.toUpperCase()}
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+
+                    {source.database_config?.dbType && (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                          <AlertCircle className="w-3 h-3 inline mr-1" />
+                          Database connections and queries will be configured in a later step after saving this data source.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+
+        <div className="p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            <AlertCircle className="w-4 h-4 inline mr-2" />
+            These data sources will be saved to your database when you complete the wizard.
+          </p>
         </div>
       </div>
     );
@@ -1277,6 +2368,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return 'Data Type';
       case 'dataSources':
         return 'Data Sources';
+      case 'configureNewSources':
+        return 'Configure New Sources';
       case 'relationships':
         return 'Data Relationships';
       case 'outputFormat':
@@ -1300,6 +2393,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return 'Choose the category of data to work with';
       case 'dataSources':
         return 'Select specific feeds to aggregate';
+      case 'configureNewSources':
+        return 'Configure connection details for new data sources';
       case 'relationships':
         return 'Define how sources relate to each other';
       case 'outputFormat':
@@ -1344,6 +2439,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           {currentStep === 'basic' && renderBasicInfo()}
           {currentStep === 'dataType' && renderDataType()}
           {currentStep === 'dataSources' && renderDataSources()}
+          {currentStep === 'configureNewSources' && renderConfigureNewSources()}
           {currentStep === 'relationships' && renderRelationships()}
           {currentStep === 'outputFormat' && renderOutputFormat()}
           {currentStep === 'transformations' && renderTransformations()}
