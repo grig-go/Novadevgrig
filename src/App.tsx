@@ -88,7 +88,7 @@ export default function App() {
       try {
         // Fetch stored articles count
         const articlesResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-articles/stored?limit=1000`,
+          `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored?limit=1000`,
           {
             headers: {
               'Authorization': `Bearer ${publicAnonKey}`,

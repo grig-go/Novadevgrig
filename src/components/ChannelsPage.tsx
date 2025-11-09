@@ -141,12 +141,14 @@ export function ChannelsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl">Channels</h1>
-          <p className="text-muted-foreground">
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
+            Channels
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Manage broadcast and output channels across different systems
           </p>
         </div>

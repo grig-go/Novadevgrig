@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
   aiProvidersInitialize: `${API_BASE_URL}/ai-providers/initialize`,
   aiProvidersMigrate: `${API_BASE_URL}/ai-providers/migrate-from-kv`,
   aiProvidersFetchModels: `${API_BASE_URL}/ai-providers/fetch-models`,
+  aiProvidersChat: `${API_BASE_URL}/ai-providers/chat`,
   
   // Weather Providers (KV Store)
   weatherProviders: `${API_BASE_URL}/weather-providers`,
@@ -46,6 +47,14 @@ export const API_ENDPOINTS = {
   // News Providers (KV Store)
   newsProviders: `${API_BASE_URL}/news-providers`,
   newsProvidersById: (id: string) => `${API_BASE_URL}/news-providers/${id}`,
+  
+  // News Articles (KV Store)
+  newsArticles: `${API_BASE_URL}/news-articles`,
+  newsArticlesById: (id: string) => `${API_BASE_URL}/news-articles/${id}`,
+  
+  // News AI Insights (KV Store)
+  newsAIInsights: `${API_BASE_URL}/news-ai-insights`,
+  newsAIInsightsById: (id: string) => `${API_BASE_URL}/news-ai-insights/${id}`,
   
   // News Feed (Separate Edge Function)
   newsFeed: NEWS_FEED_URL,
@@ -64,6 +73,13 @@ export const API_ENDPOINTS = {
   sportsAddTeam: `${API_BASE_URL}/sports/add-team`,
   sportsTeamsList: `${API_BASE_URL}/sports-teams`,
   sportsTeamsById: (id: string) => `${API_BASE_URL}/sports-teams/${id}`,
+  
+  // Sports AI Insights (KV Store)
+  sportsAIInsights: `${API_BASE_URL}/sports-ai-insights`,
+  sportsAIInsightsById: (id: string) => `${API_BASE_URL}/sports-ai-insights/${id}`,
+  
+  // Sports Data Fetch
+  sportsData: `${API_BASE_URL}/sports-data`,
   
   // Alpaca Stocks (Database)
   alpacaStocks: `${API_BASE_URL}/alpaca-stocks`,

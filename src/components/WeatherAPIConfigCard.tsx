@@ -179,7 +179,7 @@ export function WeatherAPIConfigCard() {
       setSaving(true);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-providers`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
         {
           method: provider ? "PUT" : "POST",
           headers: {
@@ -230,7 +230,7 @@ export function WeatherAPIConfigCard() {
       
       // Test with a simple query for New York
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/search?q=New York`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/search?q=New York`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,

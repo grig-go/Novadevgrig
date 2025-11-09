@@ -36,6 +36,8 @@ export interface MediaAsset {
   sync_status: SyncStatus;
   last_synced?: string; // ISO date
   distribution?: SystemDistribution[];
+  latitude?: number; // Latitude coordinate (optional)
+  longitude?: number; // Longitude coordinate (optional)
 }
 
 export interface MediaFilters {

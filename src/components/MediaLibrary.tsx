@@ -13,7 +13,7 @@ import {
   CheckCircle2, Clock, AlertCircle, Copy, Download, 
   Trash2, Edit, Tag, HardDrive, FolderOpen, X, FileText, Loader2,
   Pause, XCircle, Plus, Server, Paintbrush, Save, Eraser, Sparkles,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, MapPin
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Label } from "./ui/label";
@@ -27,6 +27,7 @@ import { useMediaData } from "../utils/useMediaData";
 import { copyToClipboard } from "../utils/clipboard";
 import { VideoThumbnail } from "./VideoThumbnail";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { LocationMapPicker } from "./LocationMapPicker";
 
 // Temporary empty object for distributions until backend provides this data
 const mockSystemDistributions: Record<string, any[]> = {};
@@ -78,17 +79,23 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     name: '',
     description: '',
     tags: '',
+    latitude: '',
+    longitude: '',
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   // Inline editing states
   const [editingName, setEditingName] = useState('');
   const [editingDescription, setEditingDescription] = useState('');
   const [newTag, setNewTag] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [editingLatitude, setEditingLatitude] = useState('');
+  const [editingLongitude, setEditingLongitude] = useState('');
+  const [showLocationPickerInInfo, setShowLocationPickerInInfo] = useState(false);
 
   // System assignment states
   const [availableSystems, setAvailableSystems] = useState<any[]>([]);
@@ -332,6 +339,43 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     setEditingDescription('');
   };
 
+  const handleUpdateLocation = async (assetId: string, latitude: string, longitude: string) => {
+    // Parse and validate coordinates
+    const lat = latitude ? parseFloat(latitude) : null;
+    const lng = longitude ? parseFloat(longitude) : null;
+
+    // Validate ranges if values are provided
+    if (lat !== null && (lat < -90 || lat > 90)) {
+      toast.error("Latitude must be between -90 and 90");
+      return;
+    }
+    if (lng !== null && (lng < -180 || lng > 180)) {
+      toast.error("Longitude must be between -180 and 180");
+      return;
+    }
+
+    const result = await updateAsset(assetId, { 
+      latitude: lat, 
+      longitude: lng 
+    } as any);
+    
+    if (result.success) {
+      toast.success("Location updated");
+      if (selectedAsset?.id === assetId) {
+        setSelectedAsset(prev => prev ? { 
+          ...prev, 
+          latitude: lat || undefined, 
+          longitude: lng || undefined 
+        } : null);
+      }
+    } else {
+      toast.error(result.error || "Failed to update location");
+    }
+    
+    setEditingLatitude('');
+    setEditingLongitude('');
+  };
+
   const handleAddTag = async (assetId: string) => {
     const tag = newTag.trim();
     if (!tag) return;
@@ -519,6 +563,14 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     formData.append("description", uploadForm.description);
     formData.append("tags", JSON.stringify(uploadForm.tags.split(',').map(t => t.trim()).filter(Boolean)));
     
+    // Add location data if provided
+    if (uploadForm.latitude) {
+      formData.append("latitude", uploadForm.latitude);
+    }
+    if (uploadForm.longitude) {
+      formData.append("longitude", uploadForm.longitude);
+    }
+    
     // Determine media type from file
     const fileType = selectedFile.type;
     const mediaType = fileType.startsWith('image') 
@@ -541,7 +593,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     if (result.success) {
       toast.success("Media uploaded successfully");
       setShowUploadDialog(false);
-      setUploadForm({ name: '', description: '', tags: '' });
+      setUploadForm({ name: '', description: '', tags: '', latitude: '', longitude: '' });
       setSelectedFile(null);
       setPreviewUrl(null);
     } else {
@@ -1423,32 +1475,17 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   ].filter(Boolean).length;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header Bar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="flex items-center gap-2">
+        <div>
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
             <HardDrive className="w-6 h-6" />
             Media Library
           </h1>
-          <Badge variant="outline" className="gap-1.5">
-            {backendLoading ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Loading...
-              </>
-            ) : backendError ? (
-              <>
-                <AlertCircle className="w-3 h-3 text-red-600" />
-                Connection Error
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-3 h-3 text-green-600" />
-                {backendCount} {backendCount === 1 ? 'Asset' : 'Assets'}
-              </>
-            )}
-          </Badge>
+          <p className="text-sm text-muted-foreground">
+            Manage and organize media assets across images, videos, and audio files
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button 
@@ -2119,6 +2156,73 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                       </div>
                     </div>
 
+                    {/* Location Section */}
+                    <div className="col-span-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label>Location</Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowLocationPickerInInfo(true)}
+                          className="h-7 text-xs gap-1"
+                        >
+                          <MapPin className="w-3.5 h-3.5" />
+                          {selectedAsset.latitude && selectedAsset.longitude ? 'Edit on Map' : 'Find on Map'}
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Input
+                            type="number"
+                            step="0.000001"
+                            placeholder="Latitude"
+                            value={editingLatitude !== '' ? editingLatitude : (selectedAsset.latitude?.toString() || '')}
+                            onChange={(e) => setEditingLatitude(e.target.value)}
+                            onFocus={() => setEditingLatitude(selectedAsset.latitude?.toString() || '')}
+                            onBlur={() => {
+                              const lat = editingLatitude;
+                              const lng = editingLongitude !== '' ? editingLongitude : (selectedAsset.longitude?.toString() || '');
+                              if ((lat !== (selectedAsset.latitude?.toString() || '')) || 
+                                  (lng !== (selectedAsset.longitude?.toString() || ''))) {
+                                handleUpdateLocation(selectedAsset.id, lat, lng);
+                              } else {
+                                setEditingLatitude('');
+                                setEditingLongitude('');
+                              }
+                            }}
+                            className="text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            type="number"
+                            step="0.000001"
+                            placeholder="Longitude"
+                            value={editingLongitude !== '' ? editingLongitude : (selectedAsset.longitude?.toString() || '')}
+                            onChange={(e) => setEditingLongitude(e.target.value)}
+                            onFocus={() => setEditingLongitude(selectedAsset.longitude?.toString() || '')}
+                            onBlur={() => {
+                              const lat = editingLatitude !== '' ? editingLatitude : (selectedAsset.latitude?.toString() || '');
+                              const lng = editingLongitude;
+                              if ((lat !== (selectedAsset.latitude?.toString() || '')) || 
+                                  (lng !== (selectedAsset.longitude?.toString() || ''))) {
+                                handleUpdateLocation(selectedAsset.id, lat, lng);
+                              } else {
+                                setEditingLatitude('');
+                                setEditingLongitude('');
+                              }
+                            }}
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+                      {selectedAsset.latitude && selectedAsset.longitude && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          📍 {selectedAsset.latitude.toFixed(6)}, {selectedAsset.longitude.toFixed(6)}
+                        </p>
+                      )}
+                    </div>
+
                     <div>
                       <Label>Source</Label>
                       <div className="mt-1">{getSourceBadge(selectedAsset)}</div>
@@ -2365,7 +2469,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
           }
           setSelectedFile(null);
           setPreviewUrl(null);
-          setUploadForm({ name: '', description: '', tags: '' });
+          setUploadForm({ name: '', description: '', tags: '', latitude: '', longitude: '' });
         }
       }}>
         <DialogContent>
@@ -2474,6 +2578,50 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                   value={uploadForm.tags}
                   onChange={(e) => setUploadForm({ ...uploadForm, tags: e.target.value })}
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Location (Optional)</Label>
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowLocationPicker(true)}
+                    className="gap-2"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Find on Map
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="upload-latitude" className="text-xs text-muted-foreground">
+                      Latitude
+                    </Label>
+                    <Input
+                      id="upload-latitude"
+                      type="number"
+                      step="0.000001"
+                      placeholder="e.g., 40.712776"
+                      value={uploadForm.latitude}
+                      onChange={(e) => setUploadForm({ ...uploadForm, latitude: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="upload-longitude" className="text-xs text-muted-foreground">
+                      Longitude
+                    </Label>
+                    <Input
+                      id="upload-longitude"
+                      type="number"
+                      step="0.000001"
+                      placeholder="e.g., -74.005974"
+                      value={uploadForm.longitude}
+                      onChange={(e) => setUploadForm({ ...uploadForm, longitude: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -2731,6 +2879,41 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Location Map Picker for Upload Dialog */}
+      <LocationMapPicker
+        open={showLocationPicker}
+        onOpenChange={setShowLocationPicker}
+        onLocationSelect={(lat, lng, address) => {
+          setUploadForm({
+            ...uploadForm,
+            latitude: lat.toFixed(6),
+            longitude: lng.toFixed(6),
+          });
+          if (address) {
+            toast.success(`Location selected: ${address}`);
+          }
+        }}
+        initialLat={uploadForm.latitude ? parseFloat(uploadForm.latitude) : undefined}
+        initialLng={uploadForm.longitude ? parseFloat(uploadForm.longitude) : undefined}
+      />
+
+      {/* Location Map Picker for Info Panel */}
+      {selectedAsset && (
+        <LocationMapPicker
+          open={showLocationPickerInInfo}
+          onOpenChange={setShowLocationPickerInInfo}
+          onLocationSelect={(lat, lng, address) => {
+            // Update the location immediately
+            handleUpdateLocation(selectedAsset.id, lat.toFixed(6), lng.toFixed(6));
+            if (address) {
+              toast.success(`Location updated: ${address}`);
+            }
+          }}
+          initialLat={selectedAsset.latitude}
+          initialLng={selectedAsset.longitude}
+        />
+      )}
     </div>
   );
 }

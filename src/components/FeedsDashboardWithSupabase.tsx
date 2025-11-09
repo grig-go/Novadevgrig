@@ -45,7 +45,8 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  Pencil
+  Pencil,
+  Clock
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
@@ -66,6 +67,9 @@ interface DataProvider {
   api_key_len: number;
   api_secret_configured: boolean;
   api_secret_len: number;
+  source_url?: string | null;
+  storage_path?: string | null;
+  refresh_interval_minutes?: number | null;
 }
 
 // Full provider data for editing
@@ -74,14 +78,18 @@ interface ProviderFullData {
   name: string;
   type: string;
   category: ProviderCategory;
+  description?: string;
   is_active: boolean;
   api_key: string;
   api_secret: string;
   base_url: string;
+  source_url?: string | null;
+  storage_path?: string | null;
   api_version: string;
   config: any;
   created_at: string;
   updated_at: string;
+  refresh_interval_minutes?: number | null;
 }
 
 interface FeedsDashboardProps {
@@ -111,10 +119,13 @@ export function FeedsDashboardWithSupabase({
     api_key: "",
     api_secret: "",
     base_url: "",
+    source_url: "",
+    storage_path: "",
     api_version: "",
     language: "",
     units: "metric",
     selectedLeagues: [] as string[],
+    refresh_interval_minutes: 15,
   });
 
   // Sports leagues state
@@ -221,10 +232,13 @@ export function FeedsDashboardWithSupabase({
           api_key: fullProvider.api_key || "",
           api_secret: fullProvider.api_secret || "",
           base_url: fullProvider.base_url || "",
+          source_url: fullProvider.source_url || "",
+          storage_path: fullProvider.storage_path || "",
           api_version: fullProvider.api_version || "",
           language: config.language || "en",
           units: config.units || "metric",
           selectedLeagues: config.leagues || [],
+          refresh_interval_minutes: fullProvider.refresh_interval_minutes || 15,
         });
         
         // If sports provider, load available leagues
@@ -322,6 +336,8 @@ export function FeedsDashboardWithSupabase({
         p_api_secret: editFormData.api_secret || null,
         p_api_version: editFormData.api_version || null,
         p_base_url: editFormData.base_url || null,
+        p_source_url: editFormData.source_url || null,
+        p_storage_path: editFormData.storage_path || null,
         p_config_patch: configObj,
         p_dashboard: 'nova',
         p_id: editProvider.id,
@@ -331,6 +347,17 @@ export function FeedsDashboardWithSupabase({
       if (error) {
         console.error("RPC save failed:", error);
         throw new Error(`Failed to save provider: ${error.message}`);
+      }
+
+      // Update refresh_interval_minutes separately
+      const { error: refreshError } = await supabase
+        .from("data_providers")
+        .update({ refresh_interval_minutes: editFormData.refresh_interval_minutes })
+        .eq("id", editProvider.id);
+
+      if (refreshError) {
+        console.error("Failed to update refresh interval:", refreshError);
+        toast.error("Provider saved but refresh interval update failed");
       }
 
       console.log("Provider saved successfully via RPC", data);
@@ -545,7 +572,8 @@ export function FeedsDashboardWithSupabase({
   };
 
   const getStatusBadge = (provider: DataProvider) => {
-    if (provider.is_active && provider.api_key_configured) {
+    // Provider is active if is_active is true
+    if (provider.is_active) {
       return (
         <Badge variant="default" className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
           <CheckCircle className="w-3 h-3 mr-1" />
@@ -570,15 +598,15 @@ export function FeedsDashboardWithSupabase({
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2">
-            <Database className="w-7 h-7" />
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
+            <Database className="w-6 h-6" />
             Data Providers
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground">
             Manage your data provider configurations
           </p>
         </div>
@@ -670,6 +698,7 @@ export function FeedsDashboardWithSupabase({
                     <TableHead>Status</TableHead>
                     <TableHead>API Key</TableHead>
                     <TableHead>API Secret</TableHead>
+                    <TableHead>Refresh Interval</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -722,6 +751,14 @@ export function FeedsDashboardWithSupabase({
                             Not Set
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-sm">
+                            {provider.refresh_interval_minutes || 15} min
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -856,16 +893,46 @@ export function FeedsDashboardWithSupabase({
                 />
               </div>
 
-              {/* Base URL */}
-              <div className="space-y-2">
-                <Label htmlFor="base_url">Base URL</Label>
-                <Input
-                  id="base_url"
-                  value={editFormData.base_url}
-                  onChange={(e) => setEditFormData({ ...editFormData, base_url: e.target.value })}
-                  placeholder="https://api.example.com"
-                />
-              </div>
+              {/* Base URL or Storage Path depending on provider type */}
+              {editProvider.type === 'local' ? (
+                <div className="space-y-4 p-4 border rounded-lg">
+                  <h3 className="font-semibold">Local Provider Paths</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="source_url">Source URL</Label>
+                    <Input
+                      id="source_url"
+                      value={editFormData.source_url}
+                      onChange={(e) => setEditFormData({ ...editFormData, source_url: e.target.value })}
+                      placeholder="file:///C:/path/to/data.csv"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      File URL format (e.g., file:///C:/Users/...)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="storage_path">Storage Path</Label>
+                    <Input
+                      id="storage_path"
+                      value={editFormData.storage_path}
+                      onChange={(e) => setEditFormData({ ...editFormData, storage_path: e.target.value })}
+                      placeholder="C:\path\to\data.csv"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      File system path (e.g., C:\Users\...)
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="base_url">Base URL</Label>
+                  <Input
+                    id="base_url"
+                    value={editFormData.base_url}
+                    onChange={(e) => setEditFormData({ ...editFormData, base_url: e.target.value })}
+                    placeholder="https://api.example.com"
+                  />
+                </div>
+              )}
 
               {/* API Version */}
               <div className="space-y-2">
@@ -876,6 +943,23 @@ export function FeedsDashboardWithSupabase({
                   onChange={(e) => setEditFormData({ ...editFormData, api_version: e.target.value })}
                   placeholder="v1, v3, etc."
                 />
+              </div>
+
+              {/* Refresh Interval */}
+              <div className="space-y-2">
+                <Label htmlFor="refresh_interval">Refresh Interval (Minutes)</Label>
+                <Input
+                  id="refresh_interval"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  value={editFormData.refresh_interval_minutes}
+                  onChange={(e) => setEditFormData({ ...editFormData, refresh_interval_minutes: parseInt(e.target.value) || 15 })}
+                  placeholder="15"
+                />
+                <p className="text-xs text-muted-foreground">
+                  How often the provider should fetch new data (1-1440 minutes)
+                </p>
               </div>
 
               {/* Weather-specific options */}
@@ -1178,6 +1262,14 @@ export function FeedsDashboardWithSupabase({
                       {debugProvider && getStatusBadge(debugProvider)}
                     </div>
                   </div>
+                  {debugFullData.description && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Description:</span>
+                      <div className="mt-1">
+                        <p className="text-xs">{debugFullData.description}</p>
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <span className="text-muted-foreground">API Version:</span>
                     <div className="mt-1">
@@ -1194,6 +1286,40 @@ export function FeedsDashboardWithSupabase({
                       </code>
                     </div>
                   </div>
+                  {debugFullData.source_url && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Source URL:</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">
+                          {debugFullData.source_url}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(debugFullData.source_url || "", "Source URL")}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {debugFullData.storage_path && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Storage Path:</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="text-xs bg-muted px-2 py-1 rounded flex-1 break-all">
+                          {debugFullData.storage_path}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(debugFullData.storage_path || "", "Storage Path")}
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

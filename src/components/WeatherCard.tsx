@@ -50,6 +50,7 @@ interface WeatherCardProps {
   onAIInsights?: (locationId: string) => void;
   view: WeatherView;
   language?: string;
+  providerTemperatureUnit?: string;
 }
 
 const getWeatherIcon = (icon: string, size: number = 24) => {
@@ -94,15 +95,15 @@ const formatDate = (dateString: string) => {
   }
 };
 
-export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsights, view, language = "en" }: WeatherCardProps) {
-  // State for backend data dialog
-  const [backendDataOpen, setBackendDataOpen] = useState(false);
+export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsights, view, language = "en", providerTemperatureUnit = "f" }: WeatherCardProps) {
   // State for refresh loading
   const [refreshing, setRefreshing] = useState(false);
   // State for delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   // State for alerts collapsible (collapsed by default)
   const [alertsOpen, setAlertsOpen] = useState(false);
+  // State for backend data dialog
+  const [backendDataOpen, setBackendDataOpen] = useState(false);
   
   // Get translations for current language
   const t = getTranslation(language);
@@ -113,7 +114,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       console.log(`🔵 FRONTEND: Saving custom name for location ${location.location.id}:`, customName);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${location.location.id}`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
         {
           method: "PUT",
           headers: {
@@ -203,30 +204,13 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       setRefreshing(true);
       toast.info(`Refreshing weather data for ${locationName}...`);
       
-      // Call the new single location refresh endpoint
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather/refresh/${locationId}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
+      // Trigger a full dashboard refresh (weather_dashboard doesn't have single-location refresh yet)
+      // The full weather-data endpoint will be called by the onRefresh callback
+      if (onRefresh) {
+        await onRefresh();
       }
       
       toast.success(`✅ Weather data refreshed for ${locationName}`);
-      
-      // Call the onRefresh callback to update the UI
-      if (onRefresh) {
-        onRefresh();
-      }
     } catch (error) {
       console.error("Error refreshing weather data:", error);
       toast.error(`Failed to refresh weather data for ${locationName}: ${error instanceof Error ? error.message : String(error)}`);
@@ -241,9 +225,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   };
 
   const handleAIInsights = () => {
+    console.log('🧠 AI Insights clicked for location:', location.location.id);
     if (onAIInsights) {
       onAIInsights(location.location.id);
     } else {
+      console.warn('No onAIInsights handler provided');
       toast.info("AI Insights feature coming soon!");
     }
   };
@@ -275,11 +261,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const admin1Value = getFieldValue(location.location.admin1);
   const countryValueRaw = getFieldValue(location.location.country);
   const countryValue = translateCountry(countryValueRaw, language);
-  const temperatureValue = getFieldValue(location.data.current.temperature.value);
-  const temperatureUnit = getFieldValue(location.data.current.temperature.unit);
-  const summaryValue = getFieldValue(location.data.current.summary);
-  const humidityValue = getFieldValue(location.data.current.humidity);
-  const uvIndexValue = getFieldValue(location.data.current.uvIndex);
+  const temperatureValue = getFieldValue(location.data?.current?.temperature?.value);
+  const temperatureUnit = getFieldValue(location.data?.current?.temperature?.unit);
+  const summaryValue = getFieldValue(location.data?.current?.summary);
+  const humidityValue = getFieldValue(location.data?.current?.humidity);
+  const uvIndexValue = getFieldValue(location.data?.current?.uvIndex);
 
   // Common dropdown menu component
   const renderDropdownMenu = () => (
@@ -335,13 +321,13 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {getWeatherIcon(getFieldValue(location.data.current.icon), 32)}
+              {getWeatherIcon(getFieldValue(location.data?.current?.icon), 32)}
               <div className="text-right">
                 <div className="text-2xl font-bold">
                   {temperatureValue}{temperatureUnit}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {t.feelsLike} {getFieldValue(location.data.current.feelsLike.value)}{getFieldValue(location.data.current.feelsLike.unit)}
+                  {t.feelsLike} {getFieldValue(location.data?.current?.feelsLike?.value)}{getFieldValue(location.data?.current?.feelsLike?.unit)}
                 </div>
               </div>
               {renderDropdownMenu()}
@@ -371,7 +357,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           </div>
 
-          {location.data.alerts.length > 0 && (
+          {location.data?.alerts?.length > 0 && (
             <Collapsible open={alertsOpen} onOpenChange={setAlertsOpen}>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start p-0 h-auto hover:bg-transparent">
@@ -402,8 +388,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </Collapsible>
           )}
 
-          <div className="text-xs text-muted-foreground">
-            {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+          <div className="text-xs text-muted-foreground mt-4">
+            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -466,7 +452,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {(location.data.hourly?.items || []).slice(0, 12).map((hour, index) => (
+            {(location.data?.hourly?.items || []).slice(0, 12).map((hour, index) => (
               <div key={index} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium w-16">{formatTime(getFieldValue(hour.time))}</span>
@@ -484,7 +470,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
           
           <div className="text-xs text-muted-foreground">
-            {getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {formatTime(getFieldValue(location.data.current?.asOf))}
+            {getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -547,7 +533,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-3">
-            {(location.data.daily?.items || []).slice(0, 7).map((day, index) => (
+            {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium w-16">{formatDate(getFieldValue(day.date))}</span>
@@ -573,7 +559,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
           
           <div className="text-xs text-muted-foreground">
-            7-day {t.forecast} • {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+            7-day {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -624,7 +610,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-red-500" />
               <h3 className="font-semibold">{locationNameValue}</h3>
-              {location.data.alerts.length > 0 && (
+              {(location.data?.alerts?.length || 0) > 0 && (
                 <Badge variant="destructive" className="text-xs">
                   {location.data.alerts.length} {t.alerts.toLowerCase()}
                 </Badge>
@@ -640,7 +626,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardHeader>
         <CardContent>
-          {location.data.alerts.length > 0 ? (
+          {(location.data?.alerts?.length || 0) > 0 ? (
             <div className="space-y-4">
               {location.data.alerts.map((alert, index) => (
                 <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
@@ -688,7 +674,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           )}
           
           <div className="text-xs text-muted-foreground mt-4">
-            {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -914,7 +900,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           </div>
           
-          {location.data.current.pollen && (
+          {location.data?.current?.pollen && (
             <div className="pt-4 border-t border-gray-200">
               <h4 className="font-medium mb-2 flex items-center gap-2">
                 <Flower2 className="w-4 h-4" />
@@ -939,7 +925,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           )}
           
           <div className="text-xs text-muted-foreground">
-            Last updated: {formatTime(getFieldValue(location.data.current.asOf))}
+            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -1007,10 +993,10 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Wind</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.wind.speed.value)} {getFieldValue(location.data.current.wind.speed.unit)}
+                  {getFieldValue(location.data?.current?.wind?.speed?.value)} {getFieldValue(location.data?.current?.wind?.speed?.unit)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {getFieldValue(location.data.current.wind.direction_cardinal)} ({getFieldValue(location.data.current.wind.direction_deg)}°)
+                  {getFieldValue(location.data?.current?.wind?.direction_cardinal)} ({getFieldValue(location.data?.current?.wind?.direction_deg)}°)
                 </p>
               </div>
             </div>
@@ -1020,9 +1006,9 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Pressure</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.pressure.value)} {getFieldValue(location.data.current.pressure.unit)}
+                  {getFieldValue(location.data?.current?.pressure?.value)} {getFieldValue(location.data?.current?.pressure?.unit)}
                 </p>
-                {getFieldValue(location.data.current.pressure.tendency) && (
+                {getFieldValue(location.data?.current?.pressure?.tendency) && (
                   <p className="text-xs text-muted-foreground">
                     {getFieldValue(location.data.current.pressure.tendency)}
                   </p>
@@ -1035,7 +1021,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Visibility</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.visibility.value)} {getFieldValue(location.data.current.visibility.unit)}
+                  {getFieldValue(location.data?.current?.visibility?.value)} {getFieldValue(location.data?.current?.visibility?.unit)}
                 </p>
               </div>
             </div>
@@ -1044,12 +1030,12 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <Cloud className="w-4 h-4 text-gray-400" />
               <div>
                 <p className="text-sm text-muted-foreground">Cloud Cover</p>
-                <p className="font-medium">{Math.round(getFieldValue(location.data.current.cloudCover))}%</p>
+                <p className="font-medium">{Math.round(getFieldValue(location.data?.current?.cloudCover) || 0)}%</p>
               </div>
             </div>
           </div>
           
-          {location.data.current.sun && (
+          {location.data?.current?.sun && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Sunrise className="w-4 h-4" />
@@ -1080,7 +1066,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          {location.data.marine && (
+          {location.data?.marine && (
             <div className="p-4 bg-cyan-50 dark:bg-cyan-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Anchor className="w-4 h-4" />
@@ -1090,18 +1076,18 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                 <div>
                   <p className="text-sm text-muted-foreground">Wave Height</p>
                   <p className="font-medium">
-                    {getFieldValue(location.data.marine.waves.significantHeight.value)} {getFieldValue(location.data.marine.waves.significantHeight.unit)}
+                    {getFieldValue(location.data.marine?.waves?.significantHeight?.value)} {getFieldValue(location.data.marine?.waves?.significantHeight?.unit)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Wave Period</p>
                   <p className="font-medium">
-                    {getFieldValue(location.data.marine.waves.period.value)} {getFieldValue(location.data.marine.waves.period.unit)}
+                    {getFieldValue(location.data.marine?.waves?.period?.value)} {getFieldValue(location.data.marine?.waves?.period?.unit)}
                   </p>
                 </div>
               </div>
               
-              {location.data.marine.tides.length > 0 && (
+              {(location.data.marine?.tides?.length || 0) > 0 && (
                 <div className="mt-3">
                   <p className="text-sm text-muted-foreground mb-2">Next Tide</p>
                   <div className="text-sm">
@@ -1113,20 +1099,20 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          {location.data.smoke && (
+          {location.data?.smoke && (
             <div className="p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Flame className="w-4 h-4" />
                 Smoke & Fire
               </h4>
               <p className="text-sm text-muted-foreground">
-                {location.data.smoke.fireSources.length} fire sources detected in area
+                {location.data.smoke?.fireSources?.length || 0} fire sources detected in area
               </p>
             </div>
           )}
           
           <div className="text-xs text-muted-foreground">
-            Last updated: {formatTime(getFieldValue(location.data.current.asOf))}
+            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>

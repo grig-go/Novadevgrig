@@ -155,7 +155,7 @@ export function NewsDashboard({
       }
 
       // Step 3: Fetch articles from backend endpoint with provider credentials
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-articles`;
+      const url = `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles`;
 
       console.log('📡 [NEWS] Fetching articles from:', url);
       console.log('📡 [NEWS] Sending providers:', providerDetails.map(p => ({ name: p.name, type: p.type })));
@@ -191,8 +191,20 @@ export function NewsDashboard({
       console.log('✅ [NEWS] Articles count:', data.articles?.length || 0);
       console.log('✅ [NEWS] First article sample:', data.articles?.[0]);
       
-      setArticles(data.articles ?? []);
-      toast.success(`Fetched ${data.articles?.length || 0} articles from ${activeProviders.length} provider(s)`);
+      // Map API response (snake_case) to Article type (camelCase)
+      const mappedArticles: Article[] = (data.articles ?? []).map((article: any) => ({
+        id: article.id,
+        provider: article.provider,
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        imageUrl: article.image_url,
+        sourceName: article.source,
+        publishedAt: article.published_at
+      }));
+      
+      setArticles(mappedArticles);
+      toast.success(`Fetched ${mappedArticles.length} articles from ${activeProviders.length} provider(s)`);
       
     } catch (err) {
       console.error('❌ [NEWS] Error fetching news:', err);
@@ -211,7 +223,7 @@ export function NewsDashboard({
     setError(null);
 
     try {
-      const url = new URL(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-articles/stored`);
+      const url = new URL(`https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored`);
       
       // Add filters as query parameters
       if (selectedProvider !== 'all') {
@@ -241,8 +253,20 @@ export function NewsDashboard({
       const data = await response.json();
       console.log('✅ [NEWS] Fetched stored articles:', data.articles?.length || 0);
       
-      setArticles(data.articles ?? []);
-      toast.success(`Loaded ${data.articles?.length || 0} stored articles from database`);
+      // Map API response (snake_case) to Article type (camelCase)
+      const mappedArticles: Article[] = (data.articles ?? []).map((article: any) => ({
+        id: article.id,
+        provider: article.provider,
+        title: article.title,
+        description: article.description,
+        url: article.url,
+        imageUrl: article.image_url,
+        sourceName: article.source,
+        publishedAt: article.published_at
+      }));
+      
+      setArticles(mappedArticles);
+      toast.success(`Loaded ${mappedArticles.length} stored articles from database`);
 
     } catch (err) {
       console.error('❌ [NEWS] Error fetching stored articles:', err);

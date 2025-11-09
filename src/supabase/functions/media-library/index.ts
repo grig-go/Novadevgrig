@@ -101,6 +101,7 @@ serve(async (req) => {
           `
           id, name, file_name, description, file_url, thumbnail_url, storage_path,
           media_type, created_by, ai_model_used, tags, created_at, metadata,
+          latitude, longitude,
           media_distribution (
             id, path, status, last_sync,
             systems ( name, ip_address, port, system_type, channel )
@@ -151,6 +152,8 @@ serve(async (req) => {
           tags: asset.tags,
           created_at: asset.created_at,
           size: asset.metadata?.size || null,
+          latitude: asset.latitude,
+          longitude: asset.longitude,
           distribution: dist,
         };
       });
@@ -176,6 +179,12 @@ serve(async (req) => {
       const mediaType = formData.get("media_type") || "image";
       const createdBy = formData.get("created_by") || "user";
       const aiModelUsed = formData.get("ai_model_used");
+      
+      // Parse latitude and longitude (optional fields)
+      const latitudeStr = formData.get("latitude");
+      const longitudeStr = formData.get("longitude");
+      const latitude = latitudeStr && latitudeStr !== "" ? parseFloat(latitudeStr) : null;
+      const longitude = longitudeStr && longitudeStr !== "" ? parseFloat(longitudeStr) : null;
 
       // Update metadata only
       if (id && !file) {
@@ -186,6 +195,8 @@ serve(async (req) => {
         if (mediaType) updateData.media_type = mediaType;
         if (createdBy) updateData.created_by = createdBy;
         if (aiModelUsed) updateData.ai_model_used = aiModelUsed;
+        if (latitude !== null) updateData.latitude = latitude;
+        if (longitude !== null) updateData.longitude = longitude;
 
         const { data, error } = await supabase
           .from("media_assets")
@@ -255,6 +266,8 @@ serve(async (req) => {
           ai_model_used: aiModelUsed,
           tags,
           metadata: { size: file.size, mimeType: file.type },
+          latitude,
+          longitude,
         })
         .select()
         .single();

@@ -222,15 +222,8 @@ export function AIConnectionsDashboard() {
       dashboardAssignments: [],
     });
     
-    // For Claude, check if we have an existing Claude provider with models
-    const existingClaude = providers.find(p => p.providerName === 'claude');
-    if (existingClaude && existingClaude.availableModels && existingClaude.availableModels.length > 0) {
-      console.log('Loading models from existing Claude provider:', existingClaude.availableModels.length);
-      setAvailableModels(existingClaude.availableModels);
-    } else {
-      console.log('No existing Claude models found');
-      setAvailableModels([]);
-    }
+    // Clear available models when opening add dialog
+    setAvailableModels([]);
     
     setAddDialogOpen(true);
   };
@@ -296,11 +289,17 @@ export function AIConnectionsDashboard() {
       return;
     }
 
+    if (!formData.model || formData.model.trim() === "") {
+      toast.error("Please select or enter a model");
+      return;
+    }
+
     console.log('💾 Saving provider with models:', {
       name: formData.name,
       providerName: formData.providerName,
       modelCount: availableModels.length,
       models: availableModels.map(m => m.id),
+      selectedModel: formData.model,
       dashboardAssignments: formData.dashboardAssignments
     });
 
@@ -353,12 +352,18 @@ export function AIConnectionsDashboard() {
       return;
     }
 
+    if (!formData.model || formData.model.trim() === "") {
+      toast.error("Please select or enter a model");
+      return;
+    }
+
     console.log('🔄 Updating AI provider:', {
       id: selectedProvider.id,
       name: formData.name,
       providerName: formData.providerName,
       modelCount: availableModels.length,
       models: availableModels.map(m => m.id),
+      selectedModel: formData.model,
       dashboardAssignments: formData.dashboardAssignments,
       assignmentCount: formData.dashboardAssignments.length
     });
@@ -727,6 +732,12 @@ export function AIConnectionsDashboard() {
       const hardcodedModels = getHardcodedModels(providerName);
       console.log('📦 Using hardcoded models:', hardcodedModels.length);
       setAvailableModels(hardcodedModels);
+      
+      // Auto-select first model if no model is currently selected
+      if (hardcodedModels.length > 0 && !formData.model) {
+        console.log('🎯 Auto-selecting first hardcoded model:', hardcodedModels[0].id);
+        setFormData(prev => ({ ...prev, model: hardcodedModels[0].id }));
+      }
       return;
     }
 
@@ -762,7 +773,17 @@ export function AIConnectionsDashboard() {
         firstFiveModels: data.models?.slice(0, 5).map((m: any) => ({ id: m.id, name: m.name })) || [],
         allModelIds: data.models?.map((m: any) => m.id) || []
       });
-      setAvailableModels(data.models || []);
+      const fetchedModels = data.models || [];
+      setAvailableModels(fetchedModels);
+      
+      // Auto-select first model if no model is currently selected
+      if (fetchedModels.length > 0 && !formData.model) {
+        console.log('🎯 Auto-selecting first model:', fetchedModels[0].id);
+        setFormData(prev => ({ ...prev, model: fetchedModels[0].id }));
+        toast.success(`Loaded ${fetchedModels.length} models, auto-selected: ${fetchedModels[0].name}`);
+      } else if (fetchedModels.length > 0) {
+        toast.success(`Successfully loaded ${fetchedModels.length} models`);
+      }
     } catch (error) {
       console.error("❌ Error fetching models:", error);
       console.error("❌ Error details:", {
@@ -775,6 +796,12 @@ export function AIConnectionsDashboard() {
       const hardcodedModels = getHardcodedModels(providerName);
       console.log('📦 Falling back to hardcoded models:', hardcodedModels.length);
       setAvailableModels(hardcodedModels);
+      
+      // Auto-select first hardcoded model if available and no model selected
+      if (hardcodedModels.length > 0 && !formData.model) {
+        console.log('🎯 Auto-selecting first hardcoded model:', hardcodedModels[0].id);
+        setFormData(prev => ({ ...prev, model: hardcodedModels[0].id }));
+      }
     } finally {
       setLoadingModels(false);
     }
@@ -879,17 +906,13 @@ export function AIConnectionsDashboard() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-              <Zap className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h1 className="text-3xl">AI Connections</h1>
-              <p className="text-muted-foreground">
-                Manage AI API providers for text and image generation
-              </p>
-            </div>
-          </div>
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
+            <Zap className="w-6 h-6 text-purple-600" />
+            AI Connections
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage AI API providers for text and image generation
+          </p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -1183,7 +1206,7 @@ export function AIConnectionsDashboard() {
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between mb-1">
-                <Label htmlFor="model">Model</Label>
+                <Label htmlFor="model">Model *</Label>
                 {AI_PROVIDER_METADATA[formData.providerName]?.supportsDynamicModels && (
                   <Button
                     type="button"
@@ -1234,16 +1257,23 @@ export function AIConnectionsDashboard() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available
+                    {availableModels.length} model{availableModels.length !== 1 ? 's' : ''} available {formData.model && '• Selected: ' + (availableModels.find(m => m.id === formData.model)?.name || formData.model)}
                   </p>
                 </>
               ) : (
-                <Input
-                  id="model"
-                  value={formData.model}
-                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  placeholder={AI_PROVIDER_METADATA[formData.providerName]?.defaultModel || "e.g., gpt-4"}
-                />
+                <>
+                  <Input
+                    id="model"
+                    value={formData.model}
+                    onChange={(e) => setFormData({ ...formData, model: e.target.value })}
+                    placeholder={AI_PROVIDER_METADATA[formData.providerName]?.defaultModel || "e.g., gpt-4"}
+                  />
+                  {AI_PROVIDER_METADATA[formData.providerName]?.supportsDynamicModels && (
+                    <p className="text-xs text-muted-foreground">
+                      Click "Fetch Latest Models" to load available models
+                    </p>
+                  )}
+                </>
               )}
               {availableModels.length > 0 && formData.model && (
                 <p className="text-xs text-muted-foreground mt-1">

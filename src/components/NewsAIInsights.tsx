@@ -56,7 +56,7 @@ export function NewsAIInsights({
     try {
       setLoadingInsights(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-ai-insights`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -86,7 +86,7 @@ export function NewsAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-ai-insights/${insightId}`,
         {
           method: 'DELETE',
           headers: {

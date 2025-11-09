@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { RaceCard } from "./RaceCard";
 import { ElectionFilters } from "./ElectionFilters";
 import { ElectionSummary } from "./ElectionSummary";
-import { ElectionAIInsights } from "./ElectionAIInsights";
+import { ElectionAIInsights } from "./ElectionsAIInsightsNew";
 import { EditCandidateDialog } from "./EditCandidateDialog";
 import { EditPartyDialog } from "./EditPartyDialog";
 import { Card, CardContent } from "./ui/card";
@@ -944,11 +944,11 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold flex items-center gap-3">
-            <Vote className="w-8 h-8 text-blue-600" />
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
+            <Vote className="w-6 h-6 text-blue-600" />
             Elections Dashboard
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground">
             Monitor and manage AP Election data with comprehensive race tracking and real-time updates
           </p>
         </div>

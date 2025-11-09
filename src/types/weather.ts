@@ -170,11 +170,13 @@ export interface Location {
   lon: number | FieldOverride<number>;
   elevation_m: number | FieldOverride<number>;
   stationId?: string | FieldOverride<string>;
+  provider_id?: string;
 }
 
 export interface WeatherData {
   version: string;
   product: string;
+  locationProvider?: string; // Data provider name for this location
   location: Location;
   current: CurrentConditions;
   hourly: {
@@ -271,6 +273,8 @@ export interface SavedWeatherLocation {
   lon: number;
   elevation_m?: number;
   stationId?: string;
+  provider_id?: string;
+  provider_name?: string;
   createdAt: string;
   updatedAt: string;
 }
