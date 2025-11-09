@@ -70,7 +70,7 @@ export async function generateRSSFeed(
     }
   } else {
     // Fallback single source mode
-    allItems = await generateSingleSourceRSS(endpoint, dataSources, supabase);
+    allItems = await generateSingleSourceRSS(endpoint, dataSources, supabase, queryParams);
   }
 
   // Apply total items limit
@@ -156,7 +156,8 @@ function interleaveItems(items: any[]): any[] {
 async function generateSingleSourceRSS(
   endpoint: APIEndpoint,
   dataSources: DataSource[],
-  supabase: any
+  supabase: any,
+  queryParams: Record<string, string> = {}
 ): Promise<any[]> {
   if (dataSources.length === 0) return [];
 
