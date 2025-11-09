@@ -279,7 +279,6 @@ async function fetchWeatherAPI(provider, locations) {
       const forecast = await res.json();
       const current = forecast.current;
       const location = forecast.location;
-      
       // UPSERT current weather
       await supabase.from("weather_current").upsert({
         location_id: id,
@@ -311,73 +310,120 @@ async function fetchWeatherAPI(provider, locations) {
       }, {
         onConflict: "location_id"
       });
-
-      // UPSERT air quality if available
-      if (current.air_quality) {
-        const aq = current.air_quality;
-        await supabase.from("weather_air_quality").upsert({
-          location_id: id,
-          timestamp: current.last_updated,
-          aqi: Math.round(aq["us-epa-index"] || aq["gb-defra-index"] || 0),
-          category: "Good",
-          standard: "US EPA",
-          pm25: aq.pm2_5,
-          pm10: aq.pm10,
-          o3: aq.o3,
-          no2: aq.no2,
-          so2: aq.so2,
-          co: aq.co,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: "location_id"
-        });
+      // ============================================================================
+      // UPSERT AIR QUALITY (aligned to weather_air_quality schema)
+      // ============================================================================
+      if (current?.air_quality) {
+        try {
+          const aq = current.air_quality;
+          // Calculate AQI and category
+          const aqi = Math.round(aq["us-epa-index"] || aq["gb-defra-index"] || 0);
+          const aqiCategory = aqi === 1 ? "Good" : aqi === 2 ? "Moderate" : aqi === 3 ? "Unhealthy for Sensitive Groups" : aqi === 4 ? "Unhealthy" : aqi === 5 ? "Very Unhealthy" : aqi === 6 ? "Hazardous" : "Unknown";
+          console.log(`💨 Inserting air quality for ${name}: AQI ${aqi} (${aqiCategory})`);
+          const { error: aqError } = await supabase.from("weather_air_quality").upsert({
+            location_id: id,
+            as_of: new Date(current.last_updated),
+            aqi,
+            aqi_category: aqiCategory,
+            aqi_standard: "US EPA",
+            pm25: aq.pm2_5 ?? null,
+            pm10: aq.pm10 ?? null,
+            o3: aq.o3 ?? null,
+            no2: aq.no2 ?? null,
+            so2: aq.so2 ?? null,
+            co: aq.co ?? null,
+            pollen_tree: null,
+            pollen_grass: null,
+            pollen_weed: null,
+            pollen_risk: null,
+            fetched_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: "location_id,as_of"
+          });
+          if (aqError) {
+            console.error(`❌ Failed to save air quality for ${name}:`, aqError);
+          } else {
+            console.log(`✅ Air quality saved for ${name}`);
+          }
+        } catch (err) {
+          console.error(`❌ Exception saving air quality for ${name}:`, err);
+        }
+      } else {
+        console.log(`⚠️ No air quality data available for ${name}`);
       }
-
-      // UPSERT hourly forecast
-      const hourlyItems = forecast.forecast.forecastday.flatMap((d)=>d.hour.map((h)=>({
-        location_id: id,
-        forecast_time: h.time,
-        temp_f: h.temp_f,
-        temp_c: h.temp_c,
-        condition_text: h.condition.text,
-        condition_icon: h.condition.icon,
-        humidity: h.humidity,
-        wind_kph: h.wind_kph,
-        wind_mph: h.wind_mph,
-        wind_degree: h.wind_degree,
-        precip_probability: h.chance_of_rain / 100,
-        precip_mm: h.precip_mm,
-        cloud_cover: h.cloud,
-        uv_index: h.uv
-      })));
-      if (hourlyItems.length > 0) {
-        await supabase.from("weather_hourly_forecast").upsert(hourlyItems, {
-          onConflict: "location_id,forecast_time"
-        });
+      // ============================================================================
+      // HOURLY FORECAST UPSERT (aligned to table structure)
+      // ============================================================================
+      if (forecast?.forecast?.forecastday?.length) {
+        const hourlyItems = forecast.forecast.forecastday.flatMap((d)=>d.hour.map((h)=>({
+              location_id: id,
+              forecast_time: new Date(h.time),
+              summary: h.condition.text,
+              icon: h.condition.icon,
+              condition_text: h.condition.text,
+              condition_icon: h.condition.icon,
+              temp_c: h.temp_c,
+              temp_f: h.temp_f,
+              temperature_value: h.temp_f,
+              temperature_unit: "F",
+              feels_like_value: h.feelslike_f,
+              feels_like_unit: "F",
+              dew_point_value: h.dewpoint_c,
+              dew_point_unit: "C",
+              humidity: h.humidity,
+              cloud_cover: h.cloud,
+              uv_index: Math.round(h.uv),
+              visibility_value: h.vis_km,
+              visibility_unit: "km",
+              wind_speed_value: h.wind_kph,
+              wind_speed_unit: "kph",
+              wind_gust_value: h.gust_kph,
+              wind_gust_unit: "kph",
+              wind_direction_deg: h.wind_degree,
+              wind_dir: h.wind_dir,
+              pressure_value: h.pressure_mb,
+              pressure_unit: "mb",
+              precip_probability: h.chance_of_rain,
+              precip_intensity_value: h.precip_mm,
+              precip_intensity_unit: "mm",
+              precip_mm: h.precip_mm,
+              provider_id: provider.id,
+              provider_type: provider.type,
+              fetched_at: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })));
+        if (hourlyItems.length > 0) {
+          console.log(`💾 Inserting ${hourlyItems.length} hourly forecast rows for ${name}`);
+          const { error: hourlyErr } = await supabase.from("weather_hourly_forecast").upsert(hourlyItems, {
+            onConflict: "location_id,forecast_time"
+          });
+          if (hourlyErr) console.error("❌ Hourly upsert failed:", hourlyErr);
+        }
       }
-
       // UPSERT daily forecast
       const dailyItems = forecast.forecast.forecastday.map((d)=>({
-        location_id: id,
-        forecast_date: d.date,
-        condition_text: d.day.condition.text,
-        condition_icon: d.day.condition.icon,
-        temp_max_f: d.day.maxtemp_f,
-        temp_min_f: d.day.mintemp_f,
-        temp_max_c: d.day.maxtemp_c,
-        temp_min_c: d.day.mintemp_c,
-        precip_probability: d.day.daily_chance_of_rain / 100,
-        precip_mm: d.day.totalprecip_mm,
-        uv_index: d.day.uv,
-        sunrise: d.astro.sunrise,
-        sunset: d.astro.sunset
-      }));
+          location_id: id,
+          forecast_date: d.date,
+          condition_text: d.day.condition.text,
+          condition_icon: d.day.condition.icon,
+          temp_max_f: d.day.maxtemp_f,
+          temp_min_f: d.day.mintemp_f,
+          temp_max_c: d.day.maxtemp_c,
+          temp_min_c: d.day.mintemp_c,
+          precip_probability: d.day.daily_chance_of_rain / 100,
+          precip_mm: d.day.totalprecip_mm,
+          uv_index: d.day.uv,
+          sunrise: d.astro.sunrise,
+          sunset: d.astro.sunset
+        }));
       if (dailyItems.length > 0) {
         await supabase.from("weather_daily_forecast").upsert(dailyItems, {
           onConflict: "location_id,forecast_date"
         });
       }
-
       // UPSERT alerts
       const alertItems = forecast.alerts?.alert?.map((a)=>{
         const alertId = `${id}_${a.event}_${a.effective}`;
@@ -390,7 +436,9 @@ async function fetchWeatherAPI(provider, locations) {
           severity: a.severity,
           urgency: a.urgency,
           certainty: a.certainty,
-          areas: a.areas ? [a.areas] : [],
+          areas: a.areas ? [
+            a.areas
+          ] : [],
           start_time: a.effective,
           end_time: a.expires,
           source: "WeatherAPI",
@@ -406,14 +454,12 @@ async function fetchWeatherAPI(provider, locations) {
           onConflict: "id"
         });
       }
-
       // Build location name field with override support
       const locationNameField = custom_name ? {
         originalValue: name,
         overriddenValue: custom_name,
         isOverridden: true
       } : name;
-
       // Return data in the format frontend expects
       return {
         success: true,
@@ -431,19 +477,34 @@ async function fetchWeatherAPI(provider, locations) {
           data: {
             current: {
               asOf: current.last_updated,
-              temperature: { value: current.temp_f, unit: "°F" },
-              feelsLike: { value: current.feelslike_f, unit: "°F" },
+              temperature: {
+                value: current.temp_f,
+                unit: "°F"
+              },
+              feelsLike: {
+                value: current.feelslike_f,
+                unit: "°F"
+              },
               humidity: current.humidity,
               uvIndex: current.uv,
               summary: current.condition.text,
               icon: current.condition.text.toLowerCase(),
               wind: {
-                speed: { value: current.wind_mph, unit: "mph" },
+                speed: {
+                  value: current.wind_mph,
+                  unit: "mph"
+                },
                 direction_deg: current.wind_degree,
                 direction_cardinal: current.wind_dir
               },
-              pressure: { value: current.pressure_in, unit: "in" },
-              visibility: { value: current.vis_miles, unit: "mi" },
+              pressure: {
+                value: current.pressure_in,
+                unit: "in"
+              },
+              visibility: {
+                value: current.vis_miles,
+                unit: "mi"
+              },
               cloudCover: current.cloud,
               airQuality: current.air_quality ? {
                 aqi: Math.round(current.air_quality["us-epa-index"] || 0),
@@ -459,34 +520,45 @@ async function fetchWeatherAPI(provider, locations) {
             },
             hourly: {
               items: forecast.forecast.forecastday[0]?.hour?.slice(0, 24).map((h)=>({
-                time: h.time,
-                temperature: { value: h.temp_f, unit: "°F" },
-                icon: h.condition.text.toLowerCase(),
-                precipProbability: h.chance_of_rain / 100
-              })) || [],
+                  time: h.time,
+                  temperature: {
+                    value: h.temp_f,
+                    unit: "°F"
+                  },
+                  icon: h.condition.text.toLowerCase(),
+                  precipProbability: h.chance_of_rain / 100
+                })) || [],
               stepHours: 1
             },
             daily: {
               items: forecast.forecast.forecastday?.map((d)=>({
-                date: d.date,
-                summary: d.day.condition.text,
-                icon: d.day.condition.text.toLowerCase(),
-                tempMax: { value: d.day.maxtemp_f, unit: "°F" },
-                tempMin: { value: d.day.mintemp_f, unit: "°F" },
-                precipProbability: d.day.daily_chance_of_rain / 100
-              })) || []
+                  date: d.date,
+                  summary: d.day.condition.text,
+                  icon: d.day.condition.text.toLowerCase(),
+                  tempMax: {
+                    value: d.day.maxtemp_f,
+                    unit: "°F"
+                  },
+                  tempMin: {
+                    value: d.day.mintemp_f,
+                    unit: "°F"
+                  },
+                  precipProbability: d.day.daily_chance_of_rain / 100
+                })) || []
             },
             alerts: forecast.alerts?.alert?.map((a)=>({
-              event: a.event,
-              headline: a.headline,
-              description: a.desc,
-              severity: a.severity,
-              urgency: a.urgency,
-              areas: [a.areas],
-              start: a.effective,
-              end: a.expires,
-              source: "WeatherAPI"
-            })) || []
+                event: a.event,
+                headline: a.headline,
+                description: a.desc,
+                severity: a.severity,
+                urgency: a.urgency,
+                areas: [
+                  a.areas
+                ],
+                start: a.effective,
+                end: a.expires,
+                source: "WeatherAPI"
+              })) || []
           }
         }
       };
@@ -501,66 +573,32 @@ async function fetchWeatherAPI(provider, locations) {
   }));
   return results;
 }
-
 // ============================================================================
 // Fetch weather data from database tables (for CSV/other providers)
 // ============================================================================
 async function fetchFromDatabase(locations) {
-  const results = await Promise.all(locations.map(async (loc) => {
+  const results = await Promise.all(locations.map(async (loc)=>{
     try {
       const { id, lat, lon, name, custom_name, admin1, country, provider_id } = loc;
-      
       console.log(`📊 Fetching data from DB for ${name} (${id})`);
-      
       // Fetch current weather
-      const { data: currentData } = await supabase
-        .from("weather_current")
-        .select("*")
-        .eq("location_id", id)
-        .single();
-      
+      const { data: currentData } = await supabase.from("weather_current").select("*").eq("location_id", id).single();
       // Fetch hourly forecast (next 24 hours)
-      const { data: hourlyData } = await supabase
-        .from("weather_hourly_forecast")
-        .select("*")
-        .eq("location_id", id)
-        .gte("forecast_time", new Date().toISOString())
-        .order("forecast_time")
-        .limit(24);
-      
+      const { data: hourlyData } = await supabase.from("weather_hourly_forecast").select("*").eq("location_id", id).gte("forecast_time", new Date().toISOString()).order("forecast_time").limit(24);
       // Fetch daily forecast
-      const { data: dailyData } = await supabase
-        .from("weather_daily_forecast")
-        .select("*")
-        .eq("location_id", id)
-        .gte("forecast_date", new Date().toISOString().split('T')[0])
-        .order("forecast_date")
-        .limit(14);
-      
+      const { data: dailyData } = await supabase.from("weather_daily_forecast").select("*").eq("location_id", id).gte("forecast_date", new Date().toISOString().split('T')[0]).order("forecast_date").limit(14);
       // Fetch alerts
-      const { data: alertsData } = await supabase
-        .from("weather_alerts")
-        .select("*")
-        .eq("location_id", id)
-        .gte("end_time", new Date().toISOString())
-        .order("start_time");
-      
+      const { data: alertsData } = await supabase.from("weather_alerts").select("*").eq("location_id", id).gte("end_time", new Date().toISOString()).order("start_time");
       // Fetch air quality
-      const { data: aqData } = await supabase
-        .from("weather_air_quality")
-        .select("*")
-        .eq("location_id", id)
-        .single();
-      
+      const { data: aqData } = await supabase.from("weather_air_quality").select("*").eq("location_id", id).single();
       // Build location name field with override support
       const locationNameField = custom_name ? {
         originalValue: name,
         overriddenValue: custom_name,
         isOverridden: true
       } : name;
-      
       // Helper function to get temperature value (handles both schemas)
-      const getTemp = (data: any, fahrenheitField: string, valueField: string) => {
+      const getTemp = (data, fahrenheitField, valueField)=>{
         // WeatherAPI schema uses temp_f, feels_like_f, etc.
         if (data[fahrenheitField] !== undefined && data[fahrenheitField] !== null) {
           return data[fahrenheitField];
@@ -571,9 +609,8 @@ async function fetchFromDatabase(locations) {
         }
         return null;
       };
-      
       // Helper function to get wind speed
-      const getWindSpeed = (data: any) => {
+      const getWindSpeed = (data)=>{
         if (data.wind_mph !== undefined && data.wind_mph !== null) {
           return data.wind_mph; // WeatherAPI schema
         }
@@ -582,9 +619,8 @@ async function fetchFromDatabase(locations) {
         }
         return null;
       };
-      
       // Helper function to get wind direction
-      const getWindDirection = (data: any) => {
+      const getWindDirection = (data)=>{
         if (data.wind_direction !== undefined && data.wind_direction !== null) {
           return data.wind_direction; // WeatherAPI schema
         }
@@ -593,9 +629,8 @@ async function fetchFromDatabase(locations) {
         }
         return null;
       };
-      
       // Helper function to get pressure
-      const getPressure = (data: any) => {
+      const getPressure = (data)=>{
         if (data.pressure_in !== undefined && data.pressure_in !== null) {
           return data.pressure_in; // WeatherAPI schema
         }
@@ -604,9 +639,8 @@ async function fetchFromDatabase(locations) {
         }
         return null;
       };
-      
       // Helper function to get visibility
-      const getVisibility = (data: any) => {
+      const getVisibility = (data)=>{
         if (data.visibility_miles !== undefined && data.visibility_miles !== null) {
           return data.visibility_miles; // WeatherAPI schema
         }
@@ -615,7 +649,6 @@ async function fetchFromDatabase(locations) {
         }
         return null;
       };
-      
       return {
         success: true,
         name,
@@ -632,33 +665,33 @@ async function fetchFromDatabase(locations) {
           data: {
             current: currentData ? {
               asOf: currentData.timestamp || currentData.as_of,
-              temperature: { 
-                value: getTemp(currentData, 'temp_f', 'temperature_value'), 
-                unit: "°F" 
+              temperature: {
+                value: getTemp(currentData, 'temp_f', 'temperature_value'),
+                unit: "°F"
               },
-              feelsLike: { 
-                value: getTemp(currentData, 'feels_like_f', 'feels_like_value'), 
-                unit: "°F" 
+              feelsLike: {
+                value: getTemp(currentData, 'feels_like_f', 'feels_like_value'),
+                unit: "°F"
               },
               humidity: currentData.humidity,
               uvIndex: currentData.uv_index,
               summary: currentData.condition_text || currentData.summary,
               icon: (currentData.condition_text || currentData.summary || "")?.toLowerCase(),
               wind: {
-                speed: { 
-                  value: getWindSpeed(currentData), 
-                  unit: "mph" 
+                speed: {
+                  value: getWindSpeed(currentData),
+                  unit: "mph"
                 },
                 direction_deg: currentData.wind_degree || currentData.wind_direction_deg,
                 direction_cardinal: getWindDirection(currentData)
               },
-              pressure: { 
-                value: getPressure(currentData), 
-                unit: "in" 
+              pressure: {
+                value: getPressure(currentData),
+                unit: "in"
               },
-              visibility: { 
-                value: getVisibility(currentData), 
-                unit: "mi" 
+              visibility: {
+                value: getVisibility(currentData),
+                unit: "mi"
               },
               cloudCover: currentData.cloud_cover,
               airQuality: aqData ? {
@@ -674,44 +707,44 @@ async function fetchFromDatabase(locations) {
               } : null
             } : null,
             hourly: {
-              items: (hourlyData || []).map((h) => ({
-                time: h.forecast_time,
-                temperature: { 
-                  value: getTemp(h, 'temp_f', 'temperature_value'), 
-                  unit: "°F" 
-                },
-                icon: (h.condition_text || h.summary || "")?.toLowerCase(),
-                precipProbability: h.precip_probability || 0
-              })),
+              items: (hourlyData || []).map((h)=>({
+                  time: h.forecast_time,
+                  temperature: {
+                    value: getTemp(h, 'temp_f', 'temperature_value'),
+                    unit: "°F"
+                  },
+                  icon: (h.condition_text || h.summary || "")?.toLowerCase(),
+                  precipProbability: h.precip_probability || 0
+                })),
               stepHours: 1
             },
             daily: {
-              items: (dailyData || []).map((d) => ({
-                date: d.forecast_date,
-                summary: d.condition_text || d.summary,
-                icon: (d.condition_text || d.summary || "")?.toLowerCase(),
-                tempMax: { 
-                  value: getTemp(d, 'temp_max_f', 'temp_max_value'), 
-                  unit: "°F" 
-                },
-                tempMin: { 
-                  value: getTemp(d, 'temp_min_f', 'temp_min_value'), 
-                  unit: "°F" 
-                },
-                precipProbability: d.precip_probability || 0
-              }))
+              items: (dailyData || []).map((d)=>({
+                  date: d.forecast_date,
+                  summary: d.condition_text || d.summary,
+                  icon: (d.condition_text || d.summary || "")?.toLowerCase(),
+                  tempMax: {
+                    value: getTemp(d, 'temp_max_f', 'temp_max_value'),
+                    unit: "°F"
+                  },
+                  tempMin: {
+                    value: getTemp(d, 'temp_min_f', 'temp_min_value'),
+                    unit: "°F"
+                  },
+                  precipProbability: d.precip_probability || 0
+                }))
             },
-            alerts: (alertsData || []).map((a) => ({
-              event: a.event,
-              headline: a.headline,
-              description: a.description,
-              severity: a.severity,
-              urgency: a.urgency,
-              areas: a.areas || [],
-              start: a.start_time,
-              end: a.end_time,
-              source: a.source || "Unknown"
-            }))
+            alerts: (alertsData || []).map((a)=>({
+                event: a.event,
+                headline: a.headline,
+                description: a.description,
+                severity: a.severity,
+                urgency: a.urgency,
+                areas: a.areas || [],
+                start: a.start_time,
+                end: a.end_time,
+                source: a.source || "Unknown"
+              }))
           }
         }
       };
@@ -726,32 +759,51 @@ async function fetchFromDatabase(locations) {
   }));
   return results;
 }
-
 // ============================================================================
 // GET /weather-data — Fetch all active providers + all locations
 // ============================================================================
 app.get("/weather-data", async (c)=>{
   try {
-    console.log("=== Fetching Weather Data for ALL active providers ===");
-    
-    // Fetch all active weather providers
-    const { data: providers, error: provError } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("is_active", true);
-    if (provError) {
-      console.error("Error fetching providers:", provError);
-      return jsonErr(c, 500, "PROVIDERS_FETCH_FAILED", provError.message);
+    // ============================================================================
+    // SUPPORT FOR provider_id FROM SCHEDULER
+    // ============================================================================
+    const url = new URL(c.req.url);
+    const providerId = url.searchParams.get("provider_id");
+    if (providerId) {
+      console.log(`🚀 Ingest triggered for specific provider: ${providerId}`);
+    } else {
+      console.log(`🌍 Ingest triggered for ALL active providers`);
     }
-    if (!providers || providers.length === 0) {
+    // ============================================================================
+    // 📡 Fetch provider(s)
+    // ============================================================================
+    let providers = [];
+    if (providerId) {
+      console.log(`🎯 Fetching data only for provider: ${providerId}`);
+      const { data: singleProvider, error: provError } = await supabase.from("data_providers").select("*").eq("id", providerId).eq("is_active", true).maybeSingle();
+      if (provError || !singleProvider) {
+        console.error("❌ Provider fetch failed or not found:", provError?.message);
+        return jsonErr(c, 404, "PROVIDER_NOT_FOUND", provError?.message || "Provider not found");
+      }
+      providers = [
+        singleProvider
+      ];
+    } else {
+      console.log("🌍 Fetching all active weather providers...");
+      const { data: allProviders, error: provError } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("is_active", true);
+      if (provError) {
+        console.error("❌ Error fetching all providers:", provError.message);
+        return jsonErr(c, 500, "PROVIDERS_FETCH_FAILED", provError.message);
+      }
+      providers = allProviders || [];
+    }
+    if (!providers.length) {
       return jsonErr(c, 400, "NO_PROVIDERS", "No active weather providers configured.");
     }
+    console.log(`✅ Found ${providers.length} active weather provider(s) to process.`);
     console.log(`🔍 Found ${providers.length} active weather providers`);
-    
     // ✅ Fetch ALL active locations (including CSV/News12)
-    const { data: allLocations, error: locError } = await supabase
-      .from("weather_locations")
-      .select("*")
-      .eq("is_active", true)
-      .order("name");
-      
+    const { data: allLocations, error: locError } = await supabase.from("weather_locations").select("*").eq("is_active", true).order("name");
     if (locError) {
       console.error("Error fetching locations:", locError);
       return jsonErr(c, 500, "LOCATIONS_FETCH_FAILED", locError.message);
@@ -765,24 +817,19 @@ app.get("/weather-data", async (c)=>{
         data: []
       });
     }
-    
     console.log(`📍 Found ${allLocations.length} total active locations`);
-    
     // Group by provider_id for efficiency
     const grouped = allLocations.reduce((acc, loc)=>{
       if (!acc[loc.provider_id]) acc[loc.provider_id] = [];
       acc[loc.provider_id].push(loc);
       return acc;
     }, {});
-    
     const allResults = [];
-    
     // Loop through each provider and its matching locations
     for (const provider of providers){
       const locations = grouped[provider.id] || [];
       console.log(`🌐 Processing provider ${provider.name} (${provider.type}) with ${locations.length} locations`);
       if (!locations.length) continue;
-      
       let results = [];
       switch(provider.type){
         case "weatherapi":
@@ -801,16 +848,13 @@ app.get("/weather-data", async (c)=>{
       }
       allResults.push(...results);
     }
-    
     // Combine and report
     const successful = allResults.filter((r)=>r.success);
     const failed = allResults.filter((r)=>!r.success);
-    
     console.log(`✅ Weather fetch complete: ${successful.length}/${allResults.length} successful`);
     if (failed.length > 0) {
-      console.warn(`⚠️ Failed locations:`, failed.map(f => f.name));
+      console.warn(`⚠️ Failed locations:`, failed.map((f)=>f.name));
     }
-    
     return c.json({
       ok: true,
       providers: providers.map((p)=>p.name),
@@ -1062,9 +1106,19 @@ app.get("/weather-data-csv", async (c)=>{
           created_at: new Date().toISOString()
         });
       } else {
+        // Compute forecast date based on ForecastName (e.g., Today, Tomorrow, Day 3)
+        function computeForecastDate(forecastName) {
+          const now = new Date();
+          const lower = forecastName.toLowerCase();
+          if (lower.includes("tomorrow")) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+          if (lower.includes("day 3") || lower.includes("day3")) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+          if (lower.includes("today")) return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          return now; // fallback
+        }
+        const fcDate = computeForecastDate(forecastName);
         forecastRows.push({
           location_id,
-          forecast_date: new Date(),
+          forecast_date: fcDate.toISOString().split("T")[0],
           temp_max_value: Number(r.Temp) || null,
           temp_min_value: Number(r.Temp2) || null,
           temp_max_unit: "F",

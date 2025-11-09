@@ -889,6 +889,8 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
         races={filteredRaces}
         compact={true}
         onClick={() => setShowAIInsights(!showAIInsights)}
+        selectedRaceType={selectedRaceType}
+        onRaceTypeChange={setSelectedRaceType}
       />
 
       <Card>
@@ -963,7 +965,12 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
 
       {/* Expanded AI Insights Section */}
       {showAIInsights && (
-        <ElectionAIInsights races={filteredRaces} listView={true} />
+        <ElectionAIInsights 
+          races={filteredRaces} 
+          listView={true} 
+          selectedRaceType={selectedRaceType}
+          onRaceTypeChange={setSelectedRaceType}
+        />
       )}
 
       {/* Overrides Management Dialog */}

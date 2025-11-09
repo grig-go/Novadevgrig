@@ -128,13 +128,8 @@ export function useWeatherData() {
 
   useEffect(() => {
     fetchWeatherData();
-
-    // Refresh every 5 minutes
-    const interval = setInterval(() => {
-      fetchWeatherData();
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
+    
+    // Auto-refresh removed - use manual refresh button instead
   }, []);
 
   return { stats, refresh: fetchWeatherData };

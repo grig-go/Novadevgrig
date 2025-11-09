@@ -23,6 +23,8 @@ interface ElectionsAIInsightsProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   defaultRaceId?: string;
+  selectedRaceType?: string;
+  onRaceTypeChange?: (raceType: string) => void;
 }
 
 export function ElectionAIInsights({ 
@@ -32,7 +34,9 @@ export function ElectionAIInsights({
   onClick,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
-  defaultRaceId
+  defaultRaceId,
+  selectedRaceType: parentRaceType,
+  onRaceTypeChange
 }: ElectionsAIInsightsProps) {
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
   
@@ -215,16 +219,36 @@ export function ElectionAIInsights({
   };
 
   const toggleRaceTypeSelection = (raceType: string) => {
-    setSelectedRaceTypes(prev => 
-      prev.includes(raceType)
-        ? prev.filter(type => type !== raceType)
-        : [...prev, raceType]
-    );
+    const newSelection = selectedRaceTypes.includes(raceType)
+      ? selectedRaceTypes.filter(type => type !== raceType)
+      : [...selectedRaceTypes, raceType];
+    
+    setSelectedRaceTypes(newSelection);
+    
+    // Sync with parent dashboard if callback provided
+    if (onRaceTypeChange && newSelection.length === 1) {
+      onRaceTypeChange(newSelection[0]);
+    } else if (onRaceTypeChange && newSelection.length === 0) {
+      onRaceTypeChange('all');
+    }
   };
 
   const clearAllRaceTypes = () => {
     setSelectedRaceTypes([]);
+    if (onRaceTypeChange) {
+      onRaceTypeChange('all');
+    }
   };
+
+  // Sync with parent race type when it changes
+  useEffect(() => {
+    if (parentRaceType && parentRaceType !== 'all') {
+      // If parent has a race type selected, sync it to our multi-select
+      if (!selectedRaceTypes.includes(parentRaceType)) {
+        setSelectedRaceTypes([parentRaceType]);
+      }
+    }
+  }, [parentRaceType]);
 
   const toggleRaceSelection = (raceId: string) => {
     setSelectedRaces(prev => 
