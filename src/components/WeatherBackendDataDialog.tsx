@@ -59,6 +59,12 @@ export function WeatherBackendDataDialog({
       }
       
       const weatherResult = await weatherResponse.json();
+      
+      // ✅ Handle new response format with metadata
+      if (!weatherResult.ok) {
+        throw new Error(weatherResult.error || weatherResult.detail || 'Failed to fetch weather data');
+      }
+      
       const weatherData = weatherResult.data?.find((wd: any) => wd.location.id === locationId);
       
       if (weatherData) {

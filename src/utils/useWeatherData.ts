@@ -42,13 +42,23 @@ export function useWeatherData() {
         throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
-      const data = await response.json();
+      const result = await response.json();
 
-      console.log("🔴 Backend response structure:", data);
-      console.log("🔍 CRITICAL: First location from backend response:", JSON.stringify(data.data?.[0]?.location, null, 2));
-
-      // Handle different response formats
-      const weatherData = data.data || data.locations || [];
+      console.log("🔴 Backend response structure:", result);
+      
+      // ✅ Handle new response format with metadata
+      if (result.ok) {
+        console.log("✅ Providers:", result.providers);
+        console.log("✅ Total Locations Processed:", result.locationsProcessed);
+      } else {
+        console.error("❌ Weather fetch failed:", result.error || result.detail);
+        throw new Error(result.error || result.detail || "Weather fetch failed");
+      }
+      
+      // Extract the data array from the response
+      const weatherData = result.data || [];
+      
+      console.log("🔍 CRITICAL: First location from backend response:", JSON.stringify(weatherData?.[0]?.location, null, 2));
       
       // Handle empty locations
       if (!weatherData || weatherData.length === 0) {
@@ -56,7 +66,7 @@ export function useWeatherData() {
           locations: [],
           totalLocations: 0,
           activeAlerts: 0,
-          lastUpdated: data.lastUpdated || new Date().toISOString(),
+          lastUpdated: result.lastUpdated || new Date().toISOString(),
           loading: false,
           error: null,
         });
@@ -101,10 +111,10 @@ export function useWeatherData() {
         locations: weatherLocations,
         totalLocations: weatherLocations.length,
         activeAlerts,
-        lastUpdated: data.lastUpdated || new Date().toISOString(),
+        lastUpdated: result.lastUpdated || new Date().toISOString(),
         loading: false,
         error: null,
-        providerSettings: data.providerSettings,
+        providerSettings: result.providerSettings,
       });
     } catch (error) {
       console.error("Error fetching weather data:", error);
