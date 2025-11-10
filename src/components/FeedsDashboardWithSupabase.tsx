@@ -402,14 +402,19 @@ export function FeedsDashboardWithSupabase({
       const configObj: any = {};
       if (editProvider.category === 'weather') {
         configObj.language = editFormData.language;
-        configObj.units = editFormData.units;
+        configObj.temperatureUnit = editFormData.units;
       } else if (editProvider.category === 'sports') {
         configObj.leagues = editFormData.selectedLeagues;
       }
       
+      // Determine the correct edge function based on category
+      const edgeFunction = editProvider.category === 'weather' 
+        ? 'weather_dashboard' 
+        : 'make-server-cbef71cf';
+      
       // Call backend test endpoint
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/test-provider`,
+        `https://${projectId}.supabase.co/functions/v1/${edgeFunction}/test-provider`,
         {
           method: 'POST',
           headers: {

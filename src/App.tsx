@@ -562,12 +562,17 @@ export default function App() {
               </div>
               <div className="flex flex-col">
                 <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "Loading..." : financeStats.hasLivePrices ? "Live prices" : "No prices"}
+                  {financeStats.loading ? "..." : `${financeStats.stockCount} stocks`}
                 </span>
               </div>
               <div className="flex flex-col">
                 <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "..." : financeStats.hasAnalystRatings ? "Analyst ratings" : "No ratings"}
+                  {financeStats.loading ? "..." : `${financeStats.etfCount} ETFs`}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">
+                  {financeStats.loading ? "..." : `${financeStats.cryptoCount} crypto`}
                 </span>
               </div>
             </div>

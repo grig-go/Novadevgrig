@@ -162,11 +162,10 @@ export function StockSearch({
       console.log(`🔍 [StockSearch] Searching for: "${searchTerm}"`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks/search?q=${encodeURIComponent(searchTerm)}`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/search/stocks?q=${encodeURIComponent(searchTerm)}`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
           },
         }
       );
@@ -212,7 +211,7 @@ export function StockSearch({
     setIsAdding(stock.symbol);
 
     try {
-      console.log(`📈 [StockSearch] Adding ${stock.type} to alpaca_stocks table:`, {
+      console.log(`📈 [StockSearch] Adding ${stock.type} to finance_dashboard:`, {
         symbol: stock.symbol,
         name: stock.name,
         type: stock.type,
@@ -220,16 +219,18 @@ export function StockSearch({
       });
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks/add`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
         {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 
-            symbol: stock.symbol
+            symbol: stock.symbol,
+            name: stock.name,
+            type: stock.type,
+            exchange: stock.exchange,
           }),
         }
       );
@@ -265,7 +266,7 @@ export function StockSearch({
 
       const result = await response.json();
       
-      console.log(`✅ [StockSearch] Successfully added ${stock.type} to alpaca_stocks table:`, {
+      console.log(`✅ [StockSearch] Successfully added ${stock.type} to finance_dashboard:`, {
         symbol: stock.symbol,
         name: stock.name,
         type: stock.type
@@ -319,7 +320,7 @@ export function StockSearch({
             Search & Add Stock / ETF
           </DialogTitle>
           <DialogDescription>
-            Search for stocks and ETFs via Alpaca and add them to your watchlist. Data is stored in the alpaca_stocks table.
+            Search for stocks and ETFs via Alpaca and add them to your watchlist.
           </DialogDescription>
         </DialogHeader>
 

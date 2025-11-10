@@ -279,37 +279,52 @@ async function fetchWeatherAPI(provider, locations) {
       const forecast = await res.json();
       const current = forecast.current;
       const location = forecast.location;
-      // UPSERT current weather
-      await supabase.from("weather_current").upsert({
+      // UPSERT current weather — unified CSV-style schema
+      // ============================================================================
+      const { error: currentErr } = await supabase.from("weather_current").upsert({
         location_id: id,
+        as_of: new Date(current.last_updated).toISOString(),
+        summary: current.condition.text,
+        icon: current.condition.icon,
+        temperature_value: current.temp_f,
+        temperature_unit: "°F",
+        feels_like_value: current.feelslike_f,
+        feels_like_unit: "°F",
+        dew_point_value: current.dewpoint_c ?? null,
+        dew_point_unit: "°C",
+        humidity: current.humidity,
+        pressure_value: current.pressure_mb,
+        pressure_unit: "mb",
+        cloud_cover: current.cloud,
+        uv_index: current.uv,
+        visibility_value: current.vis_miles,
+        visibility_unit: "mi",
+        wind_speed_value: current.wind_mph,
+        wind_speed_unit: "mph",
+        wind_gust_value: current.gust_mph ?? null,
+        wind_gust_unit: "mph",
+        wind_direction_deg: current.wind_degree,
+        wind_direction_cardinal: current.wind_dir,
+        precip_last_hr_value: current.precip_mm,
+        precip_last_hr_unit: "mm",
+        provider_id: provider.id,
+        provider_type: "weatherapi",
+        admin1: admin1 || location.region,
+        country: country || location.country,
         lat,
         lon,
         name,
-        admin1: admin1 || location.region,
-        country: country || location.country,
-        timestamp: current.last_updated,
-        temp_f: current.temp_f,
-        temp_c: current.temp_c,
-        feels_like_f: current.feelslike_f,
-        feels_like_c: current.feelslike_c,
-        condition_text: current.condition.text,
-        condition_icon: current.condition.icon,
-        humidity: current.humidity,
-        wind_mph: current.wind_mph,
-        wind_kph: current.wind_kph,
-        wind_degree: current.wind_degree,
-        wind_direction: current.wind_dir,
-        pressure_in: current.pressure_in,
-        pressure_mb: current.pressure_mb,
-        visibility_miles: current.vis_miles,
-        visibility_km: current.vis_km,
-        cloud_cover: current.cloud,
-        uv_index: current.uv,
-        precip_mm: current.precip_mm,
+        fetched_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }, {
         onConflict: "location_id"
       });
+      if (currentErr) {
+        console.error(`❌ weather_current upsert failed for ${name}:`, currentErr);
+      } else {
+        console.log(`✅ weather_current upserted for ${name}`);
+      }
       // ============================================================================
       // UPSERT AIR QUALITY (aligned to weather_air_quality schema)
       // ============================================================================
@@ -403,28 +418,53 @@ async function fetchWeatherAPI(provider, locations) {
           if (hourlyErr) console.error("❌ Hourly upsert failed:", hourlyErr);
         }
       }
-      // UPSERT daily forecast
-      const dailyItems = forecast.forecast.forecastday.map((d)=>({
+      // UPSERT daily forecast — unified CSV-style schema
+      // ============================================================================
+      const dailyItems = forecast.forecast.forecastday.map((d)=>{
+        const dayData = d.day || {};
+        const astro = d.astro || {};
+        return {
           location_id: id,
           forecast_date: d.date,
-          condition_text: d.day.condition.text,
-          condition_icon: d.day.condition.icon,
-          temp_max_f: d.day.maxtemp_f,
-          temp_min_f: d.day.mintemp_f,
-          temp_max_c: d.day.maxtemp_c,
-          temp_min_c: d.day.mintemp_c,
-          precip_probability: d.day.daily_chance_of_rain / 100,
-          precip_mm: d.day.totalprecip_mm,
-          uv_index: d.day.uv,
-          sunrise: d.astro.sunrise,
-          sunset: d.astro.sunset
-        }));
+          summary: dayData.condition?.text || null,
+          icon: dayData.condition?.icon || null,
+          temp_max_value: dayData.maxtemp_f,
+          temp_max_unit: "°F",
+          temp_min_value: dayData.mintemp_f,
+          temp_min_unit: "°F",
+          precip_probability: dayData.daily_chance_of_rain || null,
+          uv_index_max: dayData.uv || null,
+          humidity: dayData.avghumidity || null,
+          pressure_value: dayData.pressure_mb || null,
+          pressure_unit: "mb",
+          visibility_value: dayData.avgvis_miles || null,
+          visibility_unit: "mi",
+          wind_speed_value: dayData.maxwind_mph,
+          wind_speed_unit: "mph",
+          wind_direction_deg: dayData.wind_degree || null,
+          wind_direction_cardinal: dayData.wind_dir || null,
+          sunrise: astro.sunrise ? new Date(`${d.date}T${astro.sunrise}`).toISOString() : null,
+          sunset: astro.sunset ? new Date(`${d.date}T${astro.sunset}`).toISOString() : null,
+          moon_phase: astro.moon_phase || null,
+          moon_illumination: astro.moon_illumination || null,
+          provider_id: provider.id,
+          provider_type: "weatherapi",
+          fetched_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        };
+      });
       if (dailyItems.length > 0) {
-        await supabase.from("weather_daily_forecast").upsert(dailyItems, {
+        const { error: dailyErr } = await supabase.from("weather_daily_forecast").upsert(dailyItems, {
           onConflict: "location_id,forecast_date"
         });
+        if (dailyErr) {
+          console.error(`❌ weather_daily_forecast upsert failed for ${name}:`, dailyErr);
+        } else {
+          console.log(`✅ weather_daily_forecast upserted for ${name}`);
+        }
       }
-      // UPSERT alerts
+      // UPSERT alerts (unchanged)
+      // ============================================================================
       const alertItems = forecast.alerts?.alert?.map((a)=>{
         const alertId = `${id}_${a.event}_${a.effective}`;
         return {
@@ -455,12 +495,14 @@ async function fetchWeatherAPI(provider, locations) {
         });
       }
       // Build location name field with override support
+      // ============================================================================
       const locationNameField = custom_name ? {
         originalValue: name,
         overriddenValue: custom_name,
         isOverridden: true
       } : name;
       // Return data in the format frontend expects
+      // ============================================================================
       return {
         success: true,
         name,
@@ -833,9 +875,8 @@ app.get("/weather-data", async (c)=>{
       let results = [];
       switch(provider.type){
         case "weatherapi":
-          // Fetch from database (API data should be pre-loaded via scheduler)
-          console.log(`🌤️ Fetching WeatherAPI provider (${provider.name}) data from database`);
-          results = await fetchFromDatabase(locations);
+          // Fetch from WeatherAPI and save to database
+          results = await fetchWeatherAPI(provider, locations);
           break;
         case "csv":
           // Fetch from database only (CSV data already imported)
@@ -926,6 +967,109 @@ app.post("/providers", async (c)=>{
 app.put("/providers", async (c)=>{
   // Reuse POST logic for PUT
   return app.post("/providers", c);
+});
+// ============================================================================
+// TEST PROVIDER
+// ============================================================================
+app.post("/test-provider", async (c)=>{
+  try {
+    const body = await safeJson(c);
+    const { type, api_key, base_url, config } = body;
+    if (!api_key || !base_url) {
+      return jsonErr(c, 400, "MISSING_FIELDS", "api_key and base_url are required");
+    }
+    const providerConfig = config || {};
+    const language = providerConfig.language || "en";
+    const temperatureUnit = (providerConfig.temperatureUnit || "f").toLowerCase();
+    const tempSuffix = temperatureUnit === "c" ? "_c" : "_f";
+    const tempUnitSymbol = temperatureUnit === "c" ? "°C" : "°F";
+    console.log(`🌤️ Testing weather provider with unit: ${temperatureUnit.toUpperCase()} (${tempUnitSymbol})`);
+    // Test with London coordinates
+    const testUrl = `${base_url}/forecast.json?key=${api_key}&q=51.5074,-0.1278&days=3&aqi=no&alerts=no&lang=${language}`;
+    console.log(`🌤️ Weather test URL: ${testUrl.replace(api_key, "***")}`);
+    const res = await fetch(testUrl, {
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      return c.json({
+        success: false,
+        message: `Weather API returned HTTP ${res.status}`,
+        details: txt.substring(0, 200)
+      });
+    }
+    const data = await res.json();
+    const currentData = data.current || {};
+    const location = data.location || {};
+    const forecast = data.forecast?.forecastday || [];
+    const result = {
+      location: {
+        name: location.name,
+        region: location.region,
+        country: location.country,
+        lat: location.lat,
+        lon: location.lon,
+        localtime: location.localtime
+      },
+      current: {
+        condition: currentData.condition?.text,
+        icon: currentData.condition?.icon,
+        temperature: currentData[`temp${tempSuffix}`],
+        feelsLike: currentData[`feelslike${tempSuffix}`],
+        dewPoint: currentData[`dewpoint${tempSuffix}`] || 0,
+        wind: {
+          speed: currentData.wind_mph || currentData.wind_kph,
+          direction: currentData.wind_dir
+        },
+        humidity: currentData.humidity,
+        pressure: currentData.pressure_mb,
+        uv: currentData.uv
+      },
+      forecast: forecast.map((day)=>({
+          date: day.date,
+          day: {
+            condition: day.day.condition?.text,
+            icon: day.day.condition?.icon,
+            tempMax: day.day[`maxtemp${tempSuffix}`],
+            tempMin: day.day[`mintemp${tempSuffix}`],
+            humidity: day.day.avghumidity,
+            rainChance: day.day.daily_chance_of_rain
+          },
+          hours: (day.hour || []).map((hour)=>({
+              time: hour.time,
+              condition: hour.condition?.text,
+              icon: hour.condition?.icon,
+              temperature: hour[`temp${tempSuffix}`],
+              feelsLike: hour[`feelslike${tempSuffix}`],
+              dewPoint: hour[`dewpoint${tempSuffix}`] || 0,
+              humidity: hour.humidity,
+              wind: {
+                speed: hour.wind_mph || hour.wind_kph,
+                direction: hour.wind_dir
+              },
+              rainChance: hour.chance_of_rain
+            }))
+        }))
+    };
+    return c.json({
+      success: true,
+      message: "Weather provider OK",
+      details: {
+        ...result,
+        providerSettings: {
+          temperatureUnit,
+          language
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Weather provider test error:", error);
+    return c.json({
+      success: false,
+      message: `Weather API test failed: ${error.message}`,
+      details: error.stack
+    });
+  }
 });
 // ============================================================================
 // AI INSIGHTS

@@ -143,7 +143,10 @@ export function WeatherAIInsights({
         setSavedInsights(data.insights || []);
       } catch (error) {
         console.error('Error loading saved insights:', error);
-        toast.error('Failed to load saved insights');
+        // Only show toast if it's not a network error (likely function not deployed yet)
+        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+          toast.error('Failed to load saved insights');
+        }
         setSavedInsights([]);
       } finally {
         setLoadingInsights(false);
@@ -715,56 +718,147 @@ export function WeatherAIInsights({
               const model = getInsightModel(insight);
               const createdAt = getInsightCreatedAt(insight);
               
+              // Extract key data points from the insight
+              const fullText = response || question;
+              
+              // Extract percentages
+              const percentMatches = fullText.match(/(\d+(?:\.\d+)?)\s*%/g) || [];
+              const percentages = percentMatches.map(m => parseFloat(m)).slice(0, 3);
+              
+              // Extract temperatures
+              const tempMatches = fullText.match(/(\d+)\s*°[CF]/g) || [];
+              
+              // Extract wind speeds
+              const windMatches = fullText.match(/(\d+)\s*mph/gi) || [];
+              
+              // Determine overall sentiment/severity
+              const hasWarning = /warning|alert|severe|dangerous|extreme|caution/i.test(fullText);
+              const hasWatch = /watch|monitor|possible|potential/i.test(fullText);
+              const hasNormal = /normal|typical|average|moderate/i.test(fullText);
+              
               return (
-                <div key={insight.id} className="border rounded-lg p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="outline" className="text-xs">
-                          {insightTypes.find(t => t.value === insightType)?.label || insightType}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(createdAt).toLocaleString()}
-                        </span>
-                        {provider && (
-                          <Badge variant="secondary" className="text-xs">
-                            {provider}
-                          </Badge>
-                        )}
+                <Card key={insight.id} className="border-l-4 border-purple-400 bg-purple-50 dark:bg-purple-900/10">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700">
+                          <Brain className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-base leading-tight">{question}</CardTitle>
+                          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                            <Badge variant="outline" className="text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 text-xs">
+                              {insightTypes.find(t => t.value === insightType)?.label || insightType}
+                            </Badge>
+                            {provider && (
+                              <Badge variant="outline" className="text-xs">
+                                {provider}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="font-medium text-sm mb-2">{question}</p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => toggleInsightExpansion(insight.id)}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-3 h-3" />
+                          ) : (
+                            <ChevronRight className="w-3 h-3" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleDeleteInsight(insight.id)}
+                        >
+                          <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleInsightExpansion(insight.id)}
-                      >
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteInsight(insight.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                      </Button>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-4">
+                    {/* Key Metrics Display */}
+                    {(percentages.length > 0 || tempMatches.length > 0 || windMatches.length > 0) && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {percentages.slice(0, 3).map((pct, idx) => (
+                          <div key={idx} className="bg-background rounded-lg p-3 text-center border">
+                            <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                              {pct}%
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {idx === 0 ? 'Primary' : idx === 1 ? 'Secondary' : 'Tertiary'}
+                            </div>
+                          </div>
+                        ))}
+                        {tempMatches.slice(0, Math.min(3 - percentages.length, tempMatches.length)).map((temp, idx) => (
+                          <div key={`temp-${idx}`} className="bg-background rounded-lg p-3 text-center border">
+                            <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                              {temp}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              Temperature
+                            </div>
+                          </div>
+                        ))}
+                        {windMatches.slice(0, Math.min(3 - percentages.length - tempMatches.length, windMatches.length)).map((wind, idx) => (
+                          <div key={`wind-${idx}`} className="bg-background rounded-lg p-3 text-center border">
+                            <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                              {wind}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              Wind Speed
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Severity Indicator */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Severity</span>
+                        <span className="font-medium text-purple-700 dark:text-purple-400">
+                          {hasWarning ? 'High Alert' : hasWatch ? 'Watch' : hasNormal ? 'Normal' : 'Monitored'}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all ${
+                            hasWarning ? 'bg-red-500' : 
+                            hasWatch ? 'bg-yellow-500' : 
+                            hasNormal ? 'bg-green-500' : 
+                            'bg-purple-500'
+                          }`}
+                          style={{ 
+                            width: hasWarning ? '90%' : hasWatch ? '65%' : hasNormal ? '30%' : '50%' 
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  
-                  {isExpanded && (
-                    <div className="pl-4 border-l-2 border-purple-200">
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{response}</p>
-                      {model && (
-                        <p className="text-xs text-muted-foreground mt-2">Model: {model}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    
+                    {isExpanded && (
+                      <div className="space-y-2">
+                        <div className="bg-muted/30 rounded-lg p-4">
+                          <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{response}</p>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                          <span>{new Date(createdAt).toLocaleDateString()}</span>
+                          {model && (
+                            <Badge variant="outline" className="text-xs">
+                              {model}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               );
             })}
           </div>

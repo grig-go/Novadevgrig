@@ -657,19 +657,8 @@ export function WeatherDashboard({
         </div>
       </div>
 
-      {loading && locations.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-4 animate-spin" />
-            <h3 className="mb-2">Loading Weather Data</h3>
-            <p className="text-muted-foreground">
-              Fetching data from weather provider...
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        renderSummaryCards()
-      )}
+      {/* Always show summary cards, fetch happens in background */}
+      {renderSummaryCards()}
 
       {/* AI Insights Section - Visual horizontal scroll layout */}
       {showAIInsights && (

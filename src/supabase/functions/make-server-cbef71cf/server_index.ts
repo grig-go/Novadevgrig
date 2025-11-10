@@ -1,9 +1,14 @@
 /**
  * Main Server Index for make-server-cbef71cf
  * --------------------------------------------------------------
- * Handles Weather, Sports, and Finance categories.
- * News logic has been moved to its own Edge Function: /functions/news_dashboard
- */ import { Hono } from "npm:hono";
+ * MINIMAL TESTING UTILITY - Only handles Sports provider testing.
+ * 
+ * Migrated to dedicated edge functions:
+ * - Weather: /functions/weather_dashboard
+ * - News: /functions/news_dashboard
+ * - Finance: /functions/finance_dashboard
+ */
+import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
@@ -31,102 +36,15 @@ app.post("/make-server-cbef71cf/test-provider", async (c)=>{
   };
   switch(category?.toLowerCase()){
     // =========================================================
-    // WEATHER PROVIDER
+    // WEATHER PROVIDER - MOVED TO weather_dashboard edge function
     // =========================================================
     case "weather":
       {
-        try {
-          const providerConfig = config || {};
-          const language = providerConfig.language || "en";
-          const temperatureUnit = (providerConfig.temperatureUnit || "f").toLowerCase();
-          const tempSuffix = temperatureUnit === "c" ? "_c" : "_f";
-          const tempUnitSymbol = temperatureUnit === "c" ? "°C" : "°F";
-          console.log(`🌤️ Using temperature unit: ${temperatureUnit.toUpperCase()} (${tempUnitSymbol})`);
-          const testUrl = `${base_url}/forecast.json?key=${api_key}&q=51.5074,-0.1278&days=3&aqi=no&alerts=no&lang=${language}`;
-          console.log(`🌤️ Weather test URL: ${testUrl.replace(api_key, "***")}`);
-          const res = await fetch(testUrl, {
-            signal: AbortSignal.timeout(10000)
-          });
-          if (!res.ok) {
-            const txt = await res.text();
-            testResult = {
-              success: false,
-              message: `Weather API returned HTTP ${res.status}`,
-              details: txt.substring(0, 200)
-            };
-            break;
-          }
-          const data = await res.json();
-          const currentData = data.current || {};
-          const location = data.location || {};
-          const forecast = data.forecast?.forecastday || [];
-          const result = {
-            location: {
-              name: location.name,
-              region: location.region,
-              country: location.country,
-              lat: location.lat,
-              lon: location.lon,
-              localtime: location.localtime
-            },
-            current: {
-              condition: currentData.condition?.text,
-              icon: currentData.condition?.icon,
-              temperature: currentData[`temp${tempSuffix}`],
-              feelsLike: currentData[`feelslike${tempSuffix}`],
-              dewPoint: currentData[`dewpoint${tempSuffix}`] || 0,
-              wind: {
-                speed: currentData.wind_mph || currentData.wind_kph,
-                direction: currentData.wind_dir
-              },
-              humidity: currentData.humidity,
-              pressure: currentData.pressure_mb,
-              uv: currentData.uv
-            },
-            forecast: forecast.map((day)=>({
-                date: day.date,
-                day: {
-                  condition: day.day.condition?.text,
-                  icon: day.day.condition?.icon,
-                  tempMax: day.day[`maxtemp${tempSuffix}`],
-                  tempMin: day.day[`mintemp${tempSuffix}`],
-                  humidity: day.day.avghumidity,
-                  rainChance: day.day.daily_chance_of_rain
-                },
-                hours: (day.hour || []).map((hour)=>({
-                    time: hour.time,
-                    condition: hour.condition?.text,
-                    icon: hour.condition?.icon,
-                    temperature: hour[`temp${tempSuffix}`],
-                    feelsLike: hour[`feelslike${tempSuffix}`],
-                    dewPoint: hour[`dewpoint${tempSuffix}`] || 0,
-                    humidity: hour.humidity,
-                    wind: {
-                      speed: hour.wind_mph || hour.wind_kph,
-                      direction: hour.wind_dir
-                    },
-                    rainChance: hour.chance_of_rain
-                  }))
-              }))
-          };
-          testResult = {
-            success: true,
-            message: "Weather provider OK",
-            details: {
-              ...result,
-              providerSettings: {
-                temperatureUnit,
-                language
-              }
-            }
-          };
-        } catch (error) {
-          testResult = {
-            success: false,
-            message: `Weather API test failed: ${error.message}`,
-            details: error.stack
-          };
-        }
+        testResult = {
+          success: false,
+          message: "Weather provider testing has been moved to the weather_dashboard edge function. Please use /functions/v1/weather_dashboard/test-provider instead.",
+          details: "This endpoint no longer handles weather provider testing."
+        };
         break;
       }
     // =========================================================
@@ -160,31 +78,6 @@ app.post("/make-server-cbef71cf/test-provider", async (c)=>{
           testResult = {
             success: false,
             message: `Sports API failed: ${error.message}`
-          };
-        }
-        break;
-      }
-    // =========================================================
-    // FINANCE PROVIDER
-    // =========================================================
-    case "finance":
-      {
-        try {
-          const testUrl = `${base_url}/ping`;
-          console.log(`💰 Testing Finance API: ${testUrl}`);
-          const res = await fetch(testUrl, {
-            signal: AbortSignal.timeout(10000)
-          });
-          const data = await res.json();
-          testResult = {
-            success: true,
-            message: "Finance API OK",
-            details: data
-          };
-        } catch (error) {
-          testResult = {
-            success: false,
-            message: `Finance API failed: ${error.message}`
           };
         }
         break;

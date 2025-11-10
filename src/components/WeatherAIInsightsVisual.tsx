@@ -94,6 +94,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
     const loadSavedInsights = async () => {
       try {
         setLoadingInsights(true);
+        
         const response = await fetch(
           `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights`,
           {
@@ -109,7 +110,10 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
         setSavedInsights(data.insights || []);
       } catch (error) {
         console.error('Error loading saved insights:', error);
-        toast.error('Failed to load saved insights');
+        // Only show toast if it's not a network error (likely function not deployed yet)
+        if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+          toast.error('Failed to load saved insights');
+        }
         setSavedInsights([]);
       } finally {
         setLoadingInsights(false);
