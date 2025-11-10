@@ -773,18 +773,185 @@ export function WeatherAIInsights({
     );
   }
 
-  // Default full view
+  // Default full view - dialog only mode (opened from cards)
   return (
-    <Card className="hidden">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Brain className="w-5 h-5 text-purple-600" />
-          AI Weather Insights
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p>Click the compact card to open insights</p>
-      </CardContent>
-    </Card>
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <DialogContent className="max-w-3xl max-h-[80vh]">
+        <DialogHeader className="space-y-0 pb-4">
+          <div className="flex items-center gap-2">
+            <Brain className="w-5 h-5 text-purple-600" />
+            <DialogTitle>Weather AI Insight Generator</DialogTitle>
+          </div>
+          <DialogDescription>
+            Select locations and an insight type, then ask the AI assistant for weather analysis and predictions.
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* Two dropdowns side by side */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Locations</label>
+            <Popover open={isLocationPopoverOpen} onOpenChange={setIsLocationPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between h-auto min-h-9"
+                >
+                  {selectedLocations.length === 0 ? (
+                    <span className="text-muted-foreground">Select locations</span>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedLocations.map((locationId) => (
+                        <Badge
+                          key={locationId}
+                          variant="secondary"
+                          className="gap-1"
+                        >
+                          {getSelectedLocationName(locationId)}
+                          <X
+                            className="w-3 h-3 cursor-pointer hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLocationSelection(locationId);
+                            }}
+                          />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0" align="start">
+                <ScrollArea className="max-h-[300px]">
+                  <div className="p-2">
+                    {locations.map((location) => (
+                      <div
+                        key={location.location.id}
+                        className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
+                        onClick={() => toggleLocationSelection(location.location.id)}
+                      >
+                        <Checkbox
+                          checked={selectedLocations.includes(location.location.id)}
+                          onCheckedChange={() => toggleLocationSelection(location.location.id)}
+                        />
+                        <Cloud className="w-4 h-4 text-blue-600" />
+                        <span className="flex-1">{getFieldValue(location.location.name)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+                {selectedLocations.length > 0 && (
+                  <div className="p-2 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllLocations}
+                      className="w-full"
+                    >
+                      Clear all ({selectedLocations.length})
+                    </Button>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
+          </div>
+          
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Insight Type</label>
+            <div className="relative">
+              <Select value={selectedInsightType} onValueChange={setSelectedInsightType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select insight type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {insightTypes.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>
+                      <div className="flex flex-col">
+                        <span>{type.label}</span>
+                        <span className="text-xs text-muted-foreground">{type.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat Input */}
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <Textarea
+              placeholder="Ask about weather patterns, forecasts, alerts, or any weather-related question..."
+              value={chatMessage}
+              onChange={(e) => setChatMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              className="min-h-[80px] flex-1"
+              disabled={!aiProvider || sendingMessage}
+            />
+            <Button 
+              onClick={handleSendMessage}
+              disabled={!chatMessage.trim() || !aiProvider || sendingMessage}
+              className="self-end"
+            >
+              {sendingMessage ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+
+          {!aiProvider && !loadingProvider && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                ⚠️ No AI provider configured for Weather Dashboard. Configure an AI provider to use insights.
+              </p>
+            </div>
+          )}
+
+          {aiResponse && (
+            <div className="space-y-3 p-4 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-purple-600" />
+                  <span className="text-sm font-medium">AI Response</span>
+                  {insightSaved && (
+                    <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-800">
+                      ✓ Saved
+                    </Badge>
+                  )}
+                </div>
+                {!insightSaved && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveInsight}
+                    disabled={savingInsight}
+                  >
+                    {savingInsight ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Insight'
+                    )}
+                  </Button>
+                )}
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{aiResponse}</p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

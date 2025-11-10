@@ -54,7 +54,12 @@ interface WeatherCardProps {
 }
 
 const getWeatherIcon = (icon: string, size: number = 24) => {
-  const iconMap = {
+  // Normalize icon string to lowercase for matching
+  const normalizedIcon = (icon || '').toLowerCase();
+  
+  // Map both icon codes and human-readable text to icons
+  const iconMap: { [key: string]: JSX.Element } = {
+    // Icon codes
     'clear-day': <Sun className={`w-6 h-6`} />,
     'clear-night': <Moon className={`w-6 h-6`} />,
     'partly-cloudy-day': <Cloud className={`w-6 h-6`} />,
@@ -65,10 +70,52 @@ const getWeatherIcon = (icon: string, size: number = 24) => {
     'rain': <CloudRain className={`w-6 h-6`} />,
     'sleet': <CloudRain className={`w-6 h-6`} />,
     'snow': <Snowflake className={`w-6 h-6`} />,
-    'thunderstorm': <Zap className={`w-6 h-6`} />
+    'thunderstorm': <Zap className={`w-6 h-6`} />,
+    
+    // Human-readable text
+    'sunny': <Sun className={`w-6 h-6`} />,
+    'clear': <Sun className={`w-6 h-6`} />,
+    'mostly sunny': <Sun className={`w-6 h-6`} />,
+    'partly cloudy': <Cloud className={`w-6 h-6`} />,
+    'mostly cloudy': <Cloud className={`w-6 h-6`} />,
+    'overcast': <Cloud className={`w-6 h-6`} />,
+    'rainy': <CloudRain className={`w-6 h-6`} />,
+    'drizzle': <CloudRain className={`w-6 h-6`} />,
+    'showers': <CloudRain className={`w-6 h-6`} />,
+    'snowy': <Snowflake className={`w-6 h-6`} />,
+    'thunderstorms': <Zap className={`w-6 h-6`} />,
+    'windy': <Wind className={`w-6 h-6`} />,
+    'foggy': <Cloud className={`w-6 h-6`} />,
+    'haze': <Cloud className={`w-6 h-6`} />,
   };
   
-  return iconMap[icon as keyof typeof iconMap] || <Cloud className={`w-6 h-6`} />;
+  // Try exact match first
+  if (iconMap[normalizedIcon]) {
+    return iconMap[normalizedIcon];
+  }
+  
+  // Try partial matches for more flexibility
+  if (normalizedIcon.includes('sun') || normalizedIcon.includes('clear')) {
+    return <Sun className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('rain') || normalizedIcon.includes('shower')) {
+    return <CloudRain className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('snow')) {
+    return <Snowflake className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('thunder') || normalizedIcon.includes('storm')) {
+    return <Zap className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('wind')) {
+    return <Wind className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('cloud')) {
+    return <Cloud className={`w-6 h-6`} />;
+  }
+  
+  // Default fallback
+  return <Cloud className={`w-6 h-6`} />;
 };
 
 const formatTime = (timestamp: string) => {
@@ -321,7 +368,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {getWeatherIcon(getFieldValue(location.data?.current?.icon), 32)}
+              {getWeatherIcon(getFieldValue(location.data?.current?.summary), 32)}
               <div className="text-right">
                 <div className="text-2xl font-bold">
                   {temperatureValue}{temperatureUnit}
@@ -437,15 +484,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
@@ -518,21 +572,28 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Thermometer className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-80 overflow-y-auto">
             {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
@@ -607,20 +668,27 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {(location.data?.alerts?.length || 0) > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {location.data.alerts.length} {t.alerts.toLowerCase()}
-                </Badge>
-              )}
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  Modified
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                  {(location.data?.alerts?.length || 0) > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {location.data.alerts.length}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
@@ -827,23 +895,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wind className="w-5 h-5 text-purple-500" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              <Badge variant="outline" className={`text-xs ${
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 50 ? 'bg-green-50 border-green-200 text-green-800' :
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 100 ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 150 ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                'bg-red-50 border-red-200 text-red-800'
-              }`}>
-                AQI {getFieldValue(location.data.current?.airQuality?.aqi)}
-              </Badge>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+            <div className="flex items-center gap-3">
+              <Wind className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
@@ -973,15 +1040,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Gauge className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  Modified
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>

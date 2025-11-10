@@ -833,8 +833,9 @@ app.get("/weather-data", async (c)=>{
       let results = [];
       switch(provider.type){
         case "weatherapi":
-          // Fetch from WeatherAPI and save to database
-          results = await fetchWeatherAPI(provider, locations);
+          // Fetch from database (API data should be pre-loaded via scheduler)
+          console.log(`🌤️ Fetching WeatherAPI provider (${provider.name}) data from database`);
+          results = await fetchFromDatabase(locations);
           break;
         case "csv":
           // Fetch from database only (CSV data already imported)

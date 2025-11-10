@@ -34,7 +34,9 @@ import {
   TrendingUp,
   TrendingDown,
   Database,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 interface WeatherDashboardProps {
@@ -65,8 +67,8 @@ export function WeatherDashboard({
   const [loadingOverrides, setLoadingOverrides] = useState(false);
   const [removingOverride, setRemovingOverride] = useState<string | null>(null);
   
-  // Use localStorage for sticky pagination that survives re-renders and refreshes
-  const [currentPage, setCurrentPage] = useLocalStorage("weather-dashboard-page", 1);
+  // Pagination state - using simple useState like Media Library
+  const [currentPage, setCurrentPage] = useState(1);
   const locationsPerPage = 9;
   const previousLocationCountRef = useRef<number>(0);
   
@@ -179,7 +181,7 @@ export function WeatherDashboard({
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
     }
-  }, [locations, currentPage, locationsPerPage, setCurrentPage]);
+  }, [locations]); // Only depend on locations array changes
 
   // fetchWeatherData is now handled by useWeatherData hook
   // Error handling for provider configuration

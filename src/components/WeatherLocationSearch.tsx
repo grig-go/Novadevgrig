@@ -37,6 +37,7 @@ export function WeatherLocationSearch({
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [addingLocationId, setAddingLocationId] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -86,19 +87,28 @@ export function WeatherLocationSearch({
       return;
     }
 
-    const newLocation: SavedWeatherLocation = {
-      id: result.id,
-      name: result.name,
-      admin1: result.admin1,
-      country: result.country,
-      lat: result.lat,
-      lon: result.lon,
-    };
+    setAddingLocationId(result.id);
+    
+    try {
+      const newLocation: SavedWeatherLocation = {
+        id: result.id,
+        name: result.name,
+        admin1: result.admin1,
+        country: result.country,
+        lat: result.lat,
+        lon: result.lon,
+      };
 
-    await onAddLocation(newLocation);
-    setOpen(false);
-    setSearchQuery("");
-    setResults([]);
+      await onAddLocation(newLocation);
+      setOpen(false);
+      setSearchQuery("");
+      setResults([]);
+    } catch (error) {
+      console.error("Error adding location:", error);
+      // Error toast is handled by parent component
+    } finally {
+      setAddingLocationId(null);
+    }
   };
 
   return (
@@ -170,10 +180,20 @@ export function WeatherLocationSearch({
                     <Button
                       size="sm"
                       onClick={() => handleAddLocation(result)}
-                      disabled={alreadyExists}
+                      disabled={alreadyExists || addingLocationId === result.id}
                       variant={alreadyExists ? "outline" : "default"}
+                      className="gap-2"
                     >
-                      {alreadyExists ? "Already Added" : "Add"}
+                      {addingLocationId === result.id ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Adding...
+                        </>
+                      ) : alreadyExists ? (
+                        "Already Added"
+                      ) : (
+                        "Add"
+                      )}
                     </Button>
                   </div>
                 );

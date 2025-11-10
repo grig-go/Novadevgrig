@@ -27,26 +27,30 @@ export function WeatherBackendDataDialog({
     setError(null);
 
     try {
-      // Updated to use the weather_dashboard edge function
+      console.log(`🔵 Fetching backend data for location ID: ${locationId}`);
+      
+      // Fetch data directly for this specific location
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/weather_dashboard`;
-      const response = await fetch(`${baseUrl}/locations`, {
+      const response = await fetch(`${baseUrl}/locations/${locationId}`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch locations: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`🔴 Failed to fetch location data (HTTP ${response.status}):`, errorText);
+        throw new Error(`Failed to fetch location data: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
-      const location = result.locations?.find((loc: any) => loc.id === locationId);
+      console.log(`✅ Fetched location data:`, result);
       
-      if (!location) {
-        throw new Error('Location not found');
+      if (!result.ok) {
+        throw new Error(result.error || result.detail || 'Failed to fetch location data');
       }
       
-      // Fetch the full weather data for this location
+      // Now fetch weather data for this location
       const weatherResponse = await fetch(`${baseUrl}/weather-data`, {
         headers: {
           'Authorization': `Bearer ${publicAnonKey}`,
@@ -55,25 +59,36 @@ export function WeatherBackendDataDialog({
       });
       
       if (!weatherResponse.ok) {
-        throw new Error(`Failed to fetch weather data: ${weatherResponse.status}`);
+        const errorText = await weatherResponse.text();
+        console.error(`🔴 Failed to fetch weather data (HTTP ${weatherResponse.status}):`, errorText);
+        throw new Error(`Failed to fetch weather data: ${weatherResponse.status} - ${errorText}`);
       }
       
       const weatherResult = await weatherResponse.json();
+      console.log(`✅ Fetched weather data:`, weatherResult);
       
-      // ✅ Handle new response format with metadata
       if (!weatherResult.ok) {
         throw new Error(weatherResult.error || weatherResult.detail || 'Failed to fetch weather data');
       }
       
+      // Find the weather data for this specific location
       const weatherData = weatherResult.data?.find((wd: any) => wd.location.id === locationId);
       
-      if (weatherData) {
-        setData(weatherData);
-      } else {
+      if (!weatherData) {
         throw new Error('Weather data not found for this location');
       }
+      
+      // Combine location info with weather data
+      const combinedData = {
+        location: result.data,
+        weatherData: weatherData
+      };
+      
+      console.log(`✅ Combined backend data:`, combinedData);
+      setData(combinedData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error(`🔴 Error fetching backend data:`, err);
       setError(errorMessage);
       toast.error(`Failed to load backend data: ${errorMessage}`);
     } finally {
