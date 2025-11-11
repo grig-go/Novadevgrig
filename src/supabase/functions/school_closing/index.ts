@@ -130,7 +130,8 @@ app.post("/manual", async (c)=>{
   }
 });
 // ----------------------------------------------------------------------------
-// POST /fetch - Fetch XML and populate table
+// ----------------------------------------------------------------------------
+// POST /fetch - Fetch XML and populate table (with conflict-safe upsert)
 // ----------------------------------------------------------------------------
 app.post("/fetch", async (c)=>{
   console.log("🚀 Fetch route triggered");
@@ -149,7 +150,7 @@ app.post("/fetch", async (c)=>{
     });
     const parsed = parser.parse(xmlText);
     console.log("🧩 Parsed root keys:", Object.keys(parsed || {}));
-    // ✅ Correct path for your XML
+    // ✅ Correct path for your News12 XML
     let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || parsed?.DataSet?.diffgr?.NewDataSet?.closings || [];
     if (!Array.isArray(records)) records = [
       records
@@ -161,8 +162,8 @@ app.post("/fetch", async (c)=>{
         message: "⚠️ No records found in XML"
       }, 200);
     }
-    console.log("🧩 First record preview:", JSON.stringify(records[0], null, 2).substring(0, 500));
-    // ✅ Prepare normalized rows for Supabase insert
+    console.log("🧩 First record preview:", JSON.stringify(records[0], null, 2).substring(0, 400));
+    // ✅ Normalize data for upsert
     const rows = records.map((item)=>({
         provider_id: "school_provider:news12_closings",
         region_id: "42",
@@ -179,16 +180,22 @@ app.post("/fetch", async (c)=>{
         raw_data: item
       }));
     console.log(`🧾 Prepared ${rows.length} row objects for upsert`);
-    const { error } = await supabase.from("school_closings").upsert(rows);
+    // ✅ Use upsert with conflict resolution to prevent duplicates
+    const { data, error } = await supabase.from("school_closings").upsert(rows, {
+      onConflict: "provider_id,organization_name,status_day",
+      ignoreDuplicates: false
+    }).select();
     if (error) throw error;
-    console.log(`✅ Upsert complete: ${rows.length} rows inserted/updated`);
+    console.log(`✅ Upsert complete: ${data?.length || rows.length} rows inserted/updated`);
     return c.json({
-      message: `✅ Inserted ${rows.length} records from sample XML`,
-      count: rows.length
+      ok: true,
+      message: `✅ Upserted ${data?.length || rows.length} records`,
+      count: data?.length || rows.length
     });
   } catch (err) {
     console.error("❌ Fetch error:", err);
     return c.json({
+      ok: false,
       error: err.message
     }, 500);
   }

@@ -322,11 +322,12 @@ export default function SchoolClosingsDashboard() {
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch =
         !searchQuery ||
-        school.organization_name.toLowerCase().includes(searchLower) ||
-        school.city.toLowerCase().includes(searchLower) ||
-        school.county_name.toLowerCase().includes(searchLower) ||
-        school.state.toLowerCase().includes(searchLower) ||
-        school.raw_data?.zip.includes(searchQuery);
+        school.organization_name?.toLowerCase().includes(searchLower) ||
+        school.city?.toLowerCase().includes(searchLower) ||
+        school.county_name?.toLowerCase().includes(searchLower) ||
+        school.state?.toLowerCase().includes(searchLower) ||
+        (school.raw_data?.zip && String(school.raw_data.zip).includes(searchQuery)) ||
+        (school.raw_data?.ZIP && String(school.raw_data.ZIP).includes(searchQuery));
 
       // Status filter
       const matchesStatus =
@@ -360,7 +361,7 @@ export default function SchoolClosingsDashboard() {
         matchesProvider
       );
     });
-  }, [schools, searchQuery, statusFilter, countyFilter, stateFilter, dayFilter, providerFilter]);
+  }, [schools, statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, searchQuery]);
 
   // Get status badge styling
   const getStatusBadge = (statusDescription: string) => {
@@ -429,21 +430,13 @@ export default function SchoolClosingsDashboard() {
     return count;
   }, [statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, searchQuery]);
 
-  // Calculate statistics
-  const closedCount = useMemo(
-    () => schools.filter((s) => s.status_description === "Closed").length,
-    [schools]
-  );
-
-  const delayedCount = useMemo(
-    () => schools.filter((s) => s.status_description?.includes("Delayed")).length,
-    [schools]
-  );
-
-  const earlyDismissalCount = useMemo(
-    () => schools.filter((s) => s.status_description?.includes("Early Dismissal")).length,
-    [schools]
-  );
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -628,157 +621,6 @@ export default function SchoolClosingsDashboard() {
                     1
                   </motion.p>
                   <p className="text-xs text-muted-foreground">News12 Local</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.4, type: "spring", stiffness: 100 }}
-          whileHover={{ y: -4, transition: { duration: 0.2 } }}
-        >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 group">
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-              initial={false}
-            />
-            <CardContent className="p-6 relative">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg"
-                  whileHover={{ scale: 1.1, rotate: 5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
-                >
-                  <XCircle className="w-6 h-6 text-red-600 dark:text-red-400" />
-                </motion.div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Closed</p>
-                  <motion.p
-                    className="text-2xl font-semibold"
-                    key={closedCount}
-                    initial={{ scale: 1 }}
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {closedCount}
-                  </motion.p>
-                  <p className="text-xs text-muted-foreground">Schools closed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.5, type: "spring", stiffness: 100 }}
-          whileHover={{ y: -4, transition: { duration: 0.2 } }}
-        >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-amber-500/10 group">
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-              initial={false}
-            />
-            <CardContent className="p-6 relative">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  className="p-3 bg-amber-100 dark:bg-amber-900/20 rounded-lg"
-                  whileHover={{ scale: 1.1, rotate: 5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
-                >
-                  <Clock className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-                </motion.div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Delayed</p>
-                  <motion.p
-                    className="text-2xl font-semibold"
-                    key={delayedCount}
-                    initial={{ scale: 1 }}
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {delayedCount}
-                  </motion.p>
-                  <p className="text-xs text-muted-foreground">Schools delayed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.6, type: "spring", stiffness: 100 }}
-          whileHover={{ y: -4, transition: { duration: 0.2 } }}
-        >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-              initial={false}
-            />
-            <CardContent className="p-6 relative">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
-                  whileHover={{ scale: 1.1, rotate: 5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
-                >
-                  <AlertCircle className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </motion.div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Early Dismissal</p>
-                  <motion.p
-                    className="text-2xl font-semibold"
-                    key={earlyDismissalCount}
-                    initial={{ scale: 1 }}
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {earlyDismissalCount}
-                  </motion.p>
-                  <p className="text-xs text-muted-foreground">Early dismissals</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.7, type: "spring", stiffness: 100 }}
-          whileHover={{ y: -4, transition: { duration: 0.2 } }}
-        >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/10 group">
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-              initial={false}
-            />
-            <CardContent className="p-6 relative">
-              <div className="flex items-center gap-4">
-                <motion.div
-                  className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg"
-                  whileHover={{ scale: 1.1, rotate: 5 }}
-                  transition={{ type: "spring", stiffness: 400 }}
-                >
-                  <Image className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-                </motion.div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Media Library</p>
-                  <motion.p
-                    className="text-2xl font-semibold"
-                    initial={{ scale: 1 }}
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    0
-                  </motion.p>
-                  <p className="text-xs text-muted-foreground">Assets available</p>
                 </div>
               </div>
             </CardContent>
