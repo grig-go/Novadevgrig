@@ -1395,9 +1395,67 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   <div className="border-t pt-4">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-medium">Configure Multiple Data Sources</h4>
-                      <Badge variant={enabledSourcesCount > 0 ? "default" : "secondary"}>
-                        {enabledSourcesCount} of {formData.dataSources.length} sources enabled
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        {enabledSourcesCount > 0 && formData.dataSources.some((source: any) => {
+                          const mapping = sourceMappings.find((m: RSSSourceMapping) => m.sourceId === source.id);
+                          return mapping?.enabled && !source.fields?.length && !sampleData[source.id];
+                        }) && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={async () => {
+                              const enabledSourcesToTest = formData.dataSources.filter((source: any) => {
+                                const mapping = sourceMappings.find((m: RSSSourceMapping) => m.sourceId === source.id);
+                                return mapping?.enabled && !source.fields?.length && !sampleData[source.id];
+                              });
+
+                              if (enabledSourcesToTest.length === 0) return;
+
+                              setTestingSource('all');
+                              let successCount = 0;
+                              let failCount = 0;
+
+                              for (const source of enabledSourcesToTest) {
+                                try {
+                                  if (onTestDataSource) {
+                                    await onTestDataSource(source);
+                                    successCount++;
+                                    setAutoSelectSourceId(source.id);
+                                    await new Promise(resolve => setTimeout(resolve, 100));
+                                  }
+                                } catch (error) {
+                                  failCount++;
+                                  console.error(`Failed to test ${source.name}:`, error);
+                                }
+                              }
+
+                              setTestingSource(null);
+
+                              toast({
+                                title: 'Bulk test complete',
+                                description: `Successfully tested ${successCount} source(s)${failCount > 0 ? `, ${failCount} failed` : ''}`,
+                                variant: failCount > 0 ? 'destructive' : 'default',
+                              });
+                            }}
+                            disabled={testingSource !== null}
+                          >
+                            {testingSource === 'all' ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                Testing...
+                              </>
+                            ) : (
+                              <>
+                                <Search className="w-4 h-4 mr-2" />
+                                Test & Discover Enabled
+                              </>
+                            )}
+                          </Button>
+                        )}
+                        <Badge variant={enabledSourcesCount > 0 ? "default" : "secondary"}>
+                          {enabledSourcesCount} of {formData.dataSources.length} sources enabled
+                        </Badge>
+                      </div>
                     </div>
 
                     <Alert className="mb-4 flex items-start gap-2">
