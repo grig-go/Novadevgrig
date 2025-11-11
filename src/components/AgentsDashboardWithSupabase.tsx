@@ -53,15 +53,39 @@ interface AgentsDashboardWithSupabaseProps {
 function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
   // Extract data sources from api_endpoint_sources relationship
   const connectedDataSources = (endpoint as any).api_endpoint_sources?.map((eps: any) => ({
-    id: `source-${eps.data_source_id}`,
+    id: eps.data_source_id,
     name: eps.data_source?.name || 'Unknown Source',
     feedId: eps.data_source_id,
-    category: eps.data_source?.category
+    category: eps.data_source?.category,
+    type: eps.data_source?.type
   })) || [];
 
   // Extract all unique categories from the data sources
   const uniqueCategories = [...new Set(connectedDataSources.map((ds: any) => ds.category).filter(Boolean))];
   const dataType = uniqueCategories.length > 0 ? uniqueCategories : [];
+
+  // Extract format options from schema_config
+  // In nova-old, RSS config is stored at schema_config.schema.metadata
+  const schemaConfig = endpoint.schema_config || {};
+  const metadata = schemaConfig.schema?.metadata || {};
+
+  // Merge all format-specific options from metadata
+  const formatOptions = {
+    // Preserve environment/deployment settings at root
+    environment: schemaConfig.environment,
+    autoStart: schemaConfig.autoStart,
+    generateDocs: schemaConfig.generateDocs,
+    // Merge all metadata (RSS, JSON, XML, CSV options)
+    ...metadata,
+    // Explicitly include key RSS fields for clarity
+    channelTitle: metadata.channelTitle,
+    channelDescription: metadata.channelDescription,
+    channelLink: metadata.channelLink,
+    sourceMappings: metadata.sourceMappings || [],
+    mergeStrategy: metadata.mergeStrategy,
+    maxItemsPerSource: metadata.maxItemsPerSource,
+    maxTotalItems: metadata.maxTotalItems
+  };
 
   return {
     id: endpoint.id,
@@ -69,10 +93,11 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     description: endpoint.description,
     icon: '📡', // Default icon
     slug: endpoint.slug, // Include slug from database
-    environment: endpoint.schema_config?.environment || 'production',
-    autoStart: endpoint.schema_config?.autoStart !== undefined ? endpoint.schema_config.autoStart : true,
-    generateDocs: endpoint.schema_config?.generateDocs !== undefined ? endpoint.schema_config.generateDocs : true,
+    environment: schemaConfig.environment || 'production',
+    autoStart: schemaConfig.autoStart !== undefined ? schemaConfig.autoStart : true,
+    generateDocs: schemaConfig.generateDocs !== undefined ? schemaConfig.generateDocs : true,
     format: endpoint.output_format?.toUpperCase() as 'JSON' | 'RSS' | 'ATOM' || 'JSON',
+    formatOptions: formatOptions, // Map schema_config.schema.metadata to formatOptions
     auth: endpoint.auth_config?.type || 'none',
     requiresAuth: endpoint.auth_config?.required || false,
     status: endpoint.active ? 'ACTIVE' : 'PAUSED',
@@ -103,15 +128,24 @@ function convertAgentToAPIEndpoint(agent: Agent): Partial<APIEndpoint> {
     '1H': 3600
   };
 
+  // Extract environment settings from formatOptions
+  const formatOptions = agent.formatOptions || {};
+  const { environment, autoStart, generateDocs, ...metadata } = formatOptions;
+
   return {
     name: agent.name,
     slug: agent.slug || agent.url?.replace('/api/', '') || agent.name.toLowerCase().replace(/\s+/g, '-'),
     description: agent.description,
     output_format: agent.format.toLowerCase() as 'json' | 'rss' | 'xml' | 'csv' | 'custom',
     schema_config: {
-      environment: agent.environment || 'production',
-      autoStart: agent.autoStart !== undefined ? agent.autoStart : true,
-      generateDocs: agent.generateDocs !== undefined ? agent.generateDocs : true
+      environment: agent.environment || environment || 'production',
+      autoStart: agent.autoStart !== undefined ? agent.autoStart : (autoStart !== undefined ? autoStart : true),
+      generateDocs: agent.generateDocs !== undefined ? agent.generateDocs : (generateDocs !== undefined ? generateDocs : true),
+      // Store all format-specific options in schema.metadata (matching nova-old structure)
+      schema: {
+        metadata: metadata
+      },
+      mapping: [] // Preserve mapping array structure from nova-old
     },
     transform_config: {},
     relationship_config: {},

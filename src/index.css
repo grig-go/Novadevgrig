@@ -1340,6 +1340,10 @@
     max-width: var(--container-6xl);
   }
 
+  .max-w-90vw {
+    max-width: 90vw;
+  }
+
   .max-w-\[80\%\] {
     max-width: 80%;
   }

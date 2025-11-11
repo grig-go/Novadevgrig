@@ -83,6 +83,7 @@ export interface Agent {
   relationships?: AgentDataRelationship[];
   // Step 5: Output Format
   format: AgentFormat;
+  formatOptions?: Record<string, any>; // Format-specific options (channelTitle, sourceMappings, etc.)
   itemPath?: string; // JSONPath for generating items
   fieldMappings?: AgentFieldMapping[];
   fixedFields?: Record<string, string>; // For RSS/ATOM fixed fields

@@ -23,6 +23,8 @@ import {
 import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, Key, AlertCircle } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
+import OutputFormatStep from "./OutputFormatStep";
+import { useFetchProxy } from "../hooks/useFetchProxy";
 
 interface AgentWizardProps {
   open: boolean;
@@ -45,6 +47,8 @@ const dataTypeIcons: Record<AgentDataType, any> = {
 };
 
 export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds = [] }: AgentWizardProps) {
+  const { fetchViaProxy } = useFetchProxy();
+
   const [currentStep, setCurrentStep] = useState<WizardStep>('basic');
   const [formData, setFormData] = useState<Partial<Agent>>(editAgent || {
     name: '',
@@ -58,6 +62,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     dataSources: [],
     relationships: [],
     format: 'JSON',
+    formatOptions: {},
     itemPath: '',
     fieldMappings: [],
     fixedFields: {},
@@ -85,6 +90,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [testResults, setTestResults] = useState<Record<number, any>>({});
   const [testLoading, setTestLoading] = useState<Record<number, boolean>>({});
   const [testParams, setTestParams] = useState<Record<number, Record<string, string>>>({});
+
+  // State for sample data from data sources
+  const [sampleData, setSampleData] = useState<Record<string, any>>({});
 
   // Helper function to extract JSON fields
   const extractJsonFields = (data: any, prefix: string = ''): string[] => {
@@ -776,12 +784,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const renderDataSources = () => {
     const selectedCategories = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
-    const addDataSource = (sourceId: string, sourceName: string, sourceCategory: string) => {
+    const addDataSource = (sourceId: string, sourceName: string, sourceCategory: string, sourceType: string) => {
       const newSource: AgentDataSource = {
         id: `source-${Date.now()}`,
         name: sourceName,
         feedId: sourceId,
-        category: sourceCategory as AgentDataType
+        category: sourceCategory as AgentDataType,
+        type: sourceType
       };
       setFormData({
         ...formData,
@@ -873,7 +882,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       <Button
                         size="sm"
                         variant={isAdded ? "outline" : "default"}
-                        onClick={() => isAdded ? null : addDataSource(source.id, source.name, source.category)}
+                        onClick={() => isAdded ? null : addDataSource(source.id, source.name, source.category, source.type)}
                         disabled={isAdded}
                       >
                         {isAdded ? 'Added' : 'Add'}
@@ -1780,186 +1789,205 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     );
   };
 
-  const renderOutputFormat = () => {
-    const addFieldMapping = () => {
-      if (newMapping.outputField && newMapping.sourceId && newMapping.sourcePath) {
-        setFormData({
-          ...formData,
-          fieldMappings: [
-            ...(formData.fieldMappings || []),
+  // Handler for testing data sources in OutputFormat step
+  const handleTestDataSource = async (source: any) => {
+    try {
+      let fields: string[] = [];
+      let responseData: any = null;
+
+      // First, fetch the full data source from the database if we only have a reference
+      let fullSource = source;
+      if (source.feedId && !source.config && !source.api_config) {
+        const { data: dbSource, error } = await supabase
+          .from('data_sources')
+          .select('*')
+          .eq('id', source.feedId)
+          .single();
+
+        if (error) {
+          throw new Error(`Failed to fetch data source: ${error.message}`);
+        }
+
+        if (dbSource) {
+          const ds = dbSource as any;
+          fullSource = {
+            ...source,
+            type: ds.type,
+            config: ds.api_config || ds.rss_config || ds.file_config || ds.database_config,
+            api_config: ds.api_config,
+            rss_config: ds.rss_config,
+            file_config: ds.file_config,
+            database_config: ds.database_config
+          };
+        }
+      }
+
+      // Handle different possible structures for API config (matching nova-old)
+      let apiConfig: any = null;
+
+      // For API sources, make real API calls
+      if (fullSource.type === 'api') {
+        // Check different possible locations for API configuration
+        if (fullSource.config && typeof fullSource.config === 'object') {
+          // If config is an object, it might be the API config directly
+          if ('url' in fullSource.config) {
+            apiConfig = fullSource.config;
+          }
+          // Or it might be nested under api_config
+          else if ('api_config' in fullSource.config && fullSource.config.api_config) {
+            apiConfig = fullSource.config.api_config;
+          }
+        }
+        // Check if api_config is at root level
+        else if (fullSource.api_config) {
+          apiConfig = fullSource.api_config;
+        }
+        // Check if URL is at root level (legacy structure)
+        else if ('url' in fullSource) {
+          apiConfig = {
+            url: fullSource.url,
+            method: fullSource.method || 'GET',
+            headers: fullSource.headers || {}
+          };
+        }
+
+        if (!apiConfig || !apiConfig.url) {
+          throw new Error(`API URL not found for ${fullSource.name}. Please check the data source configuration.`);
+        }
+
+        // Build headers including authentication
+        const headers: Record<string, string> = { ...(apiConfig.headers || {}) };
+
+        // Add authentication headers if configured
+        if (apiConfig.auth_type === 'bearer' && apiConfig.bearer_token) {
+          headers['Authorization'] = `Bearer ${apiConfig.bearer_token}`;
+        } else if (apiConfig.auth_type === 'api_key_header' && apiConfig.api_key_header && apiConfig.api_key_value) {
+          headers[apiConfig.api_key_header] = apiConfig.api_key_value;
+        }
+
+        // Build the test URL with params
+        let testUrl = apiConfig.url;
+        if (apiConfig.params && Object.keys(apiConfig.params).length > 0) {
+          const params = new URLSearchParams(apiConfig.params);
+          testUrl += (testUrl.includes('?') ? '&' : '?') + params.toString();
+        }
+
+        // Use fetchViaProxy for the API request
+        const result = await fetchViaProxy(testUrl, {
+          method: apiConfig.method || 'GET',
+          headers,
+          body: apiConfig.body
+        });
+
+        // The data from fetchViaProxy is in result.data
+        let data = result.data;
+
+        // Parse JSON if it's a string
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data);
+          } catch (e) {
+            console.warn('Response is not JSON:', e);
+            throw new Error('API returned non-JSON response');
+          }
+        }
+
+        // Store the full response data
+        responseData = data;
+
+        // Navigate to the data path if specified
+        let targetData = data;
+        const dataPath = apiConfig.data_path || apiConfig.dataPath;
+        if (dataPath) {
+          const pathParts = dataPath.split('.');
+          for (const part of pathParts) {
+            if (targetData && typeof targetData === 'object' && part in targetData) {
+              targetData = targetData[part];
+            } else {
+              console.warn(`Data path "${dataPath}" not found in response`);
+              break;
+            }
+          }
+        }
+
+        // Extract fields from the response
+        if (Array.isArray(targetData) && targetData.length > 0) {
+          const firstItem = targetData[0];
+          if (typeof firstItem === 'object' && firstItem !== null) {
+            fields = Object.keys(firstItem).filter(key =>
+              !key.startsWith('_') && !key.startsWith('$')
+            );
+          }
+        } else if (typeof targetData === 'object' && targetData !== null) {
+          fields = Object.keys(targetData).filter(key =>
+            !key.startsWith('_') && !key.startsWith('$')
+          );
+        }
+      } else if (fullSource.type === 'rss') {
+        // RSS feeds have standard fields
+        fields = ['title', 'description', 'link', 'pubDate', 'guid', 'author', 'category', 'content'];
+        responseData = {
+          items: [
             {
-              outputField: newMapping.outputField,
-              sourceId: newMapping.sourceId,
-              sourcePath: newMapping.sourcePath,
-              transform: newMapping.transform
+              title: 'RSS Item 1',
+              description: 'RSS Description 1',
+              link: 'https://example.com/rss/1',
+              pubDate: new Date().toISOString(),
+              guid: 'rss-1',
+              author: 'RSS Author',
+              category: 'RSS Category'
+            },
+            {
+              title: 'RSS Item 2',
+              description: 'RSS Description 2',
+              link: 'https://example.com/rss/2',
+              pubDate: new Date().toISOString(),
+              guid: 'rss-2',
+              author: 'RSS Author 2',
+              category: 'News'
             }
           ]
-        });
-        setNewMapping({});
+        };
+      } else if (fullSource.type === 'database') {
+        // Database sources need to be synced first
+        throw new Error('Database field discovery requires the data source to be synced first');
+      } else {
+        // If we got here, the source type is not recognized or not supported for testing
+        throw new Error(`Unable to test data source "${fullSource.name}". Source type "${fullSource.type || 'unknown'}" is not supported or API configuration is missing.`);
       }
-    };
 
-    const removeFieldMapping = (index: number) => {
-      setFormData({
-        ...formData,
-        fieldMappings: formData.fieldMappings?.filter((_, i) => i !== index)
-      });
-    };
+      // Store sample data (full response object with nested arrays)
+      setSampleData((prev: Record<string, any>) => ({
+        ...prev,
+        [source.id]: responseData
+      }));
 
-    const addFixedField = () => {
-      if (newFixedField.key && newFixedField.value) {
-        setFormData({
-          ...formData,
-          fixedFields: {
-            ...formData.fixedFields,
-            [newFixedField.key]: newFixedField.value
-          }
-        });
-        setNewFixedField({ key: '', value: '' });
-      }
-    };
+      // Update the source with discovered fields
+      setFormData((prev: Partial<Agent>) => ({
+        ...prev,
+        dataSources: prev.dataSources?.map((ds: AgentDataSource) =>
+          ds.id === source.id
+            ? { ...ds, fields }
+            : ds
+        )
+      }));
 
-    const removeFixedField = (key: string) => {
-      const updated = { ...formData.fixedFields };
-      delete updated[key];
-      setFormData({ ...formData, fixedFields: updated });
-    };
+      return { fields, data: responseData };
+    } catch (error) {
+      console.error('Failed to test data source:', error);
+      throw error;
+    }
+  };
 
-    const sources = formData.dataSources || [];
-
+  const renderOutputFormat = () => {
     return (
-      <div className="space-y-4">
-        <div>
-          <Label htmlFor="format">Output Format *</Label>
-          <Select
-            value={formData.format}
-            onValueChange={(value: AgentFormat) => setFormData({ ...formData, format: value })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="JSON">JSON</SelectItem>
-              <SelectItem value="RSS">RSS 2.0</SelectItem>
-              <SelectItem value="ATOM">Atom</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {(formData.format === 'RSS' || formData.format === 'ATOM') && (
-          <>
-            <div>
-              <Label htmlFor="item-path">Item Generation Path</Label>
-              <Input
-                id="item-path"
-                value={formData.itemPath || ''}
-                onChange={(e) => setFormData({ ...formData, itemPath: e.target.value })}
-                placeholder="e.g., $.data.items"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                JSONPath to the array of items in the source data
-              </p>
-            </div>
-
-            {/* Fixed Fields for RSS/ATOM */}
-            <div className="space-y-2">
-              <Label>Fixed Feed Fields</Label>
-              <div className="space-y-2">
-                {Object.entries(formData.fixedFields || {}).map(([key, value]) => (
-                  <div key={key} className="flex items-center gap-2 p-2 bg-muted rounded">
-                    <code className="text-xs flex-1">{key}: {value}</code>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFixedField(key)}
-                    >
-                      <X className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Field name"
-                  value={newFixedField.key}
-                  onChange={(e) => setNewFixedField({ ...newFixedField, key: e.target.value })}
-                />
-                <Input
-                  placeholder="Value"
-                  value={newFixedField.value}
-                  onChange={(e) => setNewFixedField({ ...newFixedField, value: e.target.value })}
-                />
-                <Button onClick={addFixedField} size="sm">
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-
-            {/* Field Mappings */}
-            <div className="space-y-2">
-              <Label>Field Mappings</Label>
-              <div className="space-y-2">
-                {formData.fieldMappings?.map((mapping, index) => {
-                  const source = sources.find(s => s.id === mapping.sourceId);
-                  return (
-                    <div key={index} className="flex items-center gap-2 p-2 bg-muted rounded text-sm">
-                      <span className="flex-1">
-                        <span className="font-medium">{mapping.outputField}</span> ← {source?.name}.{mapping.sourcePath}
-                        {mapping.transform && <span className="text-muted-foreground ml-2">| {mapping.transform}</span>}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFieldMapping(index)}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-              <Card>
-                <CardContent className="p-3 space-y-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    <Input
-                      placeholder="Output field"
-                      value={newMapping.outputField || ''}
-                      onChange={(e) => setNewMapping({ ...newMapping, outputField: e.target.value })}
-                    />
-                    <Select
-                      value={newMapping.sourceId}
-                      onValueChange={(value) => setNewMapping({ ...newMapping, sourceId: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Source" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sources.map(s => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Source path"
-                      value={newMapping.sourcePath || ''}
-                      onChange={(e) => setNewMapping({ ...newMapping, sourcePath: e.target.value })}
-                    />
-                  </div>
-                  <Input
-                    placeholder="Transform (optional)"
-                    value={newMapping.transform || ''}
-                    onChange={(e) => setNewMapping({ ...newMapping, transform: e.target.value })}
-                  />
-                  <Button onClick={addFieldMapping} size="sm" className="w-full">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Field Mapping
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-      </div>
+      <OutputFormatStep
+        formData={formData}
+        setFormData={setFormData}
+        sampleData={sampleData}
+        onTestDataSource={handleTestDataSource}
+        isCreateMode={!editAgent}
+      />
     );
   };
 
@@ -2412,7 +2440,15 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   return (
     <Dialog open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) handleClose(); }}>
-      <DialogContent className="max-w-6xl sm:max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-90vw sm:max-w-90vw max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e: Event) => {
+          // Prevent closing on overlay click in create mode
+          if (!editAgent) {
+            e.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div className="flex-1">
