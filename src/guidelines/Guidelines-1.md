@@ -368,7 +368,7 @@ Nova Dashboard uses Supabase as the backend database and API layer.
 
 **Important Files:**
 - `/supabase/migrations/` - SQL migration files
-- `/supabase/functions/server/` - Edge Functions (Hono server)
+- `/supabase/functions/make-server-cbef71cf/` - Edge Function (Hono server: server_index.tsx, kv_store.tsx)
 - `/utils/supabase/info.tsx` - Supabase credentials
 - `/utils/supabase/kv_store.tsx` - Key-value store utilities
 

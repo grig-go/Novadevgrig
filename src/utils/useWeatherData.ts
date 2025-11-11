@@ -9,6 +9,10 @@ export interface WeatherDataStats {
   lastUpdated: string;
   loading: boolean;
   error: string | null;
+  providerSettings?: {
+    temperatureUnit: string;
+    language: string;
+  };
 }
 
 export function useWeatherData() {
@@ -24,7 +28,7 @@ export function useWeatherData() {
   const fetchWeatherData = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-data`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -32,31 +36,37 @@ export function useWeatherData() {
         }
       );
 
-      const data = await response.json();
-
       if (!response.ok) {
-        // Handle specific error cases
-        if (data.error === "No active weather provider configured") {
-          setStats({
-            locations: [],
-            totalLocations: 0,
-            activeAlerts: 0,
-            lastUpdated: new Date().toISOString(),
-            loading: false,
-            error: "No weather provider configured",
-          });
-          return;
-        }
-        throw new Error(data.error || "Failed to fetch weather data");
+        const errorText = await response.text();
+        console.error("Weather data fetch failed:", response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
       }
 
+      const result = await response.json();
+
+      console.log("🔴 Backend response structure:", result);
+      
+      // ✅ Handle new response format with metadata
+      if (result.ok) {
+        console.log("✅ Providers:", result.providers);
+        console.log("✅ Total Locations Processed:", result.locationsProcessed);
+      } else {
+        console.error("❌ Weather fetch failed:", result.error || result.detail);
+        throw new Error(result.error || result.detail || "Weather fetch failed");
+      }
+      
+      // Extract the data array from the response
+      const weatherData = result.data || [];
+      
+      console.log("🔍 CRITICAL: First location from backend response:", JSON.stringify(weatherData?.[0]?.location, null, 2));
+      
       // Handle empty locations
-      if (!data.locations || data.locations.length === 0) {
+      if (!weatherData || weatherData.length === 0) {
         setStats({
           locations: [],
           totalLocations: 0,
           activeAlerts: 0,
-          lastUpdated: data.lastUpdated || new Date().toISOString(),
+          lastUpdated: result.lastUpdated || new Date().toISOString(),
           loading: false,
           error: null,
         });
@@ -64,58 +74,47 @@ export function useWeatherData() {
       }
 
       // Transform backend response to WeatherLocationWithOverrides format
-      console.log(`🔴 RAW DATA from backend (before processing):`, data.locations);
+      // The backend now handles override processing, so we just pass through the data
+      console.log(`🔴 RAW DATA from backend (backend handles overrides now):`, weatherData);
       
-      const weatherLocations: WeatherLocationWithOverrides[] = data.locations
-        .filter((loc: any) => loc.success && loc.data)
-        .map((loc: any) => {
-          const location = loc.location;
-          
-          console.log(`🔵 FRONTEND useWeatherData: Processing location RAW:`, location);
-          console.log(`🔵 FRONTEND useWeatherData: Processing location DETAILS:`, {
-            id: location.id,
-            name: location.name,
-            custom_name: location.custom_name,
-          });
-          
-          // Process location name override ONLY (no other overrides)
-          const processedLocation: any = {
-            ...location,
-            name: location.custom_name 
-              ? createOverride(location.name, location.custom_name)
-              : location.name,
-          };
-          
-          console.log(`🔵 FRONTEND useWeatherData: Processed location:`, {
-            id: processedLocation.id,
-            name: processedLocation.name,
-            name_is_object: typeof processedLocation.name === 'object',
-            hasNameOverride: typeof processedLocation.name === 'object' && processedLocation.name !== null && 'isOverridden' in processedLocation.name,
-          });
-          
-          // Final summary
-          if (location.custom_name) {
-            console.log(`✅ FRONTEND useWeatherData: Created override for \"${location.name}\" → \"${location.custom_name}\"`);
-          }
-          
-          return {
-            location: processedLocation,
-            data: loc.data, // Use unmodified weather data
-          };
+      const weatherLocations: WeatherLocationWithOverrides[] = weatherData.map((weatherItem: any) => {
+        console.log(`🔵 FRONTEND: Received location from backend:`, {
+          id: weatherItem.location.id,
+          name: weatherItem.location.name,
+          name_type: typeof weatherItem.location.name,
+          is_override: typeof weatherItem.location.name === 'object' && weatherItem.location.name?.isOverridden,
         });
+        
+        console.log(`🟢 FRONTEND: Weather data structure for ${weatherItem.location.name}:`, {
+          hasData: !!weatherItem.data,
+          hasCurrent: !!weatherItem.data?.current,
+          hasHourly: !!weatherItem.data?.hourly,
+          hasDaily: !!weatherItem.data?.daily,
+          hasAlerts: !!weatherItem.data?.alerts,
+          hourlyItems: weatherItem.data?.hourly?.items?.length || 0,
+          dailyItems: weatherItem.data?.daily?.items?.length || 0,
+          alertsCount: weatherItem.data?.alerts?.length || 0
+        });
+        
+        return {
+          location: weatherItem.location,
+          data: weatherItem.data, // Use the weather data from backend response
+        };
+      });
 
       // Calculate active alerts
       const activeAlerts = weatherLocations.filter(
-        (loc) => loc.data.alerts && loc.data.alerts.length > 0
+        (loc) => loc.data?.alerts && loc.data.alerts.length > 0
       ).length;
 
       setStats({
         locations: weatherLocations,
         totalLocations: weatherLocations.length,
         activeAlerts,
-        lastUpdated: data.lastUpdated || new Date().toISOString(),
+        lastUpdated: result.lastUpdated || new Date().toISOString(),
         loading: false,
         error: null,
+        providerSettings: result.providerSettings,
       });
     } catch (error) {
       console.error("Error fetching weather data:", error);
@@ -129,13 +128,8 @@ export function useWeatherData() {
 
   useEffect(() => {
     fetchWeatherData();
-
-    // Refresh every 5 minutes
-    const interval = setInterval(() => {
-      fetchWeatherData();
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
+    
+    // Auto-refresh removed - use manual refresh button instead
   }, []);
 
   return { stats, refresh: fetchWeatherData };

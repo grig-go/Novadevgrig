@@ -25,7 +25,7 @@ export function useNewsProviders() {
       try {
         // Fetch news providers from backend
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-providers`,
+          `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-providers`,
           {
             headers: {
               'Authorization': `Bearer ${publicAnonKey}`,

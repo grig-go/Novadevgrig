@@ -1,31 +1,45 @@
 import { useState, useEffect } from "react";
+import { WeatherLocationWithOverrides, WeatherView } from "../types/weather";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { WeatherLocationWithOverrides, WeatherView, getFieldValue } from "../types/weather";
-import { 
-  Search, 
-  Filter, 
-  MapPin, 
-  AlertTriangle, 
-  Wind, 
-  Thermometer, 
-  Cloud,
-  Waves,
-  Sun,
-  Clock,
-  MoreHorizontal,
+import { Badge } from "./ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import {
+  Search,
+  Filter,
+  MapPin,
+  Calendar,
+  CloudDrizzle,
+  AlertTriangle,
+  Wind,
   ChevronLeft,
   ChevronRight,
-  ArrowUpAZ,
-  ArrowDownAZ
+  ArrowUpDown,
+  Clock,
+  CalendarDays,
+  CloudRain,
+  Gauge,
+  MoreHorizontal,
 } from "lucide-react";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
+
+interface Provider {
+  id: string;
+  name: string;
+  type: string;
+  isActive: boolean;
+}
 
 interface WeatherFiltersProps {
   locations: WeatherLocationWithOverrides[];
-  onFilterChange: (filteredLocations: WeatherLocationWithOverrides[]) => void;
+  onFilterChange: (filtered: WeatherLocationWithOverrides[]) => void;
   currentView: WeatherView;
   onViewChange: (view: WeatherView) => void;
   currentPage: number;
@@ -36,378 +50,282 @@ interface WeatherFiltersProps {
   onSortChange: (order: "asc" | "desc") => void;
 }
 
-export function WeatherFilters({ 
-  locations, 
-  onFilterChange, 
-  currentView, 
+export function WeatherFilters({
+  locations,
+  onFilterChange,
+  currentView,
   onViewChange,
   currentPage,
   totalPages,
   totalResults,
   onPageChange,
   sortOrder,
-  onSortChange
+  onSortChange,
 }: WeatherFiltersProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState<string>("all");
   const [selectedCountry, setSelectedCountry] = useState<string>("all");
   const [selectedState, setSelectedState] = useState<string>("all");
-  const [temperatureRange, setTemperatureRange] = useState<string>("all");
+  const [selectedTempRange, setSelectedTempRange] = useState<string>("all");
+  const [providers, setProviders] = useState<Provider[]>([]);
 
+  // Load providers when component mounts
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
 
-  // Apply filters whenever filter values change
+        if (response.ok) {
+          const data = await response.json();
+          setProviders(data.providers || []);
+        }
+      } catch (error) {
+        console.error('Error loading providers:', error);
+      }
+    };
+
+    loadProviders();
+  }, []);
+
+  // Apply filters whenever inputs change
   useEffect(() => {
     let filtered = [...locations];
 
-    // View-based filter: Only show locations with alerts when alerts view is active
-    if (currentView === 'alerts') {
-      filtered = filtered.filter(location => location.data.alerts.length > 0);
+    // Search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (loc) =>
+          loc.location.name.toString().toLowerCase().includes(term) ||
+          (typeof loc.location.name === "object" &&
+            loc.location.name.originalValue?.toLowerCase().includes(term)) ||
+          loc.location.admin1?.toLowerCase().includes(term) ||
+          loc.location.country?.toLowerCase().includes(term)
+      );
     }
 
-    // Search filter
-    if (searchQuery.trim()) {
-      filtered = filtered.filter(location => {
-        const name = getFieldValue(location.location.name) || '';
-        const admin1 = getFieldValue(location.location.admin1) || '';
-        const country = getFieldValue(location.location.country) || '';
-        
-        return name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               admin1.toLowerCase().includes(searchQuery.toLowerCase()) ||
-               country.toLowerCase().includes(searchQuery.toLowerCase());
-      });
+    // Provider filter
+    if (selectedProvider !== "all") {
+      filtered = filtered.filter(
+        (loc) => loc.location.provider_id === selectedProvider
+      );
     }
 
     // Country filter
     if (selectedCountry !== "all") {
-      filtered = filtered.filter(location => 
-        getFieldValue(location.location.country) === selectedCountry
+      filtered = filtered.filter(
+        (loc) => loc.location.country?.toLowerCase() === selectedCountry
       );
     }
 
     // State filter
     if (selectedState !== "all") {
-      filtered = filtered.filter(location => 
-        getFieldValue(location.location.admin1) === selectedState
+      filtered = filtered.filter(
+        (loc) => loc.location.admin1?.toLowerCase() === selectedState
       );
     }
 
     // Temperature range filter
-    if (temperatureRange !== "all") {
-      const temp = (location: WeatherLocationWithOverrides) => {
-        const tempValue = location.data.current.temperature.value;
-        return typeof tempValue === 'number' ? tempValue : getFieldValue(tempValue);
-      };
-      switch (temperatureRange) {
-        case "cold":
-          filtered = filtered.filter(location => temp(location) < 32);
-          break;
-        case "cool":
-          filtered = filtered.filter(location => temp(location) >= 32 && temp(location) < 60);
-          break;
-        case "moderate":
-          filtered = filtered.filter(location => temp(location) >= 60 && temp(location) < 80);
-          break;
-        case "warm":
-          filtered = filtered.filter(location => temp(location) >= 80 && temp(location) < 95);
-          break;
-        case "hot":
-          filtered = filtered.filter(location => temp(location) >= 95);
-          break;
-      }
+    if (selectedTempRange !== "all") {
+      const [minTemp, maxTemp] = selectedTempRange.split("-").map(Number);
+      filtered = filtered.filter(
+        (loc) =>
+          loc.data.current?.temperature >= minTemp &&
+          loc.data.current?.temperature <= maxTemp
+      );
     }
 
-
+    // View-specific filters
+    if (currentView === "alerts") {
+      filtered = filtered.filter((loc) => (loc.data.alerts?.length || 0) > 0);
+    }
 
     onFilterChange(filtered);
-  }, [searchQuery, selectedCountry, selectedState, temperatureRange, locations, currentView, onFilterChange]);
+  }, [searchTerm, selectedProvider, selectedCountry, selectedState, selectedTempRange, currentView, locations, onFilterChange]);
 
-  const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-  };
+  // Get unique countries from locations
+  const countries = Array.from(
+    new Set(locations.map((loc) => loc.location.country).filter(Boolean))
+  ).sort();
 
-  const handleCountryChange = (value: string) => {
-    setSelectedCountry(value);
-  };
+  // Get unique states from locations
+  const states = Array.from(
+    new Set(locations.map((loc) => loc.location.admin1).filter(Boolean))
+  ).sort();
 
-  const handleStateChange = (value: string) => {
-    setSelectedState(value);
-  };
-
-  const handleTemperatureRangeChange = (value: string) => {
-    setTemperatureRange(value);
-  };
-
-
-
-  const clearFilters = () => {
-    setSearchQuery("");
-    setSelectedCountry("all");
-    setSelectedState("all");
-    setTemperatureRange("all");
-    // The useEffect will automatically apply filters when state changes
-  };
-
-  // Get unique countries and states for filter dropdowns
-  const countries = Array.from(new Set(locations.map(loc => getFieldValue(loc.location.country)))).filter(Boolean).sort();
-  const states = Array.from(new Set(locations.map(loc => getFieldValue(loc.location.admin1)))).filter(Boolean).sort();
-
-  // Get statistics
-  const totalLocations = locations.length;
-  const activeAlerts = locations.filter(loc => loc.data.alerts.length > 0).length;
-
-  const views: Array<{ key: WeatherView; label: string; icon: React.ReactNode }> = [
-    { key: 'current', label: 'Current', icon: <Sun className="w-4 h-4" /> },
-    { key: 'hourly', label: 'Hourly', icon: <Clock className="w-4 h-4" /> },
-    { key: 'daily', label: 'Daily', icon: <Cloud className="w-4 h-4" /> },
-    { key: 'alerts', label: 'Alerts', icon: <AlertTriangle className="w-4 h-4" /> },
-    { key: 'tropical', label: 'Tropical', icon: <Waves className="w-4 h-4" /> },
-    { key: 'air-quality', label: 'Air Quality', icon: <Wind className="w-4 h-4" /> },
-    { key: 'other', label: 'Other', icon: <MoreHorizontal className="w-4 h-4" /> }
+  const viewOptions: { value: WeatherView; label: string; icon: any }[] = [
+    { value: "current", label: "Current", icon: CloudDrizzle },
+    { value: "hourly", label: "Hourly", icon: Clock },
+    { value: "daily", label: "Daily", icon: CalendarDays },
+    { value: "alerts", label: "Alerts", icon: AlertTriangle },
+    { value: "tropical", label: "Tropical", icon: CloudRain },
+    { value: "air-quality", label: "Air Quality", icon: Wind },
+    { value: "other", label: "Other", icon: MoreHorizontal },
   ];
 
   return (
     <Card>
       <CardContent className="p-4">
-
-
-        {/* View Tabs */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {views.map((view) => (
-            <Button
-              key={view.key}
-              variant={currentView === view.key ? "default" : "outline"}
-              size="sm"
-              onClick={() => onViewChange(view.key)}
-              className="gap-1.5"
-            >
-              {view.icon}
-              {view.label}
-              {view.key === 'alerts' && activeAlerts > 0 && (
-                <Badge variant="destructive" className="ml-1 text-xs h-4 px-1">
-                  {activeAlerts}
-                </Badge>
-              )}
-            </Button>
-          ))}
-        </div>
-
-        {/* Filters Row */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative min-w-[250px]">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search locations..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          <Select value={selectedCountry} onValueChange={handleCountryChange}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Countries" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Countries</SelectItem>
-              {countries.map((country) => (
-                <SelectItem key={country} value={country}>
-                  {country}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={selectedState} onValueChange={handleStateChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="All States" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All States</SelectItem>
-              {states.map((state) => (
-                <SelectItem key={state} value={state}>
-                  {state}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={temperatureRange} onValueChange={handleTemperatureRangeChange}>
-            <SelectTrigger className="w-[160px]">
-              <SelectValue placeholder="Temperature" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Temps</SelectItem>
-              <SelectItem value="cold">Cold (&lt; 32°F)</SelectItem>
-              <SelectItem value="cool">Cool (32-59°F)</SelectItem>
-              <SelectItem value="moderate">Moderate (60-79°F)</SelectItem>
-              <SelectItem value="warm">Warm (80-94°F)</SelectItem>
-              <SelectItem value="hot">Hot (≥ 95°F)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSortChange(sortOrder === "asc" ? "desc" : "asc")}
-            className="gap-2"
-          >
-            {sortOrder === "asc" ? (
-              <>
-                <ArrowUpAZ className="w-4 h-4" />
-                A-Z
-              </>
-            ) : (
-              <>
-                <ArrowDownAZ className="w-4 h-4" />
-                Z-A
-              </>
-            )}
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearFilters}
-            className="gap-2"
-          >
-            <Filter className="w-4 h-4" />
-            Clear
-          </Button>
-        </div>
-
-        {/* Active Filters */}
-        {(searchQuery || selectedCountry !== "all" || selectedState !== "all" || temperatureRange !== "all") && (
-          <div className="flex items-center gap-2 mt-4 pt-4 border-t">
-            <span className="text-sm text-muted-foreground">Active filters:</span>
-            {searchQuery && (
-              <Badge variant="secondary" className="gap-1">
-                Search: {searchQuery}
-                <button
-                  onClick={() => handleSearchChange("")}
-                  className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                >
-                  ×
-                </button>
-              </Badge>
-            )}
-            {selectedCountry !== "all" && (
-              <Badge variant="secondary" className="gap-1">
-                Country: {selectedCountry}
-                <button
-                  onClick={() => handleCountryChange("all")}
-                  className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                >
-                  ×
-                </button>
-              </Badge>
-            )}
-            {selectedState !== "all" && (
-              <Badge variant="secondary" className="gap-1">
-                State: {selectedState}
-                <button
-                  onClick={() => handleStateChange("all")}
-                  className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                >
-                  ×
-                </button>
-              </Badge>
-            )}
-            {temperatureRange !== "all" && (
-              <Badge variant="secondary" className="gap-1">
-                Temp: {temperatureRange}
-                <button
-                  onClick={() => handleTemperatureRangeChange("all")}
-                  className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
-                >
-                  ×
-                </button>
-              </Badge>
-            )}
-
-          </div>
-        )}
-
-        {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <div className="text-sm text-muted-foreground">
-              Showing {((currentPage - 1) * 9) + 1}-{Math.min(currentPage * 9, totalResults)} of {totalResults} locations
-            </div>
-            <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-4">
+          {/* Row 1: View Tabs */}
+          <div className="flex flex-wrap gap-2">
+            {viewOptions.map(({ value, label, icon: Icon }) => (
               <Button
-                type="button"
-                variant="outline"
+                key={value}
+                variant={currentView === value ? "default" : "outline"}
                 size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPageChange(currentPage - 1);
-                }}
-                disabled={currentPage === 1}
-                className="gap-1"
+                onClick={() => onViewChange(value)}
+                className="gap-2"
               >
-                <ChevronLeft className="w-4 h-4" />
-                Previous
+                <Icon className="w-4 h-4" />
+                {label}
               </Button>
-              
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                  // Show first page, last page, current page, and pages around current
-                  const showPage = 
-                    page === 1 || 
-                    page === totalPages || 
-                    (page >= currentPage - 1 && page <= currentPage + 1);
-                  
-                  const showEllipsis = 
-                    (page === 2 && currentPage > 3) ||
-                    (page === totalPages - 1 && currentPage < totalPages - 2);
+            ))}
+          </div>
 
-                  if (showEllipsis) {
-                    return (
-                      <span key={page} className="px-2 text-muted-foreground">
-                        ...
-                      </span>
-                    );
-                  }
+          {/* Row 2: Search and Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Search - spans 2 columns on large screens */}
+            <div className="relative lg:col-span-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search locations..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
 
-                  if (!showPage) return null;
+            {/* Country Filter */}
+            <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Countries" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Countries</SelectItem>
+                {countries.map((country) => (
+                  <SelectItem key={country} value={country.toLowerCase()}>
+                    {country}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-                  return (
-                    <Button
-                      key={page}
-                      type="button"
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onPageChange(page);
-                      }}
-                      className="w-8 h-8 p-0"
-                    >
-                      {page}
-                    </Button>
-                  );
-                })}
+            {/* State Filter */}
+            <Select value={selectedState} onValueChange={setSelectedState}>
+              <SelectTrigger>
+                <SelectValue placeholder="All States" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All States</SelectItem>
+                {states.map((state) => (
+                  <SelectItem key={state} value={state.toLowerCase()}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Temperature Range Filter */}
+            <Select value={selectedTempRange} onValueChange={setSelectedTempRange}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Temps" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Temps</SelectItem>
+                <SelectItem value="-50-0">Below 0°</SelectItem>
+                <SelectItem value="0-32">0° - 32°</SelectItem>
+                <SelectItem value="32-50">32° - 50°</SelectItem>
+                <SelectItem value="50-70">50° - 70°</SelectItem>
+                <SelectItem value="70-90">70° - 90°</SelectItem>
+                <SelectItem value="90-150">Above 90°</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Provider Filter */}
+            <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+              <SelectTrigger>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  <SelectValue placeholder="All Providers" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Data Providers</SelectItem>
+                {providers.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.name} ({provider.type})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Pagination - Media Library Style */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2 border-t">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => onPageChange(pageNum)}
+                          className="w-10"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                    className="gap-2"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Showing {totalResults} location{totalResults !== 1 ? "s" : ""}
+                </div>
               </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPageChange(currentPage + 1);
-                }}
-                disabled={currentPage === totalPages}
-                className="gap-1"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );

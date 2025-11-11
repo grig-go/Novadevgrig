@@ -145,7 +145,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       try {
         setLoadingInsights(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/finance-ai-insights`,
+          `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -302,7 +302,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/finance-ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights`,
         {
           method: 'POST',
           headers: {
@@ -314,8 +314,9 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
             response: aiResponse,
             selectedIndex: selectedIndex || null,
             selectedAssets: selectedAssetType,
-            provider: aiProvider?.name || 'Unknown',
+            aiProvider: aiProvider?.name || 'Unknown',
             model: currentModel,
+            insightType: 'all',
           }),
         }
       );
@@ -325,7 +326,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       }
 
       const data = await response.json();
-      setSavedInsights(prev => [data.insight, ...prev]);
+      setSavedInsights(prev => [data.data, ...prev]);
       setInsightSaved(true);
       toast.success('Insight saved successfully!');
       
@@ -345,7 +346,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/finance-ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights/${insightId}`,
         {
           method: 'DELETE',
           headers: {
@@ -393,25 +394,26 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
 
     // Add saved insights as AI-generated insights
     savedInsights.forEach((saved) => {
+      const metadata = saved.metadata ? (typeof saved.metadata === 'string' ? JSON.parse(saved.metadata) : saved.metadata) : {};
       results.push({
         id: saved.id,
         type: 'AI_SAVED',
         severity: 'low',
         icon: <Brain className="w-4 h-4 text-purple-600" />,
-        title: saved.question,
-        shortDescription: saved.response.length > 150 
-          ? saved.response.substring(0, 150) + '...' 
-          : saved.response,
+        title: saved.topic,
+        shortDescription: saved.insight.length > 150 
+          ? saved.insight.substring(0, 150) + '...' 
+          : saved.insight,
         trend: 'info',
         probability: 0,
         confidence: 0,
         details: {
-          fullResponse: saved.response,
-          provider: saved.provider,
-          model: saved.model,
-          createdAt: saved.createdAt,
-          selectedIndex: saved.selectedIndex,
-          selectedAssets: saved.selectedAssets,
+          fullResponse: saved.insight,
+          provider: metadata.aiProvider,
+          model: metadata.model,
+          createdAt: saved.created_at,
+          selectedIndex: metadata.selectedIndex,
+          selectedAssets: metadata.selectedAssets,
         }
       });
     });
@@ -504,181 +506,150 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
                   Add AI Insights
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[80vh]">
+              <DialogContent className="max-w-none max-h-[80vh]" style={{ maxWidth: '1200px', width: '90vw' }}>
                 <DialogHeader className="space-y-0 pb-4">
                   <div className="flex items-center gap-2">
                     <Brain className="w-5 h-5 text-purple-600" />
                     <DialogTitle>Finance AI Insight Generator</DialogTitle>
                   </div>
                   <DialogDescription>
-                    Select an index or benchmark and assets to analyze, then ask the AI assistant for market insights and analysis.
+                    Select assets to analyze, then ask the AI assistant for market insights and analysis.
                   </DialogDescription>
                 </DialogHeader>
                 
-                {/* Two dropdowns side by side */}
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Index/Benchmark</label>
-                    <div className="relative">
-                      <Select value={selectedIndex} onValueChange={setSelectedIndex}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select an index or benchmark" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableIndices.map((index) => (
-                            <SelectItem key={index.security.id} value={index.security.id}>
-                              <div className="flex items-center gap-2">
-                                <BarChart3 className="w-4 h-4 text-blue-600" />
-                                <span>{index.security.name.value}</span>
-                                <span className="text-muted-foreground text-sm">
-                                  ({getSecuritySymbol(index)})
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {selectedIndex && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-8 top-1/2 -translate-y-1/2 h-4 w-4 p-0 hover:bg-muted rounded-sm"
-                          onClick={() => setSelectedIndex("")}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
+                {/* Asset Selection */}
+                <div className="mb-6">
+                  <div className="space-y-2 relative">
                     <label className="text-sm font-medium">Asset Selection</label>
-                    <Popover open={isAssetPopoverOpen} onOpenChange={setIsAssetPopoverOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          className="w-full justify-between h-auto min-h-9"
-                        >
-                          {selectedAssetType.length === 0 ? (
-                            <span className="text-muted-foreground">Select assets</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {selectedAssetType.map((assetId) => (
-                                <Badge
-                                  key={assetId}
-                                  variant="secondary"
-                                  className="gap-1"
-                                >
-                                  {getSelectedAssetName(assetId)}
-                                  <X
-                                    className="w-3 h-3 cursor-pointer hover:text-destructive"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleAssetSelection(assetId);
-                                    }}
-                                  />
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[600px] p-0" align="start">
-                        <div className="max-h-[400px] overflow-y-auto">
-                          {/* Cryptocurrencies Group */}
-                          {availableSecurities.filter(s => s.security.type === 'CRYPTO').length > 0 && (
-                            <div className="p-2">
-                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
-                                <Coins className="w-3 h-3" />
-                                Cryptocurrencies
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between h-auto min-h-9"
+                        onClick={() => setIsAssetPopoverOpen(!isAssetPopoverOpen)}
+                      >
+                        {selectedAssetType.length === 0 ? (
+                          <span className="text-muted-foreground">Select assets</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {selectedAssetType.map((assetId) => (
+                              <Badge
+                                key={assetId}
+                                variant="secondary"
+                                className="gap-1"
+                              >
+                                {getSelectedAssetName(assetId)}
+                                <X
+                                  className="w-3 h-3 cursor-pointer hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleAssetSelection(assetId);
+                                  }}
+                                />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                      
+                      {/* Asset Selection Results */}
+                      {isAssetPopoverOpen && (
+                        <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }}>
+                          <div className="max-h-[400px] overflow-y-auto">
+                            {/* Cryptocurrencies Group */}
+                            {availableSecurities.filter(s => s.security.type === 'CRYPTO').length > 0 && (
+                              <div className="p-2">
+                                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                                  <Coins className="w-3 h-3" />
+                                  Cryptocurrencies
+                                </div>
+                                {availableSecurities
+                                  .filter(s => s.security.type === 'CRYPTO')
+                                  .map((security) => (
+                                    <div
+                                      key={security.security.id}
+                                      className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
+                                      onClick={() => toggleAssetSelection(security.security.id)}
+                                    >
+                                      <Checkbox
+                                        checked={selectedAssetType.includes(security.security.id)}
+                                        onCheckedChange={() => toggleAssetSelection(security.security.id)}
+                                      />
+                                      <Coins className="w-4 h-4 text-yellow-600" />
+                                      <span className="flex-1">{security.security.name.value}</span>
+                                    </div>
+                                  ))}
                               </div>
-                              {availableSecurities
-                                .filter(s => s.security.type === 'CRYPTO')
-                                .map((security) => (
-                                  <div
-                                    key={security.security.id}
-                                    className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
-                                    onClick={() => toggleAssetSelection(security.security.id)}
-                                  >
-                                    <Checkbox
-                                      checked={selectedAssetType.includes(security.security.id)}
-                                      onCheckedChange={() => toggleAssetSelection(security.security.id)}
-                                    />
-                                    <Coins className="w-4 h-4 text-yellow-600" />
-                                    <span className="flex-1">{security.security.name.value}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          )}
-                          
-                          {/* Stocks Group */}
-                          {availableSecurities.filter(s => s.security.type === 'EQUITY').length > 0 && (
-                            <div className="p-2">
-                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
-                                <Building2 className="w-3 h-3" />
-                                Stocks
+                            )}
+                            
+                            {/* Stocks Group */}
+                            {availableSecurities.filter(s => s.security.type === 'EQUITY').length > 0 && (
+                              <div className="p-2">
+                                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                                  <Building2 className="w-3 h-3" />
+                                  Stocks
+                                </div>
+                                {availableSecurities
+                                  .filter(s => s.security.type === 'EQUITY')
+                                  .map((security) => (
+                                    <div
+                                      key={security.security.id}
+                                      className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
+                                      onClick={() => toggleAssetSelection(security.security.id)}
+                                    >
+                                      <Checkbox
+                                        checked={selectedAssetType.includes(security.security.id)}
+                                        onCheckedChange={() => toggleAssetSelection(security.security.id)}
+                                      />
+                                      <Building2 className="w-4 h-4 text-green-600" />
+                                      <span className="flex-1">{security.security.name.value}</span>
+                                    </div>
+                                  ))}
                               </div>
-                              {availableSecurities
-                                .filter(s => s.security.type === 'EQUITY')
-                                .map((security) => (
-                                  <div
-                                    key={security.security.id}
-                                    className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
-                                    onClick={() => toggleAssetSelection(security.security.id)}
-                                  >
-                                    <Checkbox
-                                      checked={selectedAssetType.includes(security.security.id)}
-                                      onCheckedChange={() => toggleAssetSelection(security.security.id)}
-                                    />
-                                    <Building2 className="w-4 h-4 text-green-600" />
-                                    <span className="flex-1">{security.security.name.value}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          )}
-                          
-                          {/* ETFs Group */}
-                          {availableSecurities.filter(s => s.security.type === 'ETF').length > 0 && (
-                            <div className="p-2">
-                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
-                                <BarChart3 className="w-3 h-3" />
-                                ETFs
+                            )}
+                            
+                            {/* ETFs Group */}
+                            {availableSecurities.filter(s => s.security.type === 'ETF').length > 0 && (
+                              <div className="p-2">
+                                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground flex items-center gap-2">
+                                  <BarChart3 className="w-3 h-3" />
+                                  ETFs
+                                </div>
+                                {availableSecurities
+                                  .filter(s => s.security.type === 'ETF')
+                                  .map((security) => (
+                                    <div
+                                      key={security.security.id}
+                                      className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
+                                      onClick={() => toggleAssetSelection(security.security.id)}
+                                    >
+                                      <Checkbox
+                                        checked={selectedAssetType.includes(security.security.id)}
+                                        onCheckedChange={() => toggleAssetSelection(security.security.id)}
+                                      />
+                                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                                      <span className="flex-1">{security.security.name.value}</span>
+                                    </div>
+                                  ))}
                               </div>
-                              {availableSecurities
-                                .filter(s => s.security.type === 'ETF')
-                                .map((security) => (
-                                  <div
-                                    key={security.security.id}
-                                    className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
-                                    onClick={() => toggleAssetSelection(security.security.id)}
-                                  >
-                                    <Checkbox
-                                      checked={selectedAssetType.includes(security.security.id)}
-                                      onCheckedChange={() => toggleAssetSelection(security.security.id)}
-                                    />
-                                    <BarChart3 className="w-4 h-4 text-blue-600" />
-                                    <span className="flex-1">{security.security.name.value}</span>
-                                  </div>
-                                ))}
+                            )}
+                          </div>
+                          {selectedAssetType.length > 0 && (
+                            <div className="p-2 border-t">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={clearAllAssets}
+                                className="w-full"
+                              >
+                                Clear all ({selectedAssetType.length})
+                              </Button>
                             </div>
                           )}
                         </div>
-                        {selectedAssetType.length > 0 && (
-                          <div className="p-2 border-t">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={clearAllAssets}
-                              className="w-full"
-                            >
-                              Clear all ({selectedAssetType.length})
-                            </Button>
-                          </div>
-                        )}
-                      </PopoverContent>
-                    </Popover>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -889,132 +860,206 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory max-w-[calc(4*350px+3*1rem)]">
-          {filteredInsights.map((insight) => (
-            <Card key={insight.id} className="border-l-4 border-purple-400 min-w-[350px] max-w-[350px] flex-shrink-0 snap-start">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2 flex-1">
-                    {insight.icon}
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-base">{insight.title}</CardTitle>
-                      <div className="flex items-center gap-1 mt-1">
-                        <Badge variant="outline" className="text-purple-600 bg-purple-50 border-purple-200">
-                          Saved Insight
-                        </Badge>
+          {filteredInsights.map((insight) => {
+            // Extract key data points from the insight
+            const fullText = insight.details?.fullResponse || insight.shortDescription;
+            
+            // Extract percentages
+            const percentMatches = fullText.match(/(\d+(?:\.\d+)?)\s*%/g) || [];
+            const percentages = percentMatches.map(m => parseFloat(m)).slice(0, 3);
+            
+            // Extract dollar amounts
+            const dollarMatches = fullText.match(/\$[\d,]+(?:\.\d{2})?/g) || [];
+            
+            // Extract ratios
+            const ratioMatches = fullText.match(/(\d+)\s*\/\s*(\d+)/g) || [];
+            
+            // Determine overall sentiment
+            const hasPositive = /upside|bullish|gain|profit|growth|increase|strong|high confidence|outperform/i.test(fullText);
+            const hasNegative = /downside|bearish|loss|risk|decline|decrease|weak|low confidence|underperform/i.test(fullText);
+            const hasWarning = /volatil|caution|uncertain|moderate|mixed/i.test(fullText);
+            
+            return (
+              <Card key={insight.id} className="border-l-4 border-purple-400 min-w-[380px] max-w-[380px] flex-shrink-0 snap-start bg-purple-50 dark:bg-purple-900/10">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2 flex-1">
+                      <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700">
+                        {insight.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base leading-tight">{insight.title}</CardTitle>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Badge variant="outline" className="text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 text-xs">
+                            Saved Insight
+                          </Badge>
+                        </div>
                       </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 -mr-2 flex-shrink-0"
+                      onClick={() => handleDeleteInsight(insight.id)}
+                    >
+                      <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 -mr-2 flex-shrink-0"
-                    onClick={() => handleDeleteInsight(insight.id)}
-                  >
-                    <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm text-muted-foreground mb-3">
-                  {insight.shortDescription}
-                </p>
-                
-                <div className="space-y-2">
-                  {insight.details?.fullResponse && (
-                    <Collapsible>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-6 px-0 text-xs">
-                          <ChevronRight className="w-3 h-3 mr-1" />
-                          Read Full Response
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="mt-2">
-                        <div className="bg-muted/30 rounded-lg p-4 space-y-3">
-                          {(() => {
-                            const response = insight.details.fullResponse;
-                            // Split by lines and filter for bullet points or numbered items
-                            const lines = response.split('\n').filter(line => line.trim());
-                            const bulletPoints = lines.filter(line => 
-                              line.trim().match(/^[-•*\d.]+\s+/) || 
-                              (line.length > 10 && !lines[0]?.includes(line))
-                            );
-                            
-                            if (bulletPoints.length === 0) {
-                              // Fallback to original display if no bullet points found
-                              return <div className="text-xs text-muted-foreground whitespace-pre-wrap">{response}</div>;
-                            }
-                            
-                            return bulletPoints.map((point, idx) => {
-                              // Remove bullet/number prefix
-                              const cleanPoint = point.replace(/^[-•*\d.]+\s+/, '').trim();
-                              
-                              // Extract percentage (e.g., "65%", "12.5%")
-                              const percentMatch = cleanPoint.match(/(\d+(?:\.\d+)?)\s*%/);
-                              const percentage = percentMatch ? parseFloat(percentMatch[1]) : null;
-                              
-                              // Extract ratio (e.g., "3/10", "7/10")
-                              const ratioMatch = cleanPoint.match(/(\d+)\s*\/\s*(\d+)/);
-                              const ratio = ratioMatch ? (parseFloat(ratioMatch[1]) / parseFloat(ratioMatch[2])) * 100 : null;
-                              
-                              // Extract dollar amounts (e.g., "$145", "$1,234.56")
-                              const dollarMatch = cleanPoint.match(/\$[\d,]+(?:\.\d{2})?/);
-                              
-                              // Determine sentiment/color
-                              const hasPositive = /upside|bullish|gain|profit|growth|increase|strong|high confidence/i.test(cleanPoint);
-                              const hasNegative = /downside|bearish|loss|risk|decline|decrease|weak|low confidence/i.test(cleanPoint);
-                              const hasWarning = /volatil|caution|uncertain|moderate/i.test(cleanPoint);
-                              
-                              const displayValue = percentage || ratio;
-                              
-                              return (
-                                <div key={idx} className="flex items-start gap-3 text-sm">
-                                  <div className={`w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${
-                                    hasPositive ? 'bg-green-500' : 
-                                    hasNegative ? 'bg-red-500' : 
-                                    hasWarning ? 'bg-yellow-500' : 
-                                    'bg-blue-500'
-                                  }`} />
-                                  <div className="flex-1 space-y-2">
-                                    <p className="text-foreground leading-relaxed">{cleanPoint}</p>
-                                    {displayValue !== null && (
-                                      <div className="flex items-center gap-2">
-                                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
-                                          <div 
-                                            className={`h-full transition-all ${
-                                              hasPositive ? 'bg-green-500' : 
-                                              hasNegative ? 'bg-red-500' : 
-                                              hasWarning ? 'bg-yellow-500' : 
-                                              'bg-blue-500'
-                                            }`}
-                                            style={{ width: `${Math.min(displayValue, 100)}%` }}
-                                          />
-                                        </div>
-                                        <span className="text-xs font-medium text-muted-foreground min-w-[3rem] text-right">
-                                          {displayValue.toFixed(0)}%
-                                        </span>
-                                      </div>
-                                    )}
-                                    {dollarMatch && !displayValue && (
-                                      <Badge variant="outline" className="text-xs">
-                                        {dollarMatch[0]}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            });
-                          })()}
+                </CardHeader>
+                <CardContent className="pt-0 space-y-4">
+                  {/* Key Metrics Display */}
+                  {(percentages.length > 0 || dollarMatches.length > 0) && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {percentages.slice(0, 3).map((pct, idx) => (
+                        <div key={idx} className="bg-background rounded-lg p-3 text-center border">
+                          <div className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                            {pct}%
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {idx === 0 ? 'Primary' : idx === 1 ? 'Secondary' : 'Tertiary'}
+                          </div>
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
+                      ))}
+                      {dollarMatches.slice(0, Math.min(3 - percentages.length, dollarMatches.length)).map((amt, idx) => (
+                        <div key={`dollar-${idx}`} className="bg-background rounded-lg p-3 text-center border">
+                          <div className="text-lg font-bold text-purple-700 dark:text-purple-400">
+                            {amt}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Price Target
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                    <span>{new Date(insight.details?.createdAt).toLocaleDateString()}</span>
+                  
+                  {/* Sentiment Indicator */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Sentiment</span>
+                      <span className="font-medium text-purple-700 dark:text-purple-400">
+                        {hasPositive ? 'Bullish' : hasNegative ? 'Bearish' : hasWarning ? 'Neutral' : 'Mixed'}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all ${
+                          hasPositive ? 'bg-green-500' : 
+                          hasNegative ? 'bg-red-500' : 
+                          hasWarning ? 'bg-yellow-500' : 
+                          'bg-purple-500'
+                        }`}
+                        style={{ 
+                          width: hasPositive ? '75%' : hasNegative ? '25%' : hasWarning ? '50%' : '60%' 
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {insight.shortDescription}
+                  </p>
+                  
+                  <div className="space-y-2">
+                    {insight.details?.fullResponse && (
+                      <Collapsible>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 px-0 text-xs hover:bg-transparent">
+                            <ChevronRight className="w-3 h-3 mr-1" />
+                            Read Full Response
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-2">
+                          <div className="bg-muted/30 rounded-lg p-4 space-y-3">
+                            {(() => {
+                              const response = insight.details.fullResponse;
+                              // Split by lines and filter for bullet points or numbered items
+                              const lines = response.split('\n').filter(line => line.trim());
+                              const bulletPoints = lines.filter(line => 
+                                line.trim().match(/^[-•*\d.]+\s+/) || 
+                                (line.length > 10 && !lines[0]?.includes(line))
+                              );
+                              
+                              if (bulletPoints.length === 0) {
+                                // Fallback to original display if no bullet points found
+                                return <div className="text-xs text-muted-foreground whitespace-pre-wrap">{response}</div>;
+                              }
+                              
+                              return bulletPoints.map((point, idx) => {
+                                // Remove bullet/number prefix
+                                const cleanPoint = point.replace(/^[-•*\d.]+\s+/, '').trim();
+                                
+                                // Extract percentage (e.g., "65%", "12.5%")
+                                const percentMatch = cleanPoint.match(/(\d+(?:\.\d+)?)\s*%/);
+                                const percentage = percentMatch ? parseFloat(percentMatch[1]) : null;
+                                
+                                // Extract ratio (e.g., "3/10", "7/10")
+                                const ratioMatch = cleanPoint.match(/(\d+)\s*\/\s*(\d+)/);
+                                const ratio = ratioMatch ? (parseFloat(ratioMatch[1]) / parseFloat(ratioMatch[2])) * 100 : null;
+                                
+                                // Extract dollar amounts (e.g., "$145", "$1,234.56")
+                                const dollarMatch = cleanPoint.match(/\$[\d,]+(?:\.\d{2})?/);
+                                
+                                // Determine sentiment/color
+                                const hasPositive = /upside|bullish|gain|profit|growth|increase|strong|high confidence/i.test(cleanPoint);
+                                const hasNegative = /downside|bearish|loss|risk|decline|decrease|weak|low confidence/i.test(cleanPoint);
+                                const hasWarning = /volatil|caution|uncertain|moderate/i.test(cleanPoint);
+                                
+                                const displayValue = percentage || ratio;
+                                
+                                return (
+                                  <div key={idx} className="flex items-start gap-3 text-sm">
+                                    <div className={`w-1.5 h-1.5 rounded-full mt-2 shrink-0 ${
+                                      hasPositive ? 'bg-green-500' : 
+                                      hasNegative ? 'bg-red-500' : 
+                                      hasWarning ? 'bg-yellow-500' : 
+                                      'bg-blue-500'
+                                    }`} />
+                                    <div className="flex-1 space-y-2">
+                                      <p className="text-foreground leading-relaxed">{cleanPoint}</p>
+                                      {displayValue !== null && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                                            <div 
+                                              className={`h-full transition-all ${
+                                                hasPositive ? 'bg-green-500' : 
+                                                hasNegative ? 'bg-red-500' : 
+                                                hasWarning ? 'bg-yellow-500' : 
+                                                'bg-blue-500'
+                                              }`}
+                                              style={{ width: `${Math.min(displayValue, 100)}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-xs font-medium text-muted-foreground min-w-[3rem] text-right">
+                                            {displayValue.toFixed(0)}%
+                                          </span>
+                                        </div>
+                                      )}
+                                      {dollarMatch && !displayValue && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {dollarMatch[0]}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                      <span>{new Date(insight.details?.createdAt).toLocaleDateString()}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {insight.details?.provider || 'AI'}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {filteredInsights.length === 0 && (

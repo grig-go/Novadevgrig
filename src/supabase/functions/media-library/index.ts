@@ -101,6 +101,7 @@ serve(async (req) => {
           `
           id, name, file_name, description, file_url, thumbnail_url, storage_path,
           media_type, created_by, ai_model_used, tags, created_at, metadata,
+          latitude, longitude,
           media_distribution (
             id, path, status, last_sync,
             systems ( name, ip_address, port, system_type, channel )
@@ -151,6 +152,8 @@ serve(async (req) => {
           tags: asset.tags,
           created_at: asset.created_at,
           size: asset.metadata?.size || null,
+          latitude: asset.latitude,
+          longitude: asset.longitude,
           distribution: dist,
         };
       });
@@ -176,6 +179,12 @@ serve(async (req) => {
       const mediaType = formData.get("media_type") || "image";
       const createdBy = formData.get("created_by") || "user";
       const aiModelUsed = formData.get("ai_model_used");
+      
+      // Parse latitude and longitude (optional fields)
+      const latitudeStr = formData.get("latitude");
+      const longitudeStr = formData.get("longitude");
+      const latitude = latitudeStr && latitudeStr !== "" ? parseFloat(latitudeStr) : null;
+      const longitude = longitudeStr && longitudeStr !== "" ? parseFloat(longitudeStr) : null;
 
       // Update metadata only
       if (id && !file) {
@@ -186,6 +195,8 @@ serve(async (req) => {
         if (mediaType) updateData.media_type = mediaType;
         if (createdBy) updateData.created_by = createdBy;
         if (aiModelUsed) updateData.ai_model_used = aiModelUsed;
+        if (latitude !== null) updateData.latitude = latitude;
+        if (longitude !== null) updateData.longitude = longitude;
 
         const { data, error } = await supabase
           .from("media_assets")
@@ -255,6 +266,8 @@ serve(async (req) => {
           ai_model_used: aiModelUsed,
           tags,
           metadata: { size: file.size, mimeType: file.type },
+          latitude,
+          longitude,
         })
         .select()
         .single();
@@ -319,6 +332,194 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ============================================================
+    // PATCH — bulk operations (delete, add tags, archive)
+    // ============================================================
+    if (method === "PATCH") {
+      const body = await req.json();
+      const { operation, ids, tags } = body;
+
+      if (!operation || !Array.isArray(ids) || ids.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Missing required parameters: operation and ids" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`📦 Bulk operation: ${operation} on ${ids.length} assets`);
+
+      // Bulk delete
+      if (operation === "delete") {
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Fetch storage path
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("storage_path")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            // Delete from database
+            const { error: dbError } = await supabase
+              .from("media_assets")
+              .delete()
+              .eq("id", id);
+
+            if (dbError) {
+              results.failed++;
+              results.errors.push(`DB delete failed for ${id}: ${dbError.message}`);
+              continue;
+            }
+
+            // Delete from storage
+            if (asset.storage_path) {
+              const { error: storageError } = await supabase.storage
+                .from("media")
+                .remove([asset.storage_path]);
+              if (storageError) {
+                console.warn(`⚠️ Storage delete failed for ${id}:`, storageError.message);
+              }
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Bulk add tags
+      if (operation === "add_tags") {
+        if (!Array.isArray(tags) || tags.length === 0) {
+          return new Response(
+            JSON.stringify({ error: "Tags array is required for add_tags operation" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Fetch current tags
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("tags")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            // Merge tags (avoid duplicates)
+            const currentTags = asset.tags || [];
+            const newTags = Array.from(new Set([...currentTags, ...tags]));
+
+            // Update tags
+            const { error: updateError } = await supabase
+              .from("media_assets")
+              .update({ tags: newTags })
+              .eq("id", id);
+
+            if (updateError) {
+              results.failed++;
+              results.errors.push(`Update failed for ${id}: ${updateError.message}`);
+              continue;
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Bulk archive (just marks items, doesn't delete)
+      if (operation === "archive") {
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Add "archived" tag
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("tags")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            const currentTags = asset.tags || [];
+            if (!currentTags.includes("archived")) {
+              const newTags = [...currentTags, "archived"];
+              
+              const { error: updateError } = await supabase
+                .from("media_assets")
+                .update({ tags: newTags })
+                .eq("id", id);
+
+              if (updateError) {
+                results.failed++;
+                results.errors.push(`Archive failed for ${id}: ${updateError.message}`);
+                continue;
+              }
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ error: `Unknown operation: ${operation}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // ============================================================

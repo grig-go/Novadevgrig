@@ -21,9 +21,53 @@ export function NewsDebugPanel() {
       
       const diagnostics: any = {
         timestamp: new Date().toISOString(),
+        edgeFunctionHealth: null,
         providers: [],
         issues: []
       };
+
+      // Test edge function health first
+      console.log('[Debug] Testing news_dashboard edge function health...');
+      try {
+        const healthResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/news_dashboard/health`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        if (healthResponse.ok) {
+          const healthData = await healthResponse.json();
+          diagnostics.edgeFunctionHealth = {
+            status: 'ok',
+            data: healthData
+          };
+          console.log('[Debug] ✅ Edge function is healthy:', healthData);
+        } else {
+          diagnostics.edgeFunctionHealth = {
+            status: 'error',
+            statusCode: healthResponse.status,
+            statusText: healthResponse.statusText
+          };
+          console.error('[Debug] ❌ Edge function health check failed:', healthResponse.status);
+          diagnostics.issues.push({
+            type: 'error',
+            message: `Edge function health check failed: ${healthResponse.status} ${healthResponse.statusText}`
+          });
+        }
+      } catch (error) {
+        diagnostics.edgeFunctionHealth = {
+          status: 'error',
+          error: String(error)
+        };
+        console.error('[Debug] ❌ Edge function unreachable:', error);
+        diagnostics.issues.push({
+          type: 'error',
+          message: `Edge function unreachable: ${error instanceof Error ? error.message : String(error)}`
+        });
+      }
 
       // Fetch News Providers using RPC pattern (same as Finance/Sports/Weather)
       console.log('[Debug] Fetching news providers from data_providers table...');

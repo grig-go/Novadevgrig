@@ -4,7 +4,9 @@ export interface Channel {
   id: string;
   name: string;
   type: ChannelType;
-  description: string;
-  createdAt: string;
-  updatedAt: string;
+  description?: string | null;
+  status?: string;
+  config?: any;
+  created_at?: string;
+  updated_at?: string;
 }

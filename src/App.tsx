@@ -62,6 +62,33 @@ export default function App() {
     loading: true,
     error: null as string | null
   });
+  
+  // Debug dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      console.log('🌙 Dark mode status:', isDark);
+      console.log('📦 HTML classes:', document.documentElement.className);
+      
+      // Get computed styles
+      const styles = getComputedStyle(document.documentElement);
+      console.log('🎨 CSS Variables:');
+      console.log('  --background:', styles.getPropertyValue('--background'));
+      console.log('  --foreground:', styles.getPropertyValue('--foreground'));
+      console.log('  --border:', styles.getPropertyValue('--border'));
+    };
+    
+    checkDarkMode();
+    
+    // Set up mutation observer to watch for class changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Load election data asynchronously
   useEffect(() => {
@@ -99,7 +126,7 @@ export default function App() {
       try {
         // Fetch stored articles count
         const articlesResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/news-articles/stored?limit=1000`,
+          `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored?limit=1000`,
           {
             headers: {
               'Authorization': `Bearer ${publicAnonKey}`,
@@ -609,12 +636,17 @@ export default function App() {
               </div>
               <div className="flex flex-col">
                 <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "Loading..." : financeStats.hasLivePrices ? "Live prices" : "No prices"}
+                  {financeStats.loading ? "..." : `${financeStats.stockCount} stocks`}
                 </span>
               </div>
               <div className="flex flex-col">
                 <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "..." : financeStats.hasAnalystRatings ? "Analyst ratings" : "No ratings"}
+                  {financeStats.loading ? "..." : `${financeStats.etfCount} ETFs`}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">
+                  {financeStats.loading ? "..." : `${financeStats.cryptoCount} crypto`}
                 </span>
               </div>
             </div>

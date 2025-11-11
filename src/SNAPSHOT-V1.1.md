@@ -273,7 +273,7 @@ Pre-configured secrets:
 │   └── globals.css                  # Tailwind v4.0 config
 └── supabase/
     └── functions/
-        └── server/
+        └── make-server-cbef71cf/
             ├── index.tsx            # Hono server
             └── kv_store.tsx         # KV utilities (PROTECTED)
 ```
@@ -282,7 +282,7 @@ Pre-configured secrets:
 
 ## 🛡️ Protected Files (Do Not Modify)
 
-- `/supabase/functions/server/kv_store.tsx`
+- `/supabase/functions/make-server-cbef71cf/kv_store.tsx`
 - `/utils/supabase/info.tsx`
 - `/components/figma/ImageWithFallback.tsx`
 
@@ -293,7 +293,7 @@ Pre-configured secrets:
 1. **Media Storage**: Always use `media` bucket for all media uploads
 2. **Tailwind**: Do not add font-size, font-weight, or line-height classes (use globals.css defaults)
 3. **Shadcn**: Never overwrite existing ui components
-4. **Backend**: Server code only in `/supabase/functions/server/` (no subfolders)
+4. **Backend**: Server code only in `/supabase/functions/make-server-cbef71cf/` (no new folders - all files in same directory)
 5. **Types**: Update TypeScript types when adding new features
 
 ---

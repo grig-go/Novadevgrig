@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { SimpleInlineEditField } from "./SimpleInlineEditField";
 import { SimpleInlineNumberEdit } from "./SimpleInlineNumberEdit";
 import { OverrideIndicator } from "./OverrideIndicator";
@@ -942,6 +942,9 @@ export function SportsCard({ entity, view, leagues, teams = [], onUpdate, onDele
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>AI Insights</DialogTitle>
+            <DialogDescription>
+              AI-powered insights and analysis for this sports entity
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="text-muted-foreground text-center py-8">

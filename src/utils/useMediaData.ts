@@ -118,6 +118,8 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
           : 'synced') as SyncStatus,
         last_synced: asset.media_distribution?.[0]?.last_sync,
         distribution: asset.media_distribution || [],
+        latitude: asset.latitude,
+        longitude: asset.longitude,
       }));
 
       setAssets(transformedAssets);
@@ -188,6 +190,9 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       if (data.file_type) formData.append("media_type", data.file_type);
       if (data.created_by) formData.append("created_by", data.created_by);
       if (data.ai_model_used) formData.append("ai_model_used", data.ai_model_used);
+      // Handle latitude and longitude - can be null to clear values
+      if ('latitude' in data) formData.append("latitude", data.latitude !== null && data.latitude !== undefined ? data.latitude.toString() : '');
+      if ('longitude' in data) formData.append("longitude", data.longitude !== null && data.longitude !== undefined ? data.longitude.toString() : '');
 
       const response = await fetch(baseUrl, {
         method: "POST",

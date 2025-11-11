@@ -3,6 +3,7 @@ import { WeatherLocationWithOverrides, WeatherView, isFieldOverridden, getFieldV
 import { WeatherCard } from "./WeatherCard";
 import { WeatherFilters } from "./WeatherFilters";
 import { WeatherAIInsights } from "./WeatherAIInsights";
+import { WeatherAIInsightsVisual } from "./WeatherAIInsightsVisual";
 import { WeatherLocationSearch } from "./WeatherLocationSearch";
 import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
@@ -33,7 +34,9 @@ import {
   TrendingUp,
   TrendingDown,
   Database,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 
 interface WeatherDashboardProps {
@@ -64,16 +67,17 @@ export function WeatherDashboard({
   const [loadingOverrides, setLoadingOverrides] = useState(false);
   const [removingOverride, setRemovingOverride] = useState<string | null>(null);
   
-  // Use localStorage for sticky pagination that survives re-renders and refreshes
-  const [currentPage, setCurrentPage] = useLocalStorage("weather-dashboard-page", 1);
+  // Pagination state - using simple useState like Media Library
+  const [currentPage, setCurrentPage] = useState(1);
   const locationsPerPage = 9;
   const previousLocationCountRef = useRef<number>(0);
   
   // Destructure from the hook stats
   const locations = weatherDataStats.locations;
   const loading = weatherDataStats.loading;
+  const providerTemperatureUnit = weatherDataStats.providerSettings?.temperatureUnit || 'f';
   const lastUpdated = weatherDataStats.lastUpdated;
-
+  
   // Fetch weather providers from backend using RPC
   const fetchWeatherProviders = async () => {
     try {
@@ -177,7 +181,7 @@ export function WeatherDashboard({
     if (currentPage > totalPages && totalPages > 0) {
       setCurrentPage(totalPages);
     }
-  }, [locations, currentPage, locationsPerPage, setCurrentPage]);
+  }, [locations]); // Only depend on locations array changes
 
   // fetchWeatherData is now handled by useWeatherData hook
   // Error handling for provider configuration
@@ -196,7 +200,7 @@ export function WeatherDashboard({
   const handleAddLocation = async (newLocation: SavedWeatherLocation) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations`,
         {
           method: "POST",
           headers: {
@@ -208,7 +212,9 @@ export function WeatherDashboard({
       );
 
       if (!response.ok) {
-        throw new Error("Failed to add location");
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error("Failed to add location:", errorData);
+        throw new Error(errorData.error || errorData.detail || "Failed to add location");
       }
 
       toast.success(`Added ${newLocation.name} to weather monitoring`);
@@ -217,7 +223,7 @@ export function WeatherDashboard({
       await refreshWeatherData();
     } catch (error) {
       console.error("Error adding location:", error);
-      toast.error("Failed to add location");
+      toast.error(`Failed to add location: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -225,7 +231,7 @@ export function WeatherDashboard({
     try {
       console.log(`🗑️ Attempting to delete weather location: ${locationId} (${locationName})`);
       
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${locationId}`;
+      const url = `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${locationId}`;
       console.log(`🗑️ DELETE URL: ${url}`);
       
       const response = await fetch(url, {
@@ -284,8 +290,10 @@ export function WeatherDashboard({
   };
 
   const handleOpenAIInsights = (locationId?: string) => {
+    console.log('🧠 Opening AI Insights dialog for location:', locationId);
     setSelectedLocationForAI(locationId);
     setAIInsightsDialogOpen(true);
+    console.log('🧠 AI Insights dialog state set to true');
   };
 
   const handleOpenOverridesDialog = async () => {
@@ -297,7 +305,7 @@ export function WeatherDashboard({
       
       // Fetch all weather locations from backend API
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -333,7 +341,7 @@ export function WeatherDashboard({
     try {
       // Update the location to set custom_name to null
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${locationId}`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${locationId}`,
         {
           method: "PUT",
           headers: {
@@ -382,7 +390,7 @@ export function WeatherDashboard({
       for (const override of overrides) {
         try {
           const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${override.id}`,
+            `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${override.id}`,
             {
               method: "PUT",
               headers: {
@@ -455,31 +463,15 @@ export function WeatherDashboard({
 
   // Summary statistics
   const stats = useMemo(() => {
-    const alertLocations = locations.filter(loc => loc.data.alerts.length > 0);
+    const alertLocations = locations.filter(loc => loc.data?.alerts?.length > 0);
     
-    // Calculate override statistics
+    // Calculate override statistics - only checking location.name for custom_name overrides
     const locationsWithOverrides = locations.filter(location => {
-      // Check if any field in the location has overrides
-      return isFieldOverridden(location.location.name) ||
-             isFieldOverridden(location.location.admin1) ||
-             isFieldOverridden(location.location.country) ||
-             isFieldOverridden(location.data.current.temperature.value) ||
-             isFieldOverridden(location.data.current.summary) ||
-             isFieldOverridden(location.data.current.humidity) ||
-             isFieldOverridden(location.data.current.uvIndex);
+      // Only check if the location name has been overridden with a custom_name
+      return isFieldOverridden(location.location.name);
     });
 
-    const totalOverriddenFields = locations.reduce((total, location) => {
-      let fieldCount = 0;
-      if (isFieldOverridden(location.location.name)) fieldCount++;
-      if (isFieldOverridden(location.location.admin1)) fieldCount++;
-      if (isFieldOverridden(location.location.country)) fieldCount++;
-      if (isFieldOverridden(location.data.current.temperature.value)) fieldCount++;
-      if (isFieldOverridden(location.data.current.summary)) fieldCount++;
-      if (isFieldOverridden(location.data.current.humidity)) fieldCount++;
-      if (isFieldOverridden(location.data.current.uvIndex)) fieldCount++;
-      return total + fieldCount;
-    }, 0);
+    const totalOverriddenFields = locationsWithOverrides.length; // Each location can only have 1 override (custom_name)
     
     // Get provider names from weather providers
     const providerNames = weatherProviders.map(p => p.name).filter(Boolean);
@@ -489,7 +481,7 @@ export function WeatherDashboard({
       activeAlerts: alertLocations.length,
       providers: providerNames,
       alertLocations,
-      tropicalSystems: locations.reduce((sum, loc) => sum + (loc.data.tropical?.systems?.length || 0), 0),
+      tropicalSystems: locations.reduce((sum, loc) => sum + (loc.data?.tropical?.systems?.length || 0), 0),
       locationsWithOverrides: locationsWithOverrides.length,
       totalOverriddenFields
     };
@@ -582,10 +574,10 @@ export function WeatherDashboard({
   // Show helpful message when no locations are configured
   if (locations.length === 0 && !loading) {
     return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="flex items-center gap-2 mb-1">
+            <h1 className="flex items-center gap-2 mb-1 text-[24px]">
               <Cloud className="w-6 h-6 text-blue-600" />
               Weather Dashboard
             </h1>
@@ -624,8 +616,8 @@ export function WeatherDashboard({
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
             <Cloud className="w-6 h-6 text-blue-600" />
@@ -665,25 +657,13 @@ export function WeatherDashboard({
         </div>
       </div>
 
-      {loading && locations.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-4 animate-spin" />
-            <h3 className="mb-2">Loading Weather Data</h3>
-            <p className="text-muted-foreground">
-              Fetching data from weather provider...
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        renderSummaryCards()
-      )}
+      {/* Always show summary cards, fetch happens in background */}
+      {renderSummaryCards()}
 
-      {/* AI Insights Section - Always rendered for dialog access */}
+      {/* AI Insights Section - Visual horizontal scroll layout */}
       {showAIInsights && (
-        <WeatherAIInsights 
-          locations={filteredLocations} 
-          listView={true}
+        <WeatherAIInsightsVisual 
+          locations={filteredLocations}
         />
       )}
       
@@ -754,6 +734,7 @@ export function WeatherDashboard({
             onAIInsights={handleOpenAIInsights}
             view={currentView}
             language={currentLanguage}
+            providerTemperatureUnit={providerTemperatureUnit}
           />
         ))}
       </div>

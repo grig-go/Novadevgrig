@@ -38,7 +38,9 @@ import {
   Flame,
   Database,
   Trash2,
-  ChevronDown
+  ChevronDown,
+  Tv,
+  Check
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 
@@ -50,10 +52,16 @@ interface WeatherCardProps {
   onAIInsights?: (locationId: string) => void;
   view: WeatherView;
   language?: string;
+  providerTemperatureUnit?: string;
 }
 
 const getWeatherIcon = (icon: string, size: number = 24) => {
-  const iconMap = {
+  // Normalize icon string to lowercase for matching
+  const normalizedIcon = (icon || '').toLowerCase();
+  
+  // Map both icon codes and human-readable text to icons
+  const iconMap: { [key: string]: JSX.Element } = {
+    // Icon codes
     'clear-day': <Sun className={`w-6 h-6`} />,
     'clear-night': <Moon className={`w-6 h-6`} />,
     'partly-cloudy-day': <Cloud className={`w-6 h-6`} />,
@@ -64,10 +72,52 @@ const getWeatherIcon = (icon: string, size: number = 24) => {
     'rain': <CloudRain className={`w-6 h-6`} />,
     'sleet': <CloudRain className={`w-6 h-6`} />,
     'snow': <Snowflake className={`w-6 h-6`} />,
-    'thunderstorm': <Zap className={`w-6 h-6`} />
+    'thunderstorm': <Zap className={`w-6 h-6`} />,
+    
+    // Human-readable text
+    'sunny': <Sun className={`w-6 h-6`} />,
+    'clear': <Sun className={`w-6 h-6`} />,
+    'mostly sunny': <Sun className={`w-6 h-6`} />,
+    'partly cloudy': <Cloud className={`w-6 h-6`} />,
+    'mostly cloudy': <Cloud className={`w-6 h-6`} />,
+    'overcast': <Cloud className={`w-6 h-6`} />,
+    'rainy': <CloudRain className={`w-6 h-6`} />,
+    'drizzle': <CloudRain className={`w-6 h-6`} />,
+    'showers': <CloudRain className={`w-6 h-6`} />,
+    'snowy': <Snowflake className={`w-6 h-6`} />,
+    'thunderstorms': <Zap className={`w-6 h-6`} />,
+    'windy': <Wind className={`w-6 h-6`} />,
+    'foggy': <Cloud className={`w-6 h-6`} />,
+    'haze': <Cloud className={`w-6 h-6`} />,
   };
   
-  return iconMap[icon as keyof typeof iconMap] || <Cloud className={`w-6 h-6`} />;
+  // Try exact match first
+  if (iconMap[normalizedIcon]) {
+    return iconMap[normalizedIcon];
+  }
+  
+  // Try partial matches for more flexibility
+  if (normalizedIcon.includes('sun') || normalizedIcon.includes('clear')) {
+    return <Sun className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('rain') || normalizedIcon.includes('shower')) {
+    return <CloudRain className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('snow')) {
+    return <Snowflake className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('thunder') || normalizedIcon.includes('storm')) {
+    return <Zap className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('wind')) {
+    return <Wind className={`w-6 h-6`} />;
+  }
+  if (normalizedIcon.includes('cloud')) {
+    return <Cloud className={`w-6 h-6`} />;
+  }
+  
+  // Default fallback
+  return <Cloud className={`w-6 h-6`} />;
 };
 
 const formatTime = (timestamp: string) => {
@@ -94,15 +144,20 @@ const formatDate = (dateString: string) => {
   }
 };
 
-export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsights, view, language = "en" }: WeatherCardProps) {
-  // State for backend data dialog
-  const [backendDataOpen, setBackendDataOpen] = useState(false);
+export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsights, view, language = "en", providerTemperatureUnit = "f" }: WeatherCardProps) {
   // State for refresh loading
   const [refreshing, setRefreshing] = useState(false);
   // State for delete confirmation dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   // State for alerts collapsible (collapsed by default)
   const [alertsOpen, setAlertsOpen] = useState(false);
+  // State for backend data dialog
+  const [backendDataOpen, setBackendDataOpen] = useState(false);
+  // State for channel assignment dialog
+  const [assignChannelOpen, setAssignChannelOpen] = useState(false);
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
+  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [assigningChannel, setAssigningChannel] = useState(false);
   
   // Get translations for current language
   const t = getTranslation(language);
@@ -113,7 +168,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       console.log(`🔵 FRONTEND: Saving custom name for location ${location.location.id}:`, customName);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather-locations/${location.location.id}`,
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
         {
           method: "PUT",
           headers: {
@@ -203,30 +258,13 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       setRefreshing(true);
       toast.info(`Refreshing weather data for ${locationName}...`);
       
-      // Call the new single location refresh endpoint
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/weather/refresh/${locationId}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
+      // Trigger a full dashboard refresh (weather_dashboard doesn't have single-location refresh yet)
+      // The full weather-data endpoint will be called by the onRefresh callback
+      if (onRefresh) {
+        await onRefresh();
       }
       
       toast.success(`✅ Weather data refreshed for ${locationName}`);
-      
-      // Call the onRefresh callback to update the UI
-      if (onRefresh) {
-        onRefresh();
-      }
     } catch (error) {
       console.error("Error refreshing weather data:", error);
       toast.error(`Failed to refresh weather data for ${locationName}: ${error instanceof Error ? error.message : String(error)}`);
@@ -241,9 +279,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   };
 
   const handleAIInsights = () => {
+    console.log('🧠 AI Insights clicked for location:', location.location.id);
     if (onAIInsights) {
       onAIInsights(location.location.id);
     } else {
+      console.warn('No onAIInsights handler provided');
       toast.info("AI Insights feature coming soon!");
     }
   };
@@ -268,6 +308,98 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
     setBackendDataOpen(true);
   };
 
+  const handleAssignChannel = async () => {
+    console.log('📺 Assign Channel clicked for location:', location.location.id);
+    setAssignChannelOpen(true);
+    
+    // Fetch channels when opening the dialog
+    if (channels.length === 0) {
+      await fetchChannels();
+    }
+  };
+
+  const fetchChannels = async () => {
+    try {
+      setLoadingChannels(true);
+      console.log('📺 Fetching channels list...');
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to fetch channels (HTTP ${response.status}):`, errorText);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Fetched channels:', result);
+      
+      if (result.ok && result.channels) {
+        setChannels(result.channels);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Error fetching channels:', error);
+      toast.error(`Failed to fetch channels: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoadingChannels(false);
+    }
+  };
+
+  const assignChannel = async (channelId: string) => {
+    try {
+      setAssigningChannel(true);
+      const channelName = channels.find(c => c.id === channelId)?.name || channelId;
+      console.log(`🔗 Assigning channel "${channelName}" to location "${locationNameValue}"...`);
+      
+      toast.info(`Assigning channel "${channelName}" to "${locationNameValue}"...`);
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ channel_id: channelId })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to assign channel (HTTP ${response.status}):`, errorText);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Channel assigned successfully:', result);
+      
+      toast.success(`✅ Assigned "${channelName}" to "${locationNameValue}"`);
+      setAssignChannelOpen(false);
+      
+      // Refresh the card to show updated data
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Error assigning channel:', error);
+      toast.error(`Failed to assign channel: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAssigningChannel(false);
+    }
+  };
+
   // Check if location has any overrides (only location name override supported)
   const hasOverrides = isFieldOverridden(location.location.name);
 
@@ -275,11 +407,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const admin1Value = getFieldValue(location.location.admin1);
   const countryValueRaw = getFieldValue(location.location.country);
   const countryValue = translateCountry(countryValueRaw, language);
-  const temperatureValue = getFieldValue(location.data.current.temperature.value);
-  const temperatureUnit = getFieldValue(location.data.current.temperature.unit);
-  const summaryValue = getFieldValue(location.data.current.summary);
-  const humidityValue = getFieldValue(location.data.current.humidity);
-  const uvIndexValue = getFieldValue(location.data.current.uvIndex);
+  const temperatureValue = getFieldValue(location.data?.current?.temperature?.value);
+  const temperatureUnit = getFieldValue(location.data?.current?.temperature?.unit);
+  const summaryValue = getFieldValue(location.data?.current?.summary);
+  const humidityValue = getFieldValue(location.data?.current?.humidity);
+  const uvIndexValue = getFieldValue(location.data?.current?.uvIndex);
 
   // Common dropdown menu component
   const renderDropdownMenu = () => (
@@ -298,6 +430,10 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Refreshing...' : t.refreshData}
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleAssignChannel}>
+          <Tv className="mr-2 h-4 w-4" />
+          Assign Channel
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleViewBackendData}>
           <Database className="mr-2 h-4 w-4" />
           View Backend Data
@@ -309,6 +445,61 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  // Common channel assignment dialog component
+  const renderChannelDialog = () => {
+    // Get current channel_id from location (it's returned from backend but not in type)
+    const currentChannelId = (location.location as any).channel_id;
+    
+    return (
+      <Dialog open={assignChannelOpen} onOpenChange={setAssignChannelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Channel to {locationNameValue}</DialogTitle>
+            <DialogDescription>
+              Select a channel to assign to this weather location
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {loadingChannels ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading channels...</p>
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="text-center py-8">
+                <Tv className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No active channels found</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {channels.map((channel) => {
+                  const isCurrentChannel = currentChannelId === channel.id;
+                  return (
+                    <Button
+                      key={channel.id}
+                      variant={isCurrentChannel ? "default" : "outline"}
+                      className={`w-full justify-between ${isCurrentChannel ? 'bg-primary text-primary-foreground' : ''}`}
+                      onClick={() => assignChannel(channel.id)}
+                      disabled={assigningChannel}
+                    >
+                      <div className="flex items-center">
+                        <Tv className="mr-2 h-4 w-4" />
+                        {channel.name}
+                      </div>
+                      {isCurrentChannel && (
+                        <Check className="h-4 w-4 ml-2" />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   if (view === 'current') {
     return (
@@ -335,13 +526,13 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {getWeatherIcon(getFieldValue(location.data.current.icon), 32)}
+              {getWeatherIcon(getFieldValue(location.data?.current?.summary), 32)}
               <div className="text-right">
                 <div className="text-2xl font-bold">
                   {temperatureValue}{temperatureUnit}
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  {t.feelsLike} {getFieldValue(location.data.current.feelsLike.value)}{getFieldValue(location.data.current.feelsLike.unit)}
+                  {t.feelsLike} {getFieldValue(location.data?.current?.feelsLike?.value)}{getFieldValue(location.data?.current?.feelsLike?.unit)}
                 </div>
               </div>
               {renderDropdownMenu()}
@@ -371,7 +562,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           </div>
 
-          {location.data.alerts.length > 0 && (
+          {location.data?.alerts?.length > 0 && (
             <Collapsible open={alertsOpen} onOpenChange={setAlertsOpen}>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" className="w-full justify-start p-0 h-auto hover:bg-transparent">
@@ -402,8 +593,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </Collapsible>
           )}
 
-          <div className="text-xs text-muted-foreground">
-            {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+          <div className="text-xs text-muted-foreground mt-4">
+            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -441,6 +632,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -451,22 +644,29 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Clock className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-3 max-h-96 overflow-y-auto">
-            {(location.data.hourly?.items || []).slice(0, 12).map((hour, index) => (
+            {(location.data?.hourly?.items || []).slice(0, 12).map((hour, index) => (
               <div key={index} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium w-16">{formatTime(getFieldValue(hour.time))}</span>
@@ -484,7 +684,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
           
           <div className="text-xs text-muted-foreground">
-            {getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {formatTime(getFieldValue(location.data.current?.asOf))}
+            {getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -522,6 +722,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -532,22 +734,29 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Thermometer className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="space-y-3">
-            {(location.data.daily?.items || []).slice(0, 7).map((day, index) => (
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-medium w-16">{formatDate(getFieldValue(day.date))}</span>
@@ -573,7 +782,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
           
           <div className="text-xs text-muted-foreground">
-            7-day {t.forecast} • {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+            7-day {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -611,6 +820,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -621,26 +832,33 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {location.data.alerts.length > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  {location.data.alerts.length} {t.alerts.toLowerCase()}
-                </Badge>
-              )}
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  Modified
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                  {(location.data?.alerts?.length || 0) > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                      {location.data.alerts.length}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
         </CardHeader>
         <CardContent>
-          {location.data.alerts.length > 0 ? (
+          {(location.data?.alerts?.length || 0) > 0 ? (
             <div className="space-y-4">
               {location.data.alerts.map((alert, index) => (
                 <div key={index} className="border border-red-200 rounded-lg p-4 bg-red-50">
@@ -688,7 +906,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           )}
           
           <div className="text-xs text-muted-foreground mt-4">
-            {t.lastUpdated}: {formatTime(getFieldValue(location.data.current.asOf))}
+            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -726,6 +944,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -831,6 +1051,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -841,23 +1063,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wind className="w-5 h-5 text-purple-500" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              <Badge variant="outline" className={`text-xs ${
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 50 ? 'bg-green-50 border-green-200 text-green-800' :
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 100 ? 'bg-yellow-50 border-yellow-200 text-yellow-800' :
-                getFieldValue(location.data.current?.airQuality?.aqi) <= 150 ? 'bg-orange-50 border-orange-200 text-orange-800' :
-                'bg-red-50 border-red-200 text-red-800'
-              }`}>
-                AQI {getFieldValue(location.data.current?.airQuality?.aqi)}
-              </Badge>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  {t.modified}
-                </Badge>
-              )}
+            <div className="flex items-center gap-3">
+              <Wind className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
@@ -914,7 +1135,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           </div>
           
-          {location.data.current.pollen && (
+          {location.data?.current?.pollen && (
             <div className="pt-4 border-t border-gray-200">
               <h4 className="font-medium mb-2 flex items-center gap-2">
                 <Flower2 className="w-4 h-4" />
@@ -939,7 +1160,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           )}
           
           <div className="text-xs text-muted-foreground">
-            Last updated: {formatTime(getFieldValue(location.data.current.asOf))}
+            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -977,6 +1198,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -987,15 +1210,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       <Card className="h-full hover:shadow-lg transition-shadow">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <Gauge className="w-5 h-5 text-muted-foreground" />
-              <h3 className="font-semibold">{locationNameValue}</h3>
-              {hasOverrides && (
-                <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
-                  <Database className="h-3 w-3 mr-1" />
-                  Modified
-                </Badge>
-              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <InlineTextEdit
+                    field={location.location.name}
+                    fieldName="Location Name"
+                    onUpdate={(newName) => updateLocationField('name', newName)}
+                  >
+                    <h3 className="font-semibold">{locationNameValue}</h3>
+                  </InlineTextEdit>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {admin1Value}, {countryValue}
+                </div>
+              </div>
             </div>
             {renderDropdownMenu()}
           </div>
@@ -1007,10 +1237,10 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Wind</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.wind.speed.value)} {getFieldValue(location.data.current.wind.speed.unit)}
+                  {getFieldValue(location.data?.current?.wind?.speed?.value)} {getFieldValue(location.data?.current?.wind?.speed?.unit)}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {getFieldValue(location.data.current.wind.direction_cardinal)} ({getFieldValue(location.data.current.wind.direction_deg)}°)
+                  {getFieldValue(location.data?.current?.wind?.direction_cardinal)} ({getFieldValue(location.data?.current?.wind?.direction_deg)}°)
                 </p>
               </div>
             </div>
@@ -1020,9 +1250,9 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Pressure</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.pressure.value)} {getFieldValue(location.data.current.pressure.unit)}
+                  {getFieldValue(location.data?.current?.pressure?.value)} {getFieldValue(location.data?.current?.pressure?.unit)}
                 </p>
-                {getFieldValue(location.data.current.pressure.tendency) && (
+                {getFieldValue(location.data?.current?.pressure?.tendency) && (
                   <p className="text-xs text-muted-foreground">
                     {getFieldValue(location.data.current.pressure.tendency)}
                   </p>
@@ -1035,7 +1265,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <div>
                 <p className="text-sm text-muted-foreground">Visibility</p>
                 <p className="font-medium">
-                  {getFieldValue(location.data.current.visibility.value)} {getFieldValue(location.data.current.visibility.unit)}
+                  {getFieldValue(location.data?.current?.visibility?.value)} {getFieldValue(location.data?.current?.visibility?.unit)}
                 </p>
               </div>
             </div>
@@ -1044,12 +1274,12 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
               <Cloud className="w-4 h-4 text-gray-400" />
               <div>
                 <p className="text-sm text-muted-foreground">Cloud Cover</p>
-                <p className="font-medium">{Math.round(getFieldValue(location.data.current.cloudCover))}%</p>
+                <p className="font-medium">{Math.round(getFieldValue(location.data?.current?.cloudCover) || 0)}%</p>
               </div>
             </div>
           </div>
           
-          {location.data.current.sun && (
+          {location.data?.current?.sun && (
             <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Sunrise className="w-4 h-4" />
@@ -1080,7 +1310,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          {location.data.marine && (
+          {location.data?.marine && (
             <div className="p-4 bg-cyan-50 dark:bg-cyan-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Anchor className="w-4 h-4" />
@@ -1090,18 +1320,18 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                 <div>
                   <p className="text-sm text-muted-foreground">Wave Height</p>
                   <p className="font-medium">
-                    {getFieldValue(location.data.marine.waves.significantHeight.value)} {getFieldValue(location.data.marine.waves.significantHeight.unit)}
+                    {getFieldValue(location.data.marine?.waves?.significantHeight?.value)} {getFieldValue(location.data.marine?.waves?.significantHeight?.unit)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Wave Period</p>
                   <p className="font-medium">
-                    {getFieldValue(location.data.marine.waves.period.value)} {getFieldValue(location.data.marine.waves.period.unit)}
+                    {getFieldValue(location.data.marine?.waves?.period?.value)} {getFieldValue(location.data.marine?.waves?.period?.unit)}
                   </p>
                 </div>
               </div>
               
-              {location.data.marine.tides.length > 0 && (
+              {(location.data.marine?.tides?.length || 0) > 0 && (
                 <div className="mt-3">
                   <p className="text-sm text-muted-foreground mb-2">Next Tide</p>
                   <div className="text-sm">
@@ -1113,20 +1343,20 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          {location.data.smoke && (
+          {location.data?.smoke && (
             <div className="p-4 bg-orange-50 dark:bg-orange-950/20 rounded-lg">
               <h4 className="font-medium mb-3 flex items-center gap-2">
                 <Flame className="w-4 h-4" />
                 Smoke & Fire
               </h4>
               <p className="text-sm text-muted-foreground">
-                {location.data.smoke.fireSources.length} fire sources detected in area
+                {location.data.smoke?.fireSources?.length || 0} fire sources detected in area
               </p>
             </div>
           )}
           
           <div className="text-xs text-muted-foreground">
-            Last updated: {formatTime(getFieldValue(location.data.current.asOf))}
+            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
           </div>
         </CardContent>
       </Card>
@@ -1164,6 +1394,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -1181,6 +1413,46 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Channel Assignment Dialog */}
+      <Dialog open={assignChannelOpen} onOpenChange={setAssignChannelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Channel to {locationNameValue}</DialogTitle>
+            <DialogDescription>
+              Select a channel to assign to this weather location
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {loadingChannels ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading channels...</p>
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="text-center py-8">
+                <Tv className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No active channels found</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {channels.map((channel) => (
+                  <Button
+                    key={channel.id}
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => assignChannel(channel.id)}
+                    disabled={assigningChannel}
+                  >
+                    <Tv className="mr-2 h-4 w-4" />
+                    {channel.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

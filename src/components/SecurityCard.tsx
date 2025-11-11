@@ -5,6 +5,7 @@ import { InlineEditField } from "./InlineEditField";
 import { InlineNumberEdit } from "./InlineNumberEdit";
 import { OverrideIndicator } from "./OverrideIndicator";
 import { SecurityNewsContent } from "./SecurityNews";
+import { SecurityChartDialog } from "./SecurityChartDialog";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -12,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { TrendingUp, TrendingDown, BarChart3, Coins, Building2, Star, Trash2, MoreHorizontal, CheckCircle, XCircle, Newspaper, Brain, Package } from "lucide-react";
+import { TrendingUp, TrendingDown, BarChart3, Coins, Building2, Star, Trash2, MoreHorizontal, CheckCircle, XCircle, Newspaper, Brain, Package, LineChart } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 
 interface SecurityCardProps {
@@ -27,6 +28,7 @@ export function SecurityCard({ security, onUpdate, onDelete, onSaveCustomName, o
   const { security: sec, snapshot, analystRating, cryptoProfile } = security;
   const [isNewsOpen, setIsNewsOpen] = useState(false);
   const [isAIInsightsOpen, setIsAIInsightsOpen] = useState(false);
+  const [isChartOpen, setIsChartOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isSavingCustomName, setIsSavingCustomName] = useState(false);
 
@@ -170,6 +172,10 @@ export function SecurityCard({ security, onUpdate, onDelete, onSaveCustomName, o
       setIsAIInsightsOpen(true);
       toast.info("AI Insights feature coming soon!");
     }
+  };
+
+  const handleShowChart = () => {
+    setIsChartOpen(true);
   };
 
   const handleShowDeleteDialog = () => {
@@ -380,6 +386,12 @@ export function SecurityCard({ security, onUpdate, onDelete, onSaveCustomName, o
                   <Brain className="w-4 h-4 mr-2 text-purple-600" />
                   AI Insights
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleShowChart}
+                >
+                  <LineChart className="w-4 h-4 mr-2 text-blue-600" />
+                  Chart
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleShowDeleteDialog}
@@ -587,6 +599,15 @@ export function SecurityCard({ security, onUpdate, onDelete, onSaveCustomName, o
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Chart Dialog */}
+      <SecurityChartDialog
+        open={isChartOpen}
+        onOpenChange={setIsChartOpen}
+        symbol={sec.symbol || sec.uniqueKey}
+        name={getFieldValue(sec.name)}
+        type={sec.type}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

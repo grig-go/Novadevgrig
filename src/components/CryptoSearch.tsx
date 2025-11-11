@@ -156,7 +156,7 @@ export function CryptoSearch({
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto/search?q=${encodeURIComponent(searchTerm)}`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/search/crypto?q=${encodeURIComponent(searchTerm)}`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -197,22 +197,30 @@ export function CryptoSearch({
     setIsAdding(crypto.id);
 
     try {
-      console.log(`🪙 [CryptoSearch] Adding crypto to alpaca_stocks table:`, {
+      console.log(`🪙 [CryptoSearch] Adding crypto to finance_dashboard:`, {
         cgId: crypto.id,
         name: crypto.name,
         symbol: crypto.symbol.toUpperCase()
       });
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto/add`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
         {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ cgId: crypto.id }),
+          body: JSON.stringify({ 
+            symbol: crypto.symbol.toUpperCase(),
+            name: crypto.name,
+            type: 'CRYPTO',
+            source: 'coingecko',
+            source_id: crypto.id,
+            logo_url: crypto.image,
+            price: crypto.current_price,
+            change_1d_pct: crypto.price_change_percentage_24h,
+          }),
         }
       );
 
@@ -247,7 +255,7 @@ export function CryptoSearch({
 
       const result = await response.json();
       
-      console.log(`✅ [CryptoSearch] Successfully added crypto to alpaca_stocks table:`, {
+      console.log(`✅ [CryptoSearch] Successfully added crypto to finance_dashboard:`, {
         name: crypto.name,
         symbol: crypto.symbol.toUpperCase(),
         type: 'CRYPTO'
@@ -317,7 +325,7 @@ export function CryptoSearch({
             Search & Add Cryptocurrency
           </DialogTitle>
           <DialogDescription>
-            Search for cryptocurrencies via CoinGecko and add them to your watchlist. Data is stored in the alpaca_stocks table.
+            Search for cryptocurrencies via CoinGecko and add them to your watchlist.
           </DialogDescription>
         </DialogHeader>
 

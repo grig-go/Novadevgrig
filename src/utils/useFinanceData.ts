@@ -4,6 +4,7 @@ import { projectId, publicAnonKey } from "./supabase/info";
 export interface FinanceDataStats {
   totalSecurities: number;
   stockCount: number;
+  etfCount: number;
   cryptoCount: number;
   hasLivePrices: boolean;
   hasAnalystRatings: boolean;
@@ -16,6 +17,7 @@ export function useFinanceData() {
   const [stats, setStats] = useState<FinanceDataStats>({
     totalSecurities: 0,
     stockCount: 0,
+    etfCount: 0,
     cryptoCount: 0,
     hasLivePrices: false,
     hasAnalystRatings: false,
@@ -26,61 +28,52 @@ export function useFinanceData() {
 
   const fetchFinanceData = async () => {
     try {
-      // Fetch both stocks and cryptos in parallel
-      const [stocksResponse, cryptosResponse] = await Promise.all([
-        fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
-        ),
-        fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
-        ),
-      ]);
+      // Fetch from finance_dashboard edge function
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
+        {
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
 
       let stockCount = 0;
+      let etfCount = 0;
       let cryptoCount = 0;
       let hasLivePrices = false;
       let hasAnalystRatings = false;
 
-      // Process stocks
-      if (stocksResponse.ok) {
-        const stocksData = await stocksResponse.json();
-        const stocks = stocksData.stocks || [];
-        stockCount = stocks.length;
+      if (response.ok) {
+        const data = await response.json();
+        const securities = data.stocks || [];
         
-        // Check if we have live prices (at least one stock has a price)
-        hasLivePrices = stocks.some((stock: any) => stock.price !== undefined && stock.price !== null);
+        // Count by type
+        securities.forEach((sec: any) => {
+          const type = sec.type?.toUpperCase() || 'EQUITY';
+          if (type === 'CRYPTO' || type === 'CRYPTOCURRENCY') {
+            cryptoCount++;
+          } else if (type === 'ETF') {
+            etfCount++;
+          } else {
+            // EQUITY, INDEX, us_equity, or anything else counts as stock
+            stockCount++;
+          }
+        });
+        
+        // Check if we have live prices (at least one security has a price)
+        hasLivePrices = securities.some((sec: any) => sec.price !== undefined && sec.price !== null && sec.price > 0);
         
         // Check if we have analyst ratings
-        hasAnalystRatings = stocks.some((stock: any) => stock.rating !== undefined && stock.rating !== null);
+        hasAnalystRatings = securities.some((sec: any) => sec.rating !== undefined && sec.rating !== null);
       }
 
-      // Process cryptos
-      if (cryptosResponse.ok) {
-        const cryptosData = await cryptosResponse.json();
-        const cryptos = cryptosData.cryptos || [];
-        cryptoCount = cryptos.length;
-        
-        // Crypto always has live prices if any exist
-        if (cryptoCount > 0) {
-          hasLivePrices = true;
-        }
-      }
-
-      const totalSecurities = stockCount + cryptoCount;
+      const totalSecurities = stockCount + etfCount + cryptoCount;
 
       setStats({
         totalSecurities,
         stockCount,
+        etfCount,
         cryptoCount,
         hasLivePrices,
         hasAnalystRatings,

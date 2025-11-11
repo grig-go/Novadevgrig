@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
@@ -26,12 +26,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Channel, ChannelType } from "../types/channels";
-import { mockChannelsData } from "../data/mockChannelsData";
-import { Plus, Search, Filter, Edit, X } from "lucide-react";
+import { Plus, Search, Filter, Edit, X, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 
 const CHANNEL_TYPES: ChannelType[] = ["Pixera", "Vizrt", "Unreal", "Web"];
 
@@ -43,12 +53,15 @@ const TYPE_COLORS: Record<ChannelType, string> = {
 };
 
 export function ChannelsPage() {
-  const [channels, setChannels] = useState<Channel[]>(mockChannelsData);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -57,14 +70,55 @@ export function ChannelsPage() {
     description: "",
   });
 
+  // Fetch channels on mount
+  useEffect(() => {
+    fetchChannels();
+  }, []);
+
+  const fetchChannels = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/channels`,
+        {
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      console.log("Response status:", response.status);
+      console.log("Response ok:", response.ok);
+
+      const data = await response.json();
+      console.log("Full channels response:", JSON.stringify(data, null, 2));
+
+      if (data.ok && data.channels) {
+        setChannels(data.channels);
+      } else {
+        const errorMessage = typeof data.error === 'string' 
+          ? data.error 
+          : JSON.stringify(data, null, 2);
+        toast.error("Failed to load channels");
+        console.error("Error loading channels:", errorMessage);
+      }
+    } catch (error) {
+      toast.error("Failed to connect to server");
+      console.error("Error fetching channels - full error:", error);
+      console.error("Error message:", error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Filtered channels
   const filteredChannels = useMemo(() => {
     return channels.filter((channel) => {
       const matchesSearch =
         searchQuery === "" ||
         channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        channel.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        channel.type.toLowerCase().includes(searchQuery.toLowerCase());
+        (channel.description?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (channel.type?.toLowerCase() || "").includes(searchQuery.toLowerCase());
 
       const matchesType = typeFilter === "all" || channel.type === typeFilter;
 
@@ -72,28 +126,51 @@ export function ChannelsPage() {
     });
   }, [channels, searchQuery, typeFilter]);
 
-  const handleAddChannel = () => {
+  const handleAddChannel = async () => {
     if (!formData.name.trim()) {
       toast.error("Channel name is required");
       return;
     }
 
-    const newChannel: Channel = {
-      id: `ch-${Date.now()}`,
-      name: formData.name,
-      type: formData.type,
-      description: formData.description,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/channels`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            type: formData.type,
+            description: formData.description,
+            status: "active",
+          }),
+        }
+      );
 
-    setChannels((prev) => [...prev, newChannel]);
-    toast.success(`Channel "${formData.name}" added successfully`);
-    setShowAddDialog(false);
-    resetForm();
+      const data = await response.json();
+
+      if (data.ok && data.channel) {
+        setChannels((prev) => [data.channel, ...prev]);
+        toast.success(`Channel "${formData.name}" added successfully`);
+        setShowAddDialog(false);
+        resetForm();
+      } else {
+        toast.error("Failed to create channel");
+        console.error("Error creating channel:", data.error);
+      }
+    } catch (error) {
+      toast.error("Failed to connect to server");
+      console.error("Error adding channel:", error);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleEditChannel = () => {
+  const handleEditChannel = async () => {
     if (!editingChannel) return;
 
     if (!formData.name.trim()) {
@@ -101,20 +178,73 @@ export function ChannelsPage() {
       return;
     }
 
-    const updatedChannel: Channel = {
-      ...editingChannel,
-      name: formData.name,
-      type: formData.type,
-      description: formData.description,
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      setSubmitting(true);
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/channels/${editingChannel.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            type: formData.type,
+            description: formData.description,
+          }),
+        }
+      );
 
-    setChannels((prev) =>
-      prev.map((ch) => (ch.id === editingChannel.id ? updatedChannel : ch))
-    );
-    toast.success(`Channel "${formData.name}" updated successfully`);
-    setEditingChannel(null);
-    resetForm();
+      const data = await response.json();
+
+      if (data.ok && data.channel) {
+        setChannels((prev) =>
+          prev.map((ch) => (ch.id === editingChannel.id ? data.channel : ch))
+        );
+        toast.success(`Channel "${formData.name}" updated successfully`);
+        setEditingChannel(null);
+        resetForm();
+      } else {
+        toast.error("Failed to update channel");
+        console.error("Error updating channel:", data.error);
+      }
+    } catch (error) {
+      toast.error("Failed to connect to server");
+      console.error("Error editing channel:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteChannel = async () => {
+    if (!deletingChannel) return;
+
+    try {
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/channels/${deletingChannel.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.ok) {
+        setChannels((prev) => prev.filter((ch) => ch.id !== deletingChannel.id));
+        toast.success(`Channel "${deletingChannel.name}" deleted successfully`);
+        setDeletingChannel(null);
+      } else {
+        toast.error("Failed to delete channel");
+        console.error("Error deleting channel:", data.error);
+      }
+    } catch (error) {
+      toast.error("Failed to connect to server");
+      console.error("Error deleting channel:", error);
+    }
   };
 
   const openEditDialog = (channel: Channel) => {
@@ -122,7 +252,7 @@ export function ChannelsPage() {
     setFormData({
       name: channel.name,
       type: channel.type,
-      description: channel.description,
+      description: channel.description || "",
     });
   };
 
@@ -140,13 +270,24 @@ export function ChannelsPage() {
     resetForm();
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl">Channels</h1>
-          <p className="text-muted-foreground">
+          <h1 className="flex items-center gap-2 mb-1 text-[24px]">
+            Channels
+          </h1>
+          <p className="text-sm text-muted-foreground">
             Manage broadcast and output channels across different systems
           </p>
         </div>
@@ -288,6 +429,15 @@ export function ChannelsPage() {
                       <Edit className="w-4 h-4" />
                       Edit
                     </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeletingChannel(channel)}
+                      className="gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -372,12 +522,42 @@ export function ChannelsPage() {
             </Button>
             <Button
               onClick={editingChannel ? handleEditChannel : handleAddChannel}
+              disabled={submitting}
             >
               {editingChannel ? "Save Changes" : "Add Channel"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Channel Dialog */}
+      <AlertDialog
+        open={deletingChannel !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingChannel(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this channel?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              channel and remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteChannel}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -91,15 +91,14 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     fetchDataProviders();
   }, []);
 
-  const fetchBackendData = async () => {
+  const fetchBackendData = async (skipRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch from alpaca_stocks table
-      const response = await fetch(`https://${projectId}.supabase.co/rest/v1/alpaca_stocks`, {
+      // Fetch from finance_dashboard edge function
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`, {
         headers: {
-          apikey: publicAnonKey,
           Authorization: `Bearer ${publicAnonKey}`,
         },
       });
@@ -111,8 +110,8 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const data = await response.json();
       
       // Transform to FinanceSecurityWithSnapshot format
-      const securities: FinanceSecurityWithSnapshot[] = (data || []).map((item: any) => ({
-        security: {
+      const securities: FinanceSecurityWithSnapshot[] = (data.stocks || []).map((item: any) => {
+        const security = {
           id: item.symbol,
           symbol: item.symbol,
           name: { value: item.custom_name || item.name, original: item.name, isOverridden: !!item.custom_name },
@@ -123,8 +122,9 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
           exchangeId: item.exchange ? parseInt(item.exchange, 10) : undefined,
           createdAt: item.created_at || new Date().toISOString(),
           updatedAt: item.updated_at || new Date().toISOString(),
-        },
-        snapshot: {
+        };
+
+        const snapshot = {
           key: item.symbol,
           securityId: item.symbol,
           asof: item.updated_at || new Date().toISOString(),
@@ -143,8 +143,26 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
           yearLow: item.year_low !== null && item.year_low !== undefined 
             ? { value: item.year_low, original: item.year_low, isOverridden: false } 
             : undefined,
-        },
-      }));
+        };
+
+        // Add crypto profile if this is a crypto asset with logo_url
+        const result: FinanceSecurityWithSnapshot = {
+          security,
+          snapshot,
+        };
+
+        if (item.type?.toUpperCase() === 'CRYPTO' && item.logo_url) {
+          result.cryptoProfile = {
+            securityId: item.symbol,
+            cgSymbol: item.symbol.toLowerCase(),
+            cgRank: item.market_cap_rank || 0,
+            cgImage: item.logo_url,
+            cgCategories: [],
+          };
+        }
+
+        return result;
+      });
       
       setBackendSecurities(securities);
       
@@ -152,7 +170,13 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const overrideCount = securities.filter(sec => sec.security.name.isOverridden).length;
       setBackendOverrideCount(overrideCount);
       
-      console.log(`📊 Loaded ${securities.length} securities from alpaca_stocks table (${overrideCount} with custom names)`);
+      console.log(`📊 Loaded ${securities.length} securities from finance_dashboard (${overrideCount} with custom names)`);
+      
+      // If not skipping refresh, auto-refresh prices after initial load
+      if (!skipRefresh && securities.length > 0) {
+        console.log('🔄 Auto-refreshing prices after initial load...');
+        setTimeout(() => handleRefreshPrices(true), 500);
+      }
       
     } catch (err) {
       console.error('Error fetching backend data:', err);
@@ -168,6 +192,57 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         setError(errorMessage);
         toast.error('Failed to load finance data');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefreshPrices = async (silent = false) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!silent) {
+        toast.info('Fetching latest prices from APIs...');
+      }
+      
+      // Call the refresh endpoint to get fresh data from Alpaca/CoinGecko
+      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/refresh`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
+      }
+
+      const json = await response.json();
+      
+      if (!json.ok) {
+        throw new Error(json.error || 'Failed to refresh prices');
+      }
+
+      // Show success message with stats
+      const { updated, failed } = json;
+      if (!silent) {
+        if (failed > 0) {
+          toast.warning(`Refreshed ${updated} securities, ${failed} failed`);
+        } else {
+          toast.success(`Successfully refreshed ${updated} securities`);
+        }
+      }
+
+      // Fetch the updated data (skip auto-refresh to avoid loop)
+      await fetchBackendData(true);
+    } catch (err) {
+      console.error('Error refreshing prices:', err);
+      if (!silent) {
+        toast.error(err instanceof Error ? err.message : 'Failed to refresh prices');
+      }
+      setError(err instanceof Error ? err.message : 'Failed to refresh prices');
     } finally {
       setLoading(false);
     }
@@ -406,13 +481,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     setLoadingOverrides(true);
     
     try {
-      // Fetch all securities with custom names from alpaca_stocks table
+      // Fetch all securities with custom names from finance_dashboard edge function
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/alpaca_stocks?select=symbol,name,custom_name,type&custom_name=not.is.null`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/overrides/list`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
           },
         }
       );
@@ -422,8 +496,8 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       }
 
       const data = await response.json();
-      setOverrides(data || []);
-      console.log(`📋 Loaded ${data.length} custom name overrides`);
+      setOverrides(data.overrides || []);
+      console.log(`📋 Loaded ${data.overrides?.length || 0} custom name overrides`);
     } catch (error) {
       console.error("Error fetching overrides:", error);
       toast.error("Failed to load overrides");
@@ -499,28 +573,18 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   // Handler to save custom name to backend
   const handleSaveCustomName = async (symbol: string, customName: string, type: string) => {
     try {
-      // Use new drop-in pattern endpoint for stocks
-      const endpoint = type === 'CRYPTO' 
-        ? `/crypto/${symbol}/custom-name`  // Keep old crypto endpoint
-        : `/stocks/custom-name`;            // New drop-in pattern for stocks
-      
-      const url = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf${endpoint}`;
+      const url = `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/${symbol}`;
       console.log(`📝 Saving custom name for ${symbol} (${type}):`, customName);
       console.log(`📡 Request URL:`, url);
       
-      // Use new body format for stocks (drop-in pattern)
-      const body = type === 'CRYPTO'
-        ? { custom_name: customName || '' }
-        : { 
-            id: null,                        // Not used, but part of drop-in spec
-            symbol: symbol,
-            custom_name: customName || null  // null to clear
-          };
+      const body = { 
+        custom_name: customName || null  // null to clear
+      };
       
       console.log(`📦 Request body:`, body);
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'PUT',
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,
           'Content-Type': 'application/json',
@@ -540,7 +604,6 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       }
 
       console.log(`✅ Custom name saved successfully for ${symbol}`);
-      console.log(`   Updated custom_name from server:`, json.updated?.updated_custom_name);
       
       // Refresh backend data to get updated custom_name
       await fetchBackendData();
@@ -672,20 +735,8 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       .filter((symbol): symbol is string => !!symbol);
   }, [activeSecurities]);
 
-  // Show loading state
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading finance data...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Show credentials error
-  if (error === 'CREDENTIALS_MISSING') {
+  if (!loading && error === 'CREDENTIALS_MISSING') {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -749,14 +800,14 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
           <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-2">
               <Button
-                onClick={fetchBackendData}
+                onClick={() => handleRefreshPrices(false)}
                 variant="outline"
                 size="sm"
                 className="gap-2"
                 disabled={loading}
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                Fetch Latest
               </Button>
               <Button
                 onClick={handleDebugBackendData}
