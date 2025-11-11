@@ -178,7 +178,7 @@ export const JsonFieldMapper: React.FC<JsonFieldMapperProps> = ({
       <Card>
         <CardHeader>
           <CardTitle>JSON Field Mapping Configuration</CardTitle>
-          <CardDescription>
+          <CardDescription className="pb-4">
             Configure how your data sources map to the JSON output structure
           </CardDescription>
         </CardHeader>

@@ -31,6 +31,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle,
+  Info,
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useToast } from './ui/use-toast';
@@ -857,14 +858,26 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
           {format === 'JSON' && (
             <>
               <div className="space-y-3">
+                <Label className="text-sm font-medium">Configuration Mode</Label>
+                <p className="text-sm text-gray-500 mb-3">Choose between simple options or advanced field-by-field mapping</p>
                 <RadioGroup value={jsonConfigMode} onValueChange={(v: any) => setJsonConfigMode(v)}>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="simple" id="simple" className="border-2 border-gray-700" />
-                    <Label htmlFor="simple">Simple Configuration</Label>
+                  <div className="flex items-start space-x-2 mb-3">
+                    <RadioGroupItem value="simple" id="simple" className="border-2 border-gray-700 mt-0.5" />
+                    <Label htmlFor="simple" className="font-normal cursor-pointer">
+                      <div>
+                        <span className="font-semibold">Simple Configuration</span>
+                        <p className="text-sm text-gray-500">Basic JSON output with formatting options</p>
+                      </div>
+                    </Label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="advanced" id="advanced" className="border-2 border-gray-700" />
-                    <Label htmlFor="advanced">Advanced Field Mapping</Label>
+                  <div className="flex items-start space-x-2">
+                    <RadioGroupItem value="advanced" id="advanced" className="border-2 border-gray-700 mt-0.5" />
+                    <Label htmlFor="advanced" className="font-normal cursor-pointer">
+                      <div>
+                        <span className="font-semibold">Advanced Field Mapping</span>
+                        <p className="text-sm text-gray-500">Visual field mapping with transformations, conditions, and custom output structure</p>
+                      </div>
+                    </Label>
                   </div>
                 </RadioGroup>
               </div>
@@ -1019,19 +1032,28 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
               )}
 
               {jsonConfigMode === 'advanced' && (
-                <JsonFieldMapper
-                  dataSources={formData.dataSources || []}
-                  sampleData={sampleData}
-                  initialConfig={formatOptions.jsonMappingConfig}
-                  onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
-                  onTest={() => {
-                    toast({
-                      title: 'Testing JSON Mapping',
-                      description: 'Testing your JSON field mapping configuration...',
-                    });
-                  }}
-                  onTestDataSource={onTestDataSource}
-                />
+                <div className="mt-4">
+                  <Alert className="bg-blue-50 border-blue-200 mb-4">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="font-semibold">Advanced Field Mapping</p>
+                        <p className="text-sm mt-1">
+                          Create a custom JSON structure by mapping fields from your data sources.
+                          Add transformations, conditions, and define exactly how your output should look.
+                        </p>
+                      </div>
+                    </div>
+                  </Alert>
+
+                  <JsonFieldMapper
+                    dataSources={formData.dataSources || []}
+                    sampleData={sampleData}
+                    initialConfig={formatOptions.jsonMappingConfig}
+                    onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
+                    onTestDataSource={onTestDataSource}
+                  />
+                </div>
               )}
             </>
           )}
