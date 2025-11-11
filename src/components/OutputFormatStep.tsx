@@ -453,6 +453,9 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     isoDates: formData.formatOptions?.isoDates !== false,
     encoding: formData.formatOptions?.encoding || 'UTF-8',
 
+    // JSON Advanced Field Mapping Configuration
+    jsonMappingConfig: formData.formatOptions?.jsonMappingConfig || undefined,
+
     // XML options
     xmlRootElement: formData.formatOptions?.xmlRootElement || 'response',
     namespace: formData.formatOptions?.namespace || '',
@@ -502,7 +505,13 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   });
 
   const [testingSource, setTestingSource] = useState<string | null>(null);
-  const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced'>('simple');
+  const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced'>(() => {
+    // If we have saved jsonMappingConfig, start in advanced mode
+    if (formData.formatOptions?.jsonMappingConfig) {
+      return 'advanced';
+    }
+    return 'simple';
+  });
 
   // RSS Multi-source state
   const [sourceMappings, setSourceMappings] = useState<RSSSourceMapping[]>(() => {
@@ -1021,6 +1030,7 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                       description: 'Testing your JSON field mapping configuration...',
                     });
                   }}
+                  onTestDataSource={onTestDataSource}
                 />
               )}
             </>

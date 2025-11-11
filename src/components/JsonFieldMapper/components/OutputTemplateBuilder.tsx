@@ -205,7 +205,6 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
 
     const newField: OutputField = {
       path: newPath,
-      name: newFieldName,
       type: 'string',
       required: false,
       description: ''
@@ -253,8 +252,7 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
 
     const duplicatedField: OutputField = {
       ...field,
-      path: newPath,
-      name: newName
+      path: newPath
     };
 
     onChange({
@@ -394,11 +392,25 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
     const isEditing = editingField === field.path;
     const indent = depth * 24;
 
+    // Extract field name from path (last segment after the last dot)
+    const fieldName = field.path.split('.').pop() || field.path;
+
     return (
-      <div key={field.path} className="mb-1">
+      <div key={field.path} style={{ marginBottom: '4px' }}>
         <div
-          className="flex items-start gap-2 p-2 rounded hover:bg-gray-100 transition-colors"
-          style={{ marginLeft: `${indent}px` }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px',
+            marginLeft: `${indent}px`,
+            border: '1px solid #e1e8ed',
+            borderRadius: '4px',
+            backgroundColor: '#ffffff',
+            transition: 'background-color 0.2s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f8fa'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
         >
           {/* Expand/Collapse */}
           <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
@@ -414,24 +426,16 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
           </div>
 
           {/* Field Name */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <code className="font-mono text-sm font-semibold">
-                <EditableFieldName
-                  value={field.name}
-                  onSave={(newName) => handleRenameField(field.path, newName)}
-                  isEditing={isEditing}
-                  onStartEdit={() => setEditingField(field.path)}
-                  onCancelEdit={() => setEditingField(null)}
-                />
-              </code>
-              <Badge variant="outline" className="text-xs">
-                {field.type}
-              </Badge>
-              {field.required && (
-                <Badge className="bg-yellow-100 text-yellow-800 text-xs">Required</Badge>
-              )}
-            </div>
+          <div style={{ flex: '0 0 180px' }}>
+            <code className="font-mono text-sm font-semibold">
+              <EditableFieldName
+                value={fieldName}
+                onSave={(newName) => handleRenameField(field.path, newName)}
+                isEditing={isEditing}
+                onStartEdit={() => setEditingField(field.path)}
+                onCancelEdit={() => setEditingField(null)}
+              />
+            </code>
           </div>
 
           {/* Type Selector */}
@@ -569,11 +573,13 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
           {editMode === 'visual' ? (
             <>
               <Alert className="bg-blue-50 border-blue-200 mb-4">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription>
-                  Define your JSON output structure. Click field names to edit them.
-                  Press Enter to save or Escape to cancel editing.
-                </AlertDescription>
+                <div className="flex items-start gap-2">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <AlertDescription className="flex-1">
+                    Define your JSON output structure. Click field names to edit them.
+                    Press Enter to save or Escape to cancel editing.
+                  </AlertDescription>
+                </div>
               </Alert>
 
               {/* Action Buttons */}

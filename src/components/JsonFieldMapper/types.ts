@@ -7,6 +7,7 @@ export interface JsonFieldMapperProps {
   initialConfig?: JsonMappingConfig;
   onChange: (config: JsonMappingConfig) => void;
   onTest?: () => void;
+  onTestDataSource?: (source: any) => Promise<void>;
 }
 
 export interface SourceSelectorProps {

@@ -634,7 +634,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   };
 
   const OutputFieldsPanel = ({ isFloating = false }) => (
-    <Card className={isFloating ? 'fixed right-5 top-1/2 -translate-y-1/2 w-96 max-h-[70vh] z-50 shadow-xl' : ''}>
+    <Card className={isFloating ? 'fixed right-5 top-1/2 -translate-y-1/2 w-96 max-h-[70vh] z-50 shadow-2xl' : ''}>
       <CardHeader className="pb-3">
         <div className="flex justify-between items-center">
           <CardTitle className="text-base">Output Fields</CardTitle>
@@ -643,7 +643,6 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
               size="sm"
               variant="ghost"
               onClick={() => setViewMode('side-by-side')}
-              className="h-6 w-6 p-0"
             >
               <X className="w-4 h-4" />
             </Button>
@@ -651,7 +650,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="max-h-[calc(70vh-80px)] overflow-y-auto">
+      <CardContent className={isFloating ? 'max-h-[calc(70vh-80px)] overflow-y-auto' : 'overflow-y-auto'}>
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
           const hasMappings = targetMappings.length > 0;
@@ -839,14 +838,15 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   return (
     <div className="field-mapping-canvas space-y-4" ref={canvasRef}>
       <Alert className="bg-blue-50 border-blue-200">
-        <Info className="h-4 w-4 text-blue-600" />
-        <AlertDescription>
-          <div className="flex justify-between items-center">
-            <div>
-              Drag fields from sources to output fields. Fields with [*] can be configured with specific indices.
-              {debugMode && <strong className="text-red-600 ml-2">DEBUG MODE ON - Check Console</strong>}
-            </div>
-            <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
+          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-2" />
+          <AlertDescription className="flex-1">
+            <div className="flex justify-between items-center">
+              <div>
+                Drag fields from sources to output fields. Fields with [*] can be configured with specific indices.
+                {debugMode && <strong className="text-red-600 ml-2">DEBUG MODE ON - Check Console</strong>}
+              </div>
+              <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant={debugMode ? 'destructive' : 'ghost'}
@@ -893,9 +893,10 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
                 />
                 <Label className="text-xs">Mini Map</Label>
               </div>
+              </div>
             </div>
-          </div>
-        </AlertDescription>
+          </AlertDescription>
+        </div>
       </Alert>
 
       <div className={`flex gap-4 min-h-[600px] relative ${viewMode === 'floating' ? '' : ''}`}>

@@ -16,7 +16,9 @@ import {
   Info,
   AlertCircle,
   CheckCircle,
-  ArrowRight
+  ArrowRight,
+  RefreshCw,
+  Search
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible';
 import { findArraysAndObjects } from '../utils/pathHelpers';
@@ -27,6 +29,7 @@ interface SourceSelectorProps {
   selection: any;
   onChange: (selection: any) => void;
   onNext: () => void;
+  onTestDataSource?: (source: any) => Promise<void>;
 }
 
 export const SourceSelector: React.FC<SourceSelectorProps> = ({
@@ -34,7 +37,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   sampleData,
   selection,
   onChange,
-  onNext
+  onNext,
+  onTestDataSource
 }) => {
   const [selectedSources, setSelectedSources] = useState<Set<string>>(() => {
     const initialSelected = selection.sources && selection.sources.length > 0
@@ -68,6 +72,31 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     return selection.sources && selection.sources.length > 0 &&
            selection.sources.some((s: any) => s.primaryPath !== undefined);
   });
+
+  const [testingSource, setTestingSource] = useState<string | null>(null);
+  const [justTestedSource, setJustTestedSource] = useState<string | null>(null);
+
+  // Watch for sampleData changes after testing to trigger auto-detection
+  useEffect(() => {
+    if (justTestedSource && sampleData[justTestedSource]) {
+      // Data is now available, run auto-detection
+      autoDetectPath(justTestedSource);
+      setJustTestedSource(null);
+    }
+  }, [sampleData, justTestedSource]);
+
+  const testDataSource = async (source: any) => {
+    if (!onTestDataSource) return;
+
+    setTestingSource(source.id);
+    try {
+      await onTestDataSource(source);
+      // Mark this source as just tested so the useEffect can detect the new data
+      setJustTestedSource(source.id);
+    } finally {
+      setTestingSource(null);
+    }
+  };
 
   useEffect(() => {
     if (selection.sources && selection.sources.length > 0) {
@@ -200,13 +229,39 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
 
   const renderPathSelector = (sourceId: string) => {
     const data = sampleData[sourceId];
+    const source = dataSources.find(ds => ds.id === sourceId);
+
     if (!data) {
       return (
         <Alert className="bg-yellow-50 border-yellow-200">
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
-          <AlertDescription>
-            No sample data available. Please test this data source first.
-          </AlertDescription>
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <AlertDescription>
+                No sample data available. Test this data source first to discover available fields.
+                {onTestDataSource && source && (
+                  <Button
+                    className="mt-2"
+                    size="sm"
+                    onClick={() => testDataSource(source)}
+                    disabled={testingSource === sourceId}
+                  >
+                    {testingSource === sourceId ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        Testing...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Test & Discover
+                      </>
+                    )}
+                  </Button>
+                )}
+              </AlertDescription>
+            </div>
+          </div>
         </Alert>
       );
     }
@@ -358,7 +413,15 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                     <div className="flex items-center gap-3">
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => toggleSource(source.id)}
+                        onCheckedChange={(checked) => {
+                          toggleSource(source.id);
+                          // Auto-expand when checked
+                          if (checked) {
+                            const newExpanded = new Set(expandedSources);
+                            newExpanded.add(source.id);
+                            setExpandedSources(newExpanded);
+                          }
+                        }}
                       />
 
                       {getSourceIcon(source.type)}

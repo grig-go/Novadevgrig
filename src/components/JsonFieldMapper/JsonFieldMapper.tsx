@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
@@ -31,13 +31,14 @@ export const JsonFieldMapper: React.FC<JsonFieldMapperProps> = ({
   sampleData = {},
   initialConfig,
   onChange,
-  onTest
+  onTest,
+  onTestDataSource
 }) => {
   const [activeTab, setActiveTab] = useState<string>('source');
-  const [config, setConfig] = useState<JsonMappingConfig>(
-    initialConfig || {
+  const [config, setConfig] = useState<JsonMappingConfig>(() => {
+    const defaultConfig = {
       sourceSelection: {
-        type: 'object',
+        type: 'object' as const,
         primaryPath: '',
         sources: []
       },
@@ -59,11 +60,51 @@ export const JsonFieldMapper: React.FC<JsonFieldMapperProps> = ({
         },
         customMetadata: {}
       }
+    };
+
+    if (!initialConfig) {
+      return defaultConfig;
     }
-  );
+
+    // Merge initialConfig with defaults to ensure all required fields exist
+    return {
+      ...defaultConfig,
+      ...initialConfig,
+      sourceSelection: {
+        ...defaultConfig.sourceSelection,
+        ...initialConfig.sourceSelection
+      },
+      outputTemplate: {
+        ...defaultConfig.outputTemplate,
+        ...initialConfig.outputTemplate,
+        fields: initialConfig.outputTemplate?.fields || []
+      },
+      outputWrapper: {
+        ...defaultConfig.outputWrapper,
+        ...initialConfig.outputWrapper,
+        metadataFields: {
+          ...defaultConfig.outputWrapper.metadataFields,
+          ...initialConfig.outputWrapper?.metadataFields
+        }
+      }
+    };
+  });
 
   // Mapping engine (unused but required for initialization)
   useMappingEngine(config, sampleData);
+
+  // Debug log to verify config is loaded properly in edit mode
+  useEffect(() => {
+    if (initialConfig) {
+      console.log('🔧 JsonFieldMapper loaded with config:', {
+        hasSourceSelection: !!initialConfig.sourceSelection,
+        sourceCount: initialConfig.sourceSelection?.sources?.length || 0,
+        hasOutputTemplate: !!initialConfig.outputTemplate,
+        fieldCount: initialConfig.outputTemplate?.fields?.length || 0,
+        fields: initialConfig.outputTemplate?.fields
+      });
+    }
+  }, []);
 
   const updateSourceSelection = (selection: any) => {
     const newConfig = {
@@ -327,6 +368,7 @@ ${config.outputWrapper.metadataFields?.timestamp !== false ? '    "timestamp": "
             selection={getSourceSelection()}
             onChange={updateSourceSelection}
             onNext={handleNextStep}
+            onTestDataSource={onTestDataSource}
           />
         </TabsContent>
 
