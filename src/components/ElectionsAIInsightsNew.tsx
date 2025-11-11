@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
+import { motion } from "motion/react";
 
 interface ElectionsAIInsightsProps {
   races: Race[];
@@ -594,14 +595,24 @@ export function ElectionAIInsights({
 
   if (compact) {
     return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.2, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
       <Card 
-        className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]" 
+        className="h-full relative overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group" 
         onClick={() => {
           loadSavedInsights(); // Refresh insights on click
           if (onClick) onClick();
         }}
       >
-        <CardContent className="p-6">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               {loadingInsights ? (
@@ -616,12 +627,24 @@ export function ElectionAIInsights({
                 </>
               ) : (
                 <>
-                  <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                  <motion.div 
+                    className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 400 }}
+                  >
                     <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  </div>
+                  </motion.div>
                   <div>
                     <p className="text-sm text-muted-foreground">AI Insights</p>
-                    <p className="text-2xl font-semibold">{savedInsights.length}</p>
+                    <motion.p 
+                      className="text-2xl font-semibold"
+                      key={savedInsights.length}
+                      initial={{ scale: 1 }}
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      {savedInsights.length}
+                    </motion.p>
                   </div>
                 </>
               )}
@@ -632,6 +655,7 @@ export function ElectionAIInsights({
           </div>
         </CardContent>
       </Card>
+      </motion.div>
     );
   }
 

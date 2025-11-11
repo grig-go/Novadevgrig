@@ -23,6 +23,7 @@ import {
 import { Activity, Users, User, Calendar, MapPin, TrendingUp, Trophy, Rss, RefreshCw } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
+import { motion } from "framer-motion";
 
 interface SportsDashboardProps {
   onNavigateToFeeds?: () => void;
@@ -505,7 +506,20 @@ export function SportsDashboard({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <Trophy className="w-6 h-6 text-purple-600" />
+            <motion.div
+              animate={{ 
+                rotate: [0, -10, 10, -10, 0],
+                scale: [1, 1.1, 1.1, 1.1, 1]
+              }}
+              transition={{
+                duration: 0.6,
+                repeat: Infinity,
+                repeatDelay: 3,
+                ease: "easeInOut"
+              }}
+            >
+              <Trophy className="w-6 h-6 text-purple-600" />
+            </motion.div>
             Sports Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -513,15 +527,21 @@ export function SportsDashboard({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            onClick={handleInitializeAndSync}
-            disabled={refreshing}
-            variant="outline"
-            className="gap-2"
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Initializing...' : 'Initialize & Sync'}
-          </Button>
+            <Button
+              onClick={handleInitializeAndSync}
+              disabled={refreshing}
+              variant="outline"
+              className="gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Initializing...' : 'Initialize & Sync'}
+            </Button>
+          </motion.div>
           <SportsDebugPanel />
           <SportsAddActions
             onAddMultipleEntities={async (entities) => {
@@ -535,30 +555,67 @@ export function SportsDashboard({
               setLastUpdated(new Date().toISOString());
             }}
           />
-          <div className="text-sm text-muted-foreground">
+          <motion.div 
+            className="text-sm text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
             Last updated ({new Date(lastUpdated).toLocaleTimeString()})
-          </div>
+          </motion.div>
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
-        <Card>
-          <CardContent className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                <motion.div 
+                  className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
                   <Users className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                </div>
+                </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">League Distribution</p>
-                  <p className="text-2xl font-semibold">{leagues.length}</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={leagues.length}
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  >
+                    {leagues.length}
+                  </motion.p>
                 </div>
               </div>
               {stats.leagueStats.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {stats.leagueStats.map((leagueStat, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <motion.div 
+                      key={index} 
+                      className="flex items-center gap-2"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: index * 0.05, type: "spring", stiffness: 200 }}
+                    >
                       <div 
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: leagueStat.color }}
@@ -566,7 +623,7 @@ export function SportsDashboard({
                       <Badge variant="outline" className="text-xs">
                         {leagueStat.name}: {leagueStat.count}
                       </Badge>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               ) : (
@@ -577,23 +634,57 @@ export function SportsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card>
-          <CardContent className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            delay: 0.1,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <motion.div 
+                  className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
                   <Trophy className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </div>
+                </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">Tournament Distribution</p>
-                  <p className="text-2xl font-semibold">{stats.tournamentStats.reduce((sum, t) => sum + t.count, 0)}</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={stats.tournamentStats.reduce((sum, t) => sum + t.count, 0)}
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  >
+                    {stats.tournamentStats.reduce((sum, t) => sum + t.count, 0)}
+                  </motion.p>
                 </div>
               </div>
               {stats.tournamentStats.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {stats.tournamentStats.map((tournamentStat, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <motion.div 
+                      key={index} 
+                      className="flex items-center gap-2"
+                      initial={{ scale: 0, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: index * 0.05, type: "spring", stiffness: 200 }}
+                    >
                       <div 
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: tournamentStat.color }}
@@ -601,7 +692,7 @@ export function SportsDashboard({
                       <Badge variant="outline" className="text-xs">
                         {tournamentStat.name}: {tournamentStat.count}
                       </Badge>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               ) : (
@@ -612,16 +703,44 @@ export function SportsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card>
-          <CardContent className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            delay: 0.2,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-yellow-500/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-yellow-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg">
+              <motion.div 
+                className="p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
                 <Activity className="w-6 h-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
+              </motion.div>
               <div>
                 <p className="text-sm text-muted-foreground">Data Overrides</p>
-                <p className="text-2xl font-semibold">{stats.totalOverrides}</p>
+                <motion.p 
+                  className="text-2xl font-semibold"
+                  key={stats.totalOverrides}
+                  initial={{ scale: 1.2, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                >
+                  {stats.totalOverrides}
+                </motion.p>
                 <p className="text-xs text-muted-foreground">
                   {stats.totalOverrides > 0 
                     ? 'Fields modified from source' 
@@ -632,6 +751,7 @@ export function SportsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
         <SportsAIInsights 
           entities={filteredEntities} 
@@ -649,18 +769,44 @@ export function SportsDashboard({
           onClick={() => setShowAIInsights(!showAIInsights)}
         />
 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            delay: 0.4,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
         <Card 
-          className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+          className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group ${onNavigateToFeeds ? "cursor-pointer hover:bg-muted/50" : ""}`}
           onClick={onNavigateToFeeds}
         >
-          <CardContent className="p-6">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+              <motion.div 
+                className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
                 <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
+              </motion.div>
               <div>
                 <p className="text-sm text-muted-foreground">Data Providers</p>
-                <p className="text-2xl font-semibold">{providers.length}</p>
+                <motion.p 
+                  className="text-2xl font-semibold"
+                  initial={{ scale: 1 }}
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
+                  {providers.length}
+                </motion.p>
                 <p className="text-xs text-muted-foreground">
                   {providers.length === 0 
                     ? 'No providers configured'
@@ -672,6 +818,7 @@ export function SportsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
       </div>
 
       {/* Expanded AI Insights Section */}

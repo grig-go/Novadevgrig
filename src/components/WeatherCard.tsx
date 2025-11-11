@@ -43,6 +43,7 @@ import {
   Check
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
+import { motion } from "motion/react";
 
 interface WeatherCardProps {
   location: WeatherLocationWithOverrides;
@@ -502,9 +503,39 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   };
 
   if (view === 'current') {
+    const tempValue = temperatureValue || 0;
+    const isHot = tempValue > 85;
+    const isCold = tempValue < 32;
+    
     return (
       <>
-        <Card className="h-full hover:shadow-lg transition-shadow">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+            {/* Animated background gradient on hover */}
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              initial={false}
+            />
+            
+            {/* Temperature-based pulse for extreme weather */}
+            {(isHot || isCold) && (
+              <motion.div
+                className={`absolute inset-0 ${isHot ? 'bg-orange-500/10' : 'bg-blue-500/10'}`}
+                animate={{
+                  opacity: [0.3, 0.6, 0.3],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
+              />
+            )}
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
@@ -598,6 +629,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardContent>
       </Card>
+      </motion.div>
       
       <WeatherBackendDataDialog
         open={backendDataOpen}
@@ -641,7 +673,17 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   if (view === 'hourly') {
     return (
       <>
-      <Card className="h-full hover:shadow-lg transition-shadow">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -688,6 +730,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardContent>
       </Card>
+      </motion.div>
       
       <WeatherBackendDataDialog
         open={backendDataOpen}
@@ -731,7 +774,17 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   if (view === 'daily') {
     return (
       <>
-        <Card className="h-full hover:shadow-lg transition-shadow">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -786,6 +839,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardContent>
       </Card>
+      </motion.div>
       
       <WeatherBackendDataDialog
         open={backendDataOpen}
@@ -827,9 +881,36 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   }
 
   if (view === 'alerts') {
+    const hasAlerts = (location.data?.alerts?.length || 0) > 0;
+    
     return (
       <>
-        <Card className="h-full hover:shadow-lg transition-shadow">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          
+          {/* Alert pulse for active alerts */}
+          {hasAlerts && (
+            <motion.div
+              className="absolute inset-0 bg-red-500/10"
+              animate={{
+                opacity: [0.3, 0.6, 0.3],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          )}
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -910,6 +991,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardContent>
       </Card>
+      </motion.div>
       
       <WeatherBackendDataDialog
         open={backendDataOpen}
@@ -951,9 +1033,36 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   }
 
   if (view === 'tropical') {
+    const hasTropicalSystems = location.data.tropical?.systems?.length > 0;
+    
     return (
       <>
-      <Card className="h-full hover:shadow-lg transition-shadow">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        
+        {/* Tropical system pulse */}
+        {hasTropicalSystems && (
+          <motion.div
+            className="absolute inset-0 bg-purple-500/10"
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+        )}
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1044,6 +1153,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           )}
         </CardContent>
       </Card>
+      </motion.div>
       
       <WeatherBackendDataDialog
         open={backendDataOpen}

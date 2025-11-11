@@ -18,6 +18,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Switch } from "./ui/switch";
@@ -46,7 +56,11 @@ import {
   EyeOff,
   Loader2,
   Pencil,
-  Clock
+  Clock,
+  School,
+  Trophy,
+  Plus,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
@@ -54,7 +68,7 @@ import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { copyToClipboard as copyTextToClipboard } from "../utils/clipboard";
 
 // Categories for display
-type ProviderCategory = "weather" | "sports" | "news" | "finance";
+type ProviderCategory = "weather" | "sports" | "news" | "finance" | "school_closings";
 
 // RPC response interface (from list_providers_with_status_all/category)
 interface DataProvider {
@@ -126,11 +140,46 @@ export function FeedsDashboardWithSupabase({
     units: "metric",
     selectedLeagues: [] as string[],
     refresh_interval_minutes: 15,
+    // School closings config
+    endpoint: "",
+    region_id: "",
+    sample_url: "",
   });
 
   // Sports leagues state
   const [availableLeagues, setAvailableLeagues] = useState<any[]>([]);
   const [loadingLeagues, setLoadingLeagues] = useState(false);
+  
+  // Add dialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addFormData, setAddFormData] = useState({
+    name: "",
+    description: "",
+    type: "api" as string,
+    category: "weather" as ProviderCategory,
+    is_active: true,
+    api_key: "",
+    api_secret: "",
+    base_url: "",
+    source_url: "",
+    storage_path: "",
+    api_version: "",
+    language: "en",
+    units: "metric",
+    selectedLeagues: [] as string[],
+    refresh_interval_minutes: 15,
+    // School closings config
+    endpoint: "",
+    region_id: "",
+    sample_url: "",
+  });
+  const [showAddApiKey, setShowAddApiKey] = useState(false);
+  const [showAddApiSecret, setShowAddApiSecret] = useState(false);
+  const [adding, setAdding] = useState(false);
+  
+  // Delete confirmation state
+  const [providerToDelete, setProviderToDelete] = useState<DataProvider | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   // Debug dialog state
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
@@ -239,6 +288,10 @@ export function FeedsDashboardWithSupabase({
           units: config.units || "metric",
           selectedLeagues: config.leagues || [],
           refresh_interval_minutes: fullProvider.refresh_interval_minutes || 15,
+          // School closings config
+          endpoint: config.endpoint || "",
+          region_id: config.region_id || "",
+          sample_url: config.sample_url || "",
         });
         
         // If sports provider, load available leagues
@@ -325,6 +378,10 @@ export function FeedsDashboardWithSupabase({
         configObj.units = editFormData.units;
       } else if (editProvider.category === 'sports') {
         configObj.leagues = editFormData.selectedLeagues.map(id => Number(id));
+      } else if (editProvider.category === 'school_closings') {
+        configObj.endpoint = editFormData.endpoint;
+        configObj.region_id = editFormData.region_id;
+        configObj.sample_url = editFormData.sample_url;
       }
 
       // Use singleton Supabase client
@@ -376,6 +433,128 @@ export function FeedsDashboardWithSupabase({
     }
   };
 
+  const handleAdd = async () => {
+    console.log("Add button clicked. Form data:", addFormData);
+    
+    // Validate required fields
+    if (!addFormData.name || !addFormData.name.trim()) {
+      toast.error("Provider name is required");
+      return;
+    }
+    
+    if (!addFormData.base_url && addFormData.type !== 'local') {
+      toast.error("Base URL is required for API providers");
+      return;
+    }
+    
+    if (!addFormData.source_url && addFormData.type === 'local') {
+      toast.error("Source URL is required for local providers");
+      return;
+    }
+    
+    setAdding(true);
+    try {
+      // Build config object
+      const configObj: any = {};
+      
+      if (addFormData.category === 'weather') {
+        configObj.language = addFormData.language;
+        configObj.units = addFormData.units;
+      } else if (addFormData.category === 'sports') {
+        configObj.leagues = addFormData.selectedLeagues.map(id => Number(id));
+      } else if (addFormData.category === 'school_closings') {
+        configObj.endpoint = addFormData.endpoint;
+        configObj.region_id = addFormData.region_id;
+        configObj.sample_url = addFormData.sample_url;
+      }
+
+      // Use RPC to create provider with proper security
+      const { data, error } = await supabase.rpc('create_data_provider', {
+        _type: addFormData.type,
+        _category: addFormData.category,
+        _name: addFormData.name.trim(),
+        _description: addFormData.description || null,
+        _api_key: addFormData.api_key || null,
+        _api_secret: addFormData.api_secret || null,
+        _base_url: addFormData.base_url || null,
+        _api_version: addFormData.api_version || null,
+        _config: configObj,
+        _refresh_interval_minutes: addFormData.refresh_interval_minutes,
+      });
+
+      if (error) {
+        console.error("Failed to add provider:", error);
+        throw new Error(`Failed to add provider: ${error.message}`);
+      }
+
+      console.log("Provider added successfully", data);
+      toast.success(`Provider "${addFormData.name}" added successfully`);
+      
+      setAddDialogOpen(false);
+      
+      // Reset form
+      setAddFormData({
+        name: "",
+        description: "",
+        type: "api",
+        category: "weather",
+        is_active: true,
+        api_key: "",
+        api_secret: "",
+        base_url: "",
+        source_url: "",
+        storage_path: "",
+        api_version: "",
+        language: "en",
+        units: "metric",
+        selectedLeagues: [],
+        refresh_interval_minutes: 15,
+        endpoint: "",
+        region_id: "",
+        sample_url: "",
+      });
+
+      // Reload providers
+      await loadProviders(selectedCategory === "All" ? undefined : selectedCategory);
+    } catch (error) {
+      console.error("Error adding provider:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to add provider");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!providerToDelete) return;
+    
+    setDeleting(true);
+    try {
+      console.log("🗑️ Deleting provider:", providerToDelete.id);
+      
+      const { data, error } = await supabase.rpc('delete_data_provider', {
+        _id: providerToDelete.id
+      });
+
+      if (error) {
+        console.error("❌ Failed to delete provider:", error.message);
+        throw new Error(`Failed to delete provider: ${error.message}`);
+      }
+
+      console.log("✅ Deleted provider:", data);
+      toast.success(`Provider "${providerToDelete.name}" deleted successfully`);
+      
+      setProviderToDelete(null);
+      
+      // Reload providers
+      await loadProviders(selectedCategory === "All" ? undefined : selectedCategory);
+    } catch (error) {
+      console.error("Error deleting provider:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to delete provider");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleTestConnection = async () => {
     if (!editProvider) return;
     
@@ -405,6 +584,10 @@ export function FeedsDashboardWithSupabase({
         configObj.temperatureUnit = editFormData.units;
       } else if (editProvider.category === 'sports') {
         configObj.leagues = editFormData.selectedLeagues;
+      } else if (editProvider.category === 'school_closings') {
+        configObj.endpoint = editFormData.endpoint;
+        configObj.region_id = editFormData.region_id;
+        configObj.sample_url = editFormData.sample_url;
       }
       
       // Determine the correct edge function based on category
@@ -551,11 +734,13 @@ export function FeedsDashboardWithSupabase({
       case "weather":
         return <CloudSun className="w-5 h-5" />;
       case "sports":
-        return <TrendingUp className="w-5 h-5" />;
+        return <Trophy className="w-5 h-5" />;
       case "news":
         return <Newspaper className="w-5 h-5" />;
       case "finance":
         return <TrendingUp className="w-5 h-5" />;
+      case "school_closings":
+        return <School className="w-5 h-5" />;
       default:
         return <Database className="w-5 h-5" />;
     }
@@ -571,6 +756,8 @@ export function FeedsDashboardWithSupabase({
         return "text-purple-600 dark:text-purple-400";
       case "finance":
         return "text-amber-600 dark:text-amber-400";
+      case "school_closings":
+        return "text-red-600 dark:text-red-400";
       default:
         return "text-gray-600 dark:text-gray-400";
     }
@@ -616,6 +803,13 @@ export function FeedsDashboardWithSupabase({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button onClick={() => {
+            console.log("Add Provider button clicked - opening dialog");
+            setAddDialogOpen(true);
+          }} size="sm">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Provider
+          </Button>
           <Button onClick={handleRefresh} variant="outline" size="sm">
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -645,7 +839,7 @@ export function FeedsDashboardWithSupabase({
           size="sm"
           onClick={() => setSelectedCategory("sports")}
         >
-          <TrendingUp className="w-4 h-4 mr-2" />
+          <Trophy className="w-4 h-4 mr-2" />
           Sports
         </Button>
         <Button
@@ -664,6 +858,14 @@ export function FeedsDashboardWithSupabase({
           <TrendingUp className="w-4 h-4 mr-2" />
           Finance
         </Button>
+        <Button
+          variant={selectedCategory === "school_closings" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedCategory("school_closings")}
+        >
+          <School className="w-4 h-4 mr-2" />
+          School Closings
+        </Button>
       </div>
 
       {/* Providers Table */}
@@ -671,7 +873,11 @@ export function FeedsDashboardWithSupabase({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="w-5 h-5" />
-            {selectedCategory === "All" ? "All Providers" : `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Providers`}
+            {selectedCategory === "All" 
+              ? "All Providers" 
+              : selectedCategory === "school_closings"
+              ? "School Closings Providers"
+              : `${selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)} Providers`}
             <Badge variant="secondary" className="ml-2">
               {filteredProviders.length}
             </Badge>
@@ -782,6 +988,15 @@ export function FeedsDashboardWithSupabase({
                             title="Debug provider"
                           >
                             <Bug className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setProviderToDelete(provider)}
+                            title="Delete provider"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -1166,6 +1381,52 @@ export function FeedsDashboardWithSupabase({
                 </div>
               )}
 
+              {/* School Closings-specific options */}
+              {editProvider.category === 'school_closings' && (
+                <div className="space-y-4 p-4 border rounded-lg">
+                  <h3 className="font-semibold">School Closings Configuration</h3>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="endpoint">API Endpoint</Label>
+                    <Input
+                      id="endpoint"
+                      value={editFormData.endpoint}
+                      onChange={(e) => setEditFormData({ ...editFormData, endpoint: e.target.value })}
+                      placeholder="/GetClosings?sOrganizationName=&sRegionId=42&sZoneId="
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The API endpoint path with query parameters
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="region_id">Region ID</Label>
+                    <Input
+                      id="region_id"
+                      value={editFormData.region_id}
+                      onChange={(e) => setEditFormData({ ...editFormData, region_id: e.target.value })}
+                      placeholder="42"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The region identifier for school closings data
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="sample_url">Sample URL (Optional)</Label>
+                    <Input
+                      id="sample_url"
+                      value={editFormData.sample_url}
+                      onChange={(e) => setEditFormData({ ...editFormData, sample_url: e.target.value })}
+                      placeholder="https://example.com/sample.xml"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional URL to a sample data file for testing
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Test Connection Button */}
               <Button
                 onClick={handleTestConnection}
@@ -1491,6 +1752,388 @@ export function FeedsDashboardWithSupabase({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add Provider Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5" />
+              Add New Provider
+            </DialogTitle>
+            <DialogDescription>
+              Configure a new data provider
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Provider Name */}
+            <div className="space-y-2">
+              <Label htmlFor="add_name">Provider Name *</Label>
+              <Input
+                id="add_name"
+                value={addFormData.name}
+                onChange={(e) => setAddFormData({ ...addFormData, name: e.target.value })}
+                placeholder="My Weather Provider"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+              <Label htmlFor="add_description">Description</Label>
+              <Input
+                id="add_description"
+                value={addFormData.description}
+                onChange={(e) => setAddFormData({ ...addFormData, description: e.target.value })}
+                placeholder="Brief description of this provider"
+              />
+            </div>
+
+            {/* Type and Category */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="add_type">Provider Type *</Label>
+                <Select
+                  value={addFormData.type}
+                  onValueChange={(value) => setAddFormData({ ...addFormData, type: value })}
+                >
+                  <SelectTrigger id="add_type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="api">API</SelectItem>
+                    <SelectItem value="local">Local File</SelectItem>
+                    <SelectItem value="sportmonks">SportMonks</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="add_category">Category *</Label>
+                <Select
+                  value={addFormData.category}
+                  onValueChange={(value) => setAddFormData({ ...addFormData, category: value as ProviderCategory })}
+                >
+                  <SelectTrigger id="add_category">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weather">Weather</SelectItem>
+                    <SelectItem value="sports">Sports</SelectItem>
+                    <SelectItem value="news">News</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="school_closings">School Closings</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Active Status */}
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div>
+                <Label htmlFor="add_is_active" className="cursor-pointer">
+                  Enable Provider
+                </Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {addFormData.is_active
+                    ? "Provider is active and will be used"
+                    : "Provider is disabled"}
+                </p>
+              </div>
+              <Switch
+                id="add_is_active"
+                checked={addFormData.is_active}
+                onCheckedChange={(checked) =>
+                  setAddFormData({ ...addFormData, is_active: checked })
+                }
+              />
+            </div>
+
+            {/* API Key */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="add_api_key">API Key</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddApiKey(!showAddApiKey)}
+                >
+                  {showAddApiKey ? (
+                    <><EyeOff className="w-3 h-3 mr-1" /> Hide</>
+                  ) : (
+                    <><Eye className="w-3 h-3 mr-1" /> Show</>
+                  )}
+                </Button>
+              </div>
+              <Input
+                id="add_api_key"
+                type={showAddApiKey ? "text" : "password"}
+                value={addFormData.api_key}
+                onChange={(e) => setAddFormData({ ...addFormData, api_key: e.target.value })}
+                placeholder="Enter API key"
+              />
+            </div>
+
+            {/* API Secret */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="add_api_secret">API Secret (Optional)</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddApiSecret(!showAddApiSecret)}
+                >
+                  {showAddApiSecret ? (
+                    <><EyeOff className="w-3 h-3 mr-1" /> Hide</>
+                  ) : (
+                    <><Eye className="w-3 h-3 mr-1" /> Show</>
+                  )}
+                </Button>
+              </div>
+              <Input
+                id="add_api_secret"
+                type={showAddApiSecret ? "text" : "password"}
+                value={addFormData.api_secret}
+                onChange={(e) => setAddFormData({ ...addFormData, api_secret: e.target.value })}
+                placeholder="Enter API secret (if required)"
+              />
+            </div>
+
+            {/* Base URL or Source URL depending on provider type */}
+            {addFormData.type === 'local' ? (
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold">Local Provider Paths</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="add_source_url">Source URL *</Label>
+                  <Input
+                    id="add_source_url"
+                    value={addFormData.source_url}
+                    onChange={(e) => setAddFormData({ ...addFormData, source_url: e.target.value })}
+                    placeholder="file:///C:/path/to/data.csv"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    File URL format (e.g., file:///C:/Users/...)
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="add_storage_path">Storage Path</Label>
+                  <Input
+                    id="add_storage_path"
+                    value={addFormData.storage_path}
+                    onChange={(e) => setAddFormData({ ...addFormData, storage_path: e.target.value })}
+                    placeholder="C:\\path\\to\\data.csv"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    File system path (e.g., C:\\Users\\...)
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="add_base_url">Base URL *</Label>
+                <Input
+                  id="add_base_url"
+                  value={addFormData.base_url}
+                  onChange={(e) => setAddFormData({ ...addFormData, base_url: e.target.value })}
+                  placeholder="https://api.example.com"
+                />
+              </div>
+            )}
+
+            {/* API Version */}
+            <div className="space-y-2">
+              <Label htmlFor="add_api_version">API Version (Optional)</Label>
+              <Input
+                id="add_api_version"
+                value={addFormData.api_version}
+                onChange={(e) => setAddFormData({ ...addFormData, api_version: e.target.value })}
+                placeholder="v1, v3, etc."
+              />
+            </div>
+
+            {/* Refresh Interval */}
+            <div className="space-y-2">
+              <Label htmlFor="add_refresh_interval">Refresh Interval (Minutes)</Label>
+              <Input
+                id="add_refresh_interval"
+                type="number"
+                min="1"
+                max="1440"
+                value={addFormData.refresh_interval_minutes}
+                onChange={(e) => setAddFormData({ ...addFormData, refresh_interval_minutes: parseInt(e.target.value) || 15 })}
+                placeholder="15"
+              />
+              <p className="text-xs text-muted-foreground">
+                How often the provider should fetch new data (1-1440 minutes)
+              </p>
+            </div>
+
+            {/* Weather-specific options */}
+            {addFormData.category === 'weather' && (
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold">Weather Options</h3>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="add_language">Language</Label>
+                  <Select
+                    value={addFormData.language}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, language: value })}
+                  >
+                    <SelectTrigger id="add_language">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="es">Spanish</SelectItem>
+                      <SelectItem value="fr">French</SelectItem>
+                      <SelectItem value="de">German</SelectItem>
+                      <SelectItem value="it">Italian</SelectItem>
+                      <SelectItem value="pt">Portuguese</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="add_units">Temperature Units</Label>
+                  <Select
+                    value={addFormData.units}
+                    onValueChange={(value) => setAddFormData({ ...addFormData, units: value })}
+                  >
+                    <SelectTrigger id="add_units">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="metric">Celsius (°C)</SelectItem>
+                      <SelectItem value="imperial">Fahrenheit (°F)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* School Closings-specific options */}
+            {addFormData.category === 'school_closings' && (
+              <div className="space-y-4 p-4 border rounded-lg">
+                <h3 className="font-semibold">School Closings Configuration</h3>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="add_endpoint">API Endpoint</Label>
+                  <Input
+                    id="add_endpoint"
+                    value={addFormData.endpoint}
+                    onChange={(e) => setAddFormData({ ...addFormData, endpoint: e.target.value })}
+                    placeholder="/GetClosings?sOrganizationName=&sRegionId=42&sZoneId="
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The API endpoint path with query parameters
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="add_region_id">Region ID</Label>
+                  <Input
+                    id="add_region_id"
+                    value={addFormData.region_id}
+                    onChange={(e) => setAddFormData({ ...addFormData, region_id: e.target.value })}
+                    placeholder="42"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The region identifier for school closings data
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="add_sample_url">Sample URL (Optional)</Label>
+                  <Input
+                    id="add_sample_url"
+                    value={addFormData.sample_url}
+                    onChange={(e) => setAddFormData({ ...addFormData, sample_url: e.target.value })}
+                    placeholder="https://example.com/sample.xml"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional URL to a sample data file for testing
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Note about Sports leagues */}
+            {addFormData.category === 'sports' && (
+              <div className="p-4 border rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  <strong>Note:</strong> You can configure league selections after creating the provider by editing it.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAddDialogOpen(false)}
+              disabled={adding}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAdd}
+              disabled={adding}
+            >
+              {adding ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Provider
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!providerToDelete} onOpenChange={(open) => !open && setProviderToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="w-5 h-5" />
+              Danger! Are you sure?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the provider{" "}
+              <span className="font-semibold text-foreground">"{providerToDelete?.name}"</span>?
+              <br />
+              <br />
+              This action cannot be undone. This will permanently delete the provider
+              and all its configuration.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Provider
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

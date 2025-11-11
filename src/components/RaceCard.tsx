@@ -10,6 +10,7 @@ import { InlineTextEdit, InlineNumberEdit, InlineSelectEdit, InlineBooleanEdit }
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { updateRacesFieldOverride, updateRaceFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { EditImageDialog } from "./EditImageDialog";
+import { motion } from "motion/react";
 
 interface RaceCardProps {
   race: Race;

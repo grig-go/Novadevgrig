@@ -21,6 +21,7 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Slider } from "./ui/slider";
+import { motion } from "motion/react";
 
 import { MediaAsset, MediaType, MediaSource, SyncStatus } from "../types/media";
 import { toast } from "sonner@2.0.3";
@@ -1485,7 +1486,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <HardDrive className="w-6 h-6" />
+            <motion.div
+              animate={{ 
+                rotate: [0, -5, 5, -5, 0],
+                scale: [1, 1.05, 1.05, 1.05, 1]
+              }}
+              transition={{
+                duration: 0.5,
+                repeat: Infinity,
+                repeatDelay: 3,
+                ease: "easeInOut"
+              }}
+            >
+              <HardDrive className="w-6 h-6" />
+            </motion.div>
             Media Library
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -1493,32 +1507,56 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh}
-            disabled={backendLoading}
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <RefreshCw className={`w-4 h-4 ${backendLoading ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
-            {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid3x3 className="w-4 h-4" />}
-          </Button>
-          <Button 
-            onClick={() => {
-              setShowAIImageDialog(true);
-              setAiImagePrompt('');
-              setGeneratedImageUrl(null);
-            }} 
-            className="gap-2 bg-black text-white hover:bg-black/90"
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefresh}
+              disabled={backendLoading}
+            >
+              <RefreshCw className={`w-4 h-4 ${backendLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <Sparkles className="w-4 h-4" />
-            Gen Image
-          </Button>
-          <Button onClick={() => setShowUploadDialog(true)} className="gap-2">
-            <Upload className="w-4 h-4" />
-            Upload Media
-          </Button>
+            <Button variant="outline" size="sm" onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}>
+              {viewMode === 'grid' ? <List className="w-4 h-4" /> : <Grid3x3 className="w-4 h-4" />}
+            </Button>
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <Button 
+              onClick={() => {
+                setShowAIImageDialog(true);
+                setAiImagePrompt('');
+                setGeneratedImageUrl(null);
+              }} 
+              className="gap-2 bg-black text-white hover:bg-black/90"
+            >
+              <Sparkles className="w-4 h-4" />
+              Gen Image
+            </Button>
+          </motion.div>
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <Button onClick={() => setShowUploadDialog(true)} className="gap-2">
+              <Upload className="w-4 h-4" />
+              Upload Media
+            </Button>
+          </motion.div>
         </div>
       </div>
 
@@ -1884,10 +1922,26 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         </Card>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {paginatedAssets.map((asset) => (
-            <Card 
+          {paginatedAssets.map((asset, index) => (
+            <motion.div
               key={asset.id}
-              className={`overflow-hidden hover:shadow-lg transition-shadow flex flex-col h-full ${
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{
+                type: "spring",
+                stiffness: 260,
+                damping: 20,
+                delay: index * 0.02
+              }}
+              whileHover={{ 
+                y: -4,
+                transition: { type: "spring", stiffness: 400, damping: 17 }
+              }}
+              className="h-full"
+            >
+            <Card 
+              className={`overflow-hidden transition-shadow flex flex-col h-full ${
                 selectedIds.has(asset.id) ? 'ring-2 ring-blue-500' : ''
               }`}
             >
@@ -1950,15 +2004,24 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 </div>
               </CardContent>
             </Card>
+            </motion.div>
           ))}
         </div>
       ) : (
         <Card>
           <CardContent className="p-0">
             <div className="divide-y">
-              {paginatedAssets.map((asset) => (
-                <div 
+              {paginatedAssets.map((asset, index) => (
+                <motion.div 
                   key={asset.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 260,
+                    damping: 20,
+                    delay: index * 0.02
+                  }}
                   className={`p-4 hover:bg-muted/50 flex items-center gap-4 ${
                     selectedIds.has(asset.id) ? 'bg-blue-50 dark:bg-blue-950' : ''
                   }`}
@@ -2008,7 +2071,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                     {formatFileSize(asset.file_size)}
                   </div>
                   {getSyncStatusBadge(asset.sync_status, asset.id)}
-                </div>
+                </motion.div>
               ))}
             </div>
           </CardContent>

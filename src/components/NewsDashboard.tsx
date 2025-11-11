@@ -15,6 +15,7 @@ import {
   Newspaper, Database, Clock, RefreshCw, Loader2, ExternalLink, Archive, Rss
 } from "lucide-react";
 import { Switch } from "./ui/switch";
+import { motion } from "motion/react";
 
 interface NewsDashboardProps {
   onNavigateToFeeds?: () => void;
@@ -307,7 +308,20 @@ export function NewsDashboard({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <Newspaper className="w-6 h-6 text-blue-600" />
+            <motion.div
+              animate={{ 
+                rotate: [0, -10, 10, -10, 0],
+                scale: [1, 1.1, 1.1, 1.1, 1]
+              }}
+              transition={{
+                duration: 0.6,
+                repeat: Infinity,
+                repeatDelay: 3,
+                ease: "easeInOut"
+              }}
+            >
+              <Newspaper className="w-6 h-6 text-blue-600" />
+            </motion.div>
             News Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -325,40 +339,76 @@ export function NewsDashboard({
             <Archive className="w-4 h-4 text-muted-foreground" />
             <span className="text-sm">Stored</span>
           </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={useStoredArticles ? handleFetchStoredArticles : handleFetchArticles}
-            disabled={loadingArticles}
-            className="gap-2"
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            {loadingArticles ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Fetching...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                {useStoredArticles ? 'Refresh Stored' : 'Fetch Live'}
-              </>
-            )}
-          </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={useStoredArticles ? handleFetchStoredArticles : handleFetchArticles}
+              disabled={loadingArticles}
+              className="gap-2"
+            >
+              {loadingArticles ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Fetching...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  {useStoredArticles ? 'Refresh Stored' : 'Fetch Live'}
+                </>
+              )}
+            </Button>
+          </motion.div>
           <NewsDebugPanel />
         </div>
       </div>
 
       {/* Summary Statistics (KPIs) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+              <motion.div 
+                className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
                 <Newspaper className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
+              </motion.div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Articles</p>
-                <p className="text-2xl font-semibold">{loadingArticles ? '...' : articles.length}</p>
+                {loadingArticles ? (
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                ) : (
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={articles.length}
+                    initial={{ scale: 1.2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                  >
+                    {articles.length}
+                  </motion.p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {loadingArticles ? 'Loading...' : 'From all sources'}
                 </p>
@@ -366,6 +416,7 @@ export function NewsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
         <NewsAIInsights
           articles={filteredArticles}
@@ -373,15 +424,42 @@ export function NewsDashboard({
           onClick={() => setShowAIInsights(!showAIInsights)}
         />
 
-        <Card>
-          <CardContent className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            delay: 0.2,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/10 group">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+              <motion.div 
+                className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
                 <Database className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
+              </motion.div>
               <div>
                 <p className="text-sm text-muted-foreground">Data Mode</p>
-                <p className="text-2xl font-semibold">{useStoredArticles ? 'Stored' : 'Live'}</p>
+                <motion.p 
+                  className="text-2xl font-semibold"
+                  key={useStoredArticles ? 'stored' : 'live'}
+                  initial={{ scale: 1.2, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                >
+                  {useStoredArticles ? 'Stored' : 'Live'}
+                </motion.p>
                 <p className="text-xs text-muted-foreground">
                   {useStoredArticles ? 'From database' : 'Real-time fetch'}
                 </p>
@@ -389,21 +467,46 @@ export function NewsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ 
+            duration: 0.5,
+            delay: 0.3,
+            type: "spring",
+            stiffness: 100,
+            damping: 15
+          }}
+        >
         <Card 
-          className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+          className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group ${onNavigateToFeeds ? "cursor-pointer hover:bg-muted/50" : ""}`}
           onClick={onNavigateToFeeds}
         >
-          <CardContent className="p-6">
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            initial={false}
+          />
+          <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+              <motion.div 
+                className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                whileHover={{ scale: 1.1, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              >
                 <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
+              </motion.div>
               <div>
                 <p className="text-sm text-muted-foreground">Data Providers</p>
-                <p className="text-2xl font-semibold">
+                <motion.p 
+                  className="text-2xl font-semibold"
+                  initial={{ scale: 1 }}
+                  whileHover={{ scale: 1.05 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
                   {availableProviders.filter(p => p.is_active).length}/{availableProviders.length}
-                </p>
+                </motion.p>
                 <p className="text-xs text-muted-foreground">
                   {availableProviders.filter(p => p.is_active).length} active
                 </p>
@@ -411,6 +514,7 @@ export function NewsDashboard({
             </div>
           </CardContent>
         </Card>
+        </motion.div>
       </div>
 
       {/* AI Insights Section - Expanded View */}
@@ -545,20 +649,40 @@ export function NewsDashboard({
             </div>
           ) : (
             <div className="grid gap-4">
-              {filteredArticles.map((article) => (
-                <a
+              {filteredArticles.map((article, index) => (
+                <motion.a
                   key={article.id}
                   href={article.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="grid grid-cols-[160px_1fr] gap-4 p-4 border rounded-lg hover:shadow-md transition-shadow no-underline text-foreground"
+                  className="grid grid-cols-[160px_1fr] gap-4 p-4 border rounded-lg transition-all no-underline text-foreground relative overflow-hidden group"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: index * 0.05,
+                    type: "spring",
+                    stiffness: 100,
+                    damping: 15
+                  }}
+                  whileHover={{ 
+                    scale: 1.02,
+                    transition: { type: "spring", stiffness: 400, damping: 17 }
+                  }}
                 >
-                  <div className="w-[160px] h-[100px] bg-muted rounded overflow-hidden">
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    initial={false}
+                  />
+                  <div className="w-[160px] h-[100px] bg-muted rounded overflow-hidden relative">
                     {article.imageUrl ? (
-                      <img
+                      <motion.img
                         src={article.imageUrl}
                         alt=""
                         className="w-full h-full object-cover"
+                        initial={{ scale: 1 }}
+                        whileHover={{ scale: 1.1 }}
+                        transition={{ duration: 0.3 }}
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
@@ -569,15 +693,25 @@ export function NewsDashboard({
                       </div>
                     )}
                   </div>
-                  <div>
+                  <div className="relative">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="flex-1">{article.title}</h3>
-                      <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <motion.div
+                        whileHover={{ x: 3, y: -3 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                      >
+                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      </motion.div>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <Badge variant="outline" className="text-xs">
-                        {article.provider.toUpperCase()}
-                      </Badge>
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                      >
+                        <Badge variant="outline" className="text-xs">
+                          {article.provider.toUpperCase()}
+                        </Badge>
+                      </motion.div>
                       {article.sourceName && (
                         <span>{article.sourceName}</span>
                       )}
@@ -591,7 +725,7 @@ export function NewsDashboard({
                       </p>
                     )}
                   </div>
-                </a>
+                </motion.a>
               ))}
             </div>
           )}
