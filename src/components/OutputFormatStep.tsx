@@ -35,6 +35,7 @@ import {
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useToast } from './ui/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { JsonFieldMapper } from './JsonFieldMapper/JsonFieldMapper';
 
 // Helper function to extract field paths with data examples
 function extractFieldPaths(obj: any, prefix = ''): Array<{ path: string; display: string }> {
@@ -102,16 +103,8 @@ const JsonPathSelector: React.FC<{
 
   // Auto-select first array path when autoSelect prop is true
   useEffect(() => {
-    console.log('JsonPathSelector useEffect:', {
-      autoSelect,
-      arrayPathsLength: arrayPaths.length,
-      selectedItemsPath,
-      firstPath: arrayPaths[0]?.path
-    });
-
     if (autoSelect && arrayPaths.length > 0 && !selectedItemsPath) {
       const firstPath = arrayPaths[0].path;
-      console.log('Auto-selecting first array path:', firstPath);
       onSelectItemsPath(firstPath);
     }
   }, [autoSelect, arrayPaths.length, selectedItemsPath, onSelectItemsPath]);
@@ -131,7 +124,7 @@ const JsonPathSelector: React.FC<{
           <div className="space-y-2">
             {arrayPaths.map(({ path, count }) => (
               <div key={path} className="flex items-center space-x-2">
-                <RadioGroupItem value={path} id={`array-${path}`} className="border-2 border-gray-400" />
+                <RadioGroupItem value={path} id={`array-${path}`} className="border-2 border-gray-700" />
                 <label htmlFor={`array-${path}`} className="font-normal cursor-pointer flex items-center gap-2">
                   <code className="text-sm bg-gray-100 px-2 py-1 rounded">{path}</code>
                   <Badge variant="default" className="bg-blue-100 text-blue-800 border-blue-200">
@@ -453,6 +446,12 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     includeMetadata: formData.formatOptions?.includeMetadata || false,
     wrapResponse: formData.formatOptions?.wrapResponse || false,
     rootElement: formData.formatOptions?.rootElement || 'data',
+    rootWrapper: formData.formatOptions?.rootWrapper || 'data',
+    sourceId: formData.formatOptions?.sourceId || '',
+    includeNulls: formData.formatOptions?.includeNulls !== false,
+    sortKeys: formData.formatOptions?.sortKeys || false,
+    isoDates: formData.formatOptions?.isoDates !== false,
+    encoding: formData.formatOptions?.encoding || 'UTF-8',
 
     // XML options
     xmlRootElement: formData.formatOptions?.xmlRootElement || 'response',
@@ -465,10 +464,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     channelDescription: formData.formatOptions?.channelDescription || '',
     channelLink: formData.formatOptions?.channelLink || '',
 
-    // RSS Single-source field mappings (legacy)
+    // RSS Single-source field mappings (legacy) - shared with ATOM
     titleField: formData.formatOptions?.titleField || '',
     descriptionField: formData.formatOptions?.descriptionField || '',
     linkField: formData.formatOptions?.linkField || '',
+    contentField: formData.formatOptions?.contentField || '',
     pubDateField: formData.formatOptions?.pubDateField || '',
     guidField: formData.formatOptions?.guidField || '',
     authorField: formData.formatOptions?.authorField || '',
@@ -489,8 +489,10 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     authorEmail: formData.formatOptions?.authorEmail || '',
     idField: formData.formatOptions?.idField || '',
     summaryField: formData.formatOptions?.summaryField || '',
-    contentField: formData.formatOptions?.contentField || '',
+    // Note: linkField, contentField, titleField are shared with RSS and already defined above
     updatedField: formData.formatOptions?.updatedField || '',
+    publishedField: formData.formatOptions?.publishedField || '',
+    categoriesField: formData.formatOptions?.categoriesField || '',
 
     // CSV options
     delimiter: formData.formatOptions?.delimiter || ',',
@@ -577,7 +579,6 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
       const mapping = sourceMappings.find((m: RSSSourceMapping) => m.sourceId === autoSelectSourceId);
       if (mapping?.itemsPath) {
         // Selection was made, reset the auto-select trigger
-        console.log('Resetting autoSelectSourceId after selection');
         setAutoSelectSourceId(null);
       }
     }
@@ -738,17 +739,8 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
         const mapping = sourceMappings.find((m: RSSSourceMapping) => m.sourceId === sourceId);
         const hasData = sampleData[sourceId];
 
-        console.log('Toggle source expansion:', {
-          sourceId,
-          isCreateMode,
-          hasData: !!hasData,
-          mapping,
-          hasItemsPath: mapping?.itemsPath
-        });
-
         // Only auto-select if we have data but no itemsPath selected yet
         if (hasData && mapping && !mapping.itemsPath) {
-          console.log('Triggering auto-select for source:', sourceId);
           // Set the auto-select state immediately
           setAutoSelectSourceId(sourceId);
         }
@@ -858,11 +850,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
               <div className="space-y-3">
                 <RadioGroup value={jsonConfigMode} onValueChange={(v: any) => setJsonConfigMode(v)}>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="simple" id="simple" />
+                    <RadioGroupItem value="simple" id="simple" className="border-2 border-gray-700" />
                     <Label htmlFor="simple">Simple Configuration</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="advanced" id="advanced" />
+                    <RadioGroupItem value="advanced" id="advanced" className="border-2 border-gray-700" />
                     <Label htmlFor="advanced">Advanced Field Mapping</Label>
                   </div>
                 </RadioGroup>
@@ -870,54 +862,166 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
 
               {jsonConfigMode === 'simple' && (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="pretty">Pretty print</Label>
-                    <Switch
-                      id="pretty"
-                      checked={formatOptions.prettyPrint}
-                      onCheckedChange={(v) => updateFormatOption('prettyPrint', v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="metadata">Include metadata</Label>
-                    <Switch
-                      id="metadata"
-                      checked={formatOptions.includeMetadata}
-                      onCheckedChange={(v) => updateFormatOption('includeMetadata', v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="wrap">Wrap response</Label>
-                    <Switch
-                      id="wrap"
-                      checked={formatOptions.wrapResponse}
-                      onCheckedChange={(v) => updateFormatOption('wrapResponse', v)}
-                    />
-                  </div>
-                  {formatOptions.wrapResponse && (
-                    <div className="space-y-2">
-                      <Label htmlFor="root">Root element</Label>
-                      <Input
-                        id="root"
-                        value={formatOptions.rootElement}
-                        onChange={(e) => updateFormatOption('rootElement', e.target.value)}
-                        placeholder="data"
+                  <Alert className="bg-blue-50 border-blue-200 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                    <AlertDescription className="flex-1">
+                      Configure basic JSON output settings. Your data sources will be combined into a single JSON response.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="pretty"
+                        checked={formatOptions.prettyPrint}
+                        onCheckedChange={(v) => updateFormatOption('prettyPrint', v)}
                       />
+                      <Label htmlFor="pretty">Pretty print (formatted output)</Label>
+                    </div>
+                    <p className="text-xs text-gray-500">Format JSON with indentation for better readability</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Switch
+                        id="metadata"
+                        checked={formatOptions.includeMetadata}
+                        onCheckedChange={(v) => updateFormatOption('includeMetadata', v)}
+                      />
+                      <Label htmlFor="metadata">Include response metadata</Label>
+                    </div>
+                    <p className="text-xs text-gray-500">Adds timestamp, version, and source information to the response</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="root-wrapper">Root wrapper element</Label>
+                    <Input
+                      id="root-wrapper"
+                      value={formatOptions.rootWrapper}
+                      onChange={(e) => updateFormatOption('rootWrapper', e.target.value)}
+                      placeholder="e.g., data, response, items, results"
+                    />
+                    <p className="text-xs text-gray-500">The top-level key that will contain your data</p>
+                  </div>
+
+                  {formData.dataSources && formData.dataSources.length > 0 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="source-id">Primary Data Source *</Label>
+                      <Select
+                        value={formatOptions.sourceId || '__none__'}
+                        onValueChange={(v) => updateFormatOption('sourceId', v === '__none__' ? '' : v)}
+                      >
+                        <SelectTrigger id="source-id">
+                          <SelectValue placeholder="Select a data source..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Select a data source...</SelectItem>
+                          {formData.dataSources.map((source: any) => (
+                            <SelectItem key={source.id} value={source.id}>
+                              {source.name} ({source.type})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">Select which data source to use as the main response body</p>
                     </div>
                   )}
+
+                  {formatOptions.sourceId && sampleData[formatOptions.sourceId] && (
+                    <div className="space-y-2">
+                      <Label>Response Structure Preview</Label>
+                      <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-48">
+                        {JSON.stringify(
+                          {
+                            ...(formatOptions.includeMetadata && {
+                              metadata: {
+                                timestamp: new Date().toISOString(),
+                                version: "1.0",
+                                source: formatOptions.sourceId
+                              }
+                            }),
+                            [formatOptions.rootWrapper || 'data']: Array.isArray(sampleData[formatOptions.sourceId])
+                              ? `[${sampleData[formatOptions.sourceId].length} items...]`
+                              : '{...}'
+                          },
+                          null,
+                          2
+                        )}
+                      </pre>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4">
+                    <Label className="mb-3">Additional Options</Label>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="include-nulls"
+                            checked={formatOptions.includeNulls}
+                            onCheckedChange={(v) => updateFormatOption('includeNulls', v)}
+                          />
+                          <Label htmlFor="include-nulls" className="font-normal">Include null values</Label>
+                        </div>
+                        <p className="text-xs text-gray-500 pl-11">Keep fields with null values in the output</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="sort-keys"
+                            checked={formatOptions.sortKeys}
+                            onCheckedChange={(v) => updateFormatOption('sortKeys', v)}
+                          />
+                          <Label htmlFor="sort-keys" className="font-normal">Sort object keys alphabetically</Label>
+                        </div>
+                        <p className="text-xs text-gray-500 pl-11">Order object properties alphabetically</p>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id="iso-dates"
+                            checked={formatOptions.isoDates}
+                            onCheckedChange={(v) => updateFormatOption('isoDates', v)}
+                          />
+                          <Label htmlFor="iso-dates" className="font-normal">Convert dates to ISO strings</Label>
+                        </div>
+                        <p className="text-xs text-gray-500 pl-11">Format date values as ISO 8601 strings</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="encoding">Character Encoding</Label>
+                    <Select
+                      value={formatOptions.encoding}
+                      onValueChange={(v) => updateFormatOption('encoding', v)}
+                    >
+                      <SelectTrigger id="encoding">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UTF-8">UTF-8 (Default)</SelectItem>
+                        <SelectItem value="UTF-16">UTF-16</SelectItem>
+                        <SelectItem value="ASCII">ASCII</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               )}
 
               {jsonConfigMode === 'advanced' && (
-                <Alert className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <AlertTitle>Advanced Mapping</AlertTitle>
-                    <AlertDescription>
-                      Advanced field mapping with transformations will be configured here
-                    </AlertDescription>
-                  </div>
-                </Alert>
+                <JsonFieldMapper
+                  dataSources={formData.dataSources || []}
+                  sampleData={sampleData}
+                  initialConfig={formatOptions.jsonMappingConfig}
+                  onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
+                  onTest={() => {
+                    toast({
+                      title: 'Testing JSON Mapping',
+                      description: 'Testing your JSON field mapping configuration...',
+                    });
+                  }}
+                />
               )}
             </>
           )}
@@ -942,21 +1046,21 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   placeholder="http://example.com/ns"
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="declaration">Include XML declaration</Label>
+              <div className="flex items-center gap-3">
                 <Switch
                   id="declaration"
                   checked={formatOptions.includeDeclaration}
                   onCheckedChange={(v) => updateFormatOption('includeDeclaration', v)}
                 />
+                <Label htmlFor="declaration">Include XML declaration</Label>
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="attributes">Use attributes instead of elements</Label>
+              <div className="flex items-center gap-3">
                 <Switch
                   id="attributes"
                   checked={formatOptions.useAttributes}
                   onCheckedChange={(v) => updateFormatOption('useAttributes', v)}
                 />
+                <Label htmlFor="attributes">Use attributes instead of elements</Label>
               </div>
             </div>
           )}
@@ -1032,7 +1136,6 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
 
                                       // Auto-select first array path when enabling in create mode
                                       if (isCreateMode && (sampleData as Record<string, any>)[source.id] && !mapping.itemsPath) {
-                                        console.log('Auto-selecting on enable for source:', source.id);
                                         setAutoSelectSourceId(source.id);
                                       }
                                     }
@@ -1100,20 +1203,9 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                                       <div className="mb-4">
                                         <JsonPathSelector
                                           data={sampleData[source.id]}
-                                          onSelectItemsPath={(path) => {
-                                            console.log('onSelectItemsPath called with:', path);
-                                            updateSourceMapping(source.id, { itemsPath: path });
-                                          }}
+                                          onSelectItemsPath={(path) => updateSourceMapping(source.id, { itemsPath: path })}
                                           selectedItemsPath={mapping.itemsPath}
-                                          autoSelect={(() => {
-                                            const shouldAutoSelect = autoSelectSourceId === source.id;
-                                            console.log('JsonPathSelector render for source:', source.id, {
-                                              autoSelectSourceId,
-                                              sourceId: source.id,
-                                              shouldAutoSelect
-                                            });
-                                            return shouldAutoSelect;
-                                          })()}
+                                          autoSelect={autoSelectSourceId === source.id}
                                         />
                                       </div>
                                     )}
@@ -1236,25 +1328,25 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                             className="space-y-2"
                           >
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="sequential" id="sequential" className="border-2 border-gray-400" />
+                              <RadioGroupItem value="sequential" id="sequential" className="border-2 border-gray-700" />
                               <Label htmlFor="sequential" className="font-normal cursor-pointer">
                                 Sequential - Append sources one after another
                               </Label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="chronological" id="chronological" className="border-2 border-gray-400" />
+                              <RadioGroupItem value="chronological" id="chronological" className="border-2 border-gray-700" />
                               <Label htmlFor="chronological" className="font-normal cursor-pointer">
                                 Chronological - Sort by publication date (requires pubDate mapping)
                               </Label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="interleaved" id="interleaved" className="border-2 border-gray-400" />
+                              <RadioGroupItem value="interleaved" id="interleaved" className="border-2 border-gray-700" />
                               <Label htmlFor="interleaved" className="font-normal cursor-pointer">
                                 Interleaved - Alternate between sources evenly
                               </Label>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="priority" id="priority" className="border-2 border-gray-400" />
+                              <RadioGroupItem value="priority" id="priority" className="border-2 border-gray-700" />
                               <Label htmlFor="priority" className="font-normal cursor-pointer">
                                 Priority - Order by source priority (order above)
                               </Label>
@@ -1323,6 +1415,7 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
 
           {format === 'ATOM' && (
             <div className="space-y-4">
+              {/* Feed Metadata */}
               <div className="space-y-2">
                 <Label htmlFor="feed-id">Feed ID (unique URI) *</Label>
                 <Input
@@ -1349,6 +1442,33 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   onChange={(e) => updateFormatOption('feedSubtitle', e.target.value)}
                   placeholder="Description of your feed"
                   rows={2}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="feed-link">Feed Link</Label>
+                <Input
+                  id="feed-link"
+                  value={formatOptions.feedLink}
+                  onChange={(e) => updateFormatOption('feedLink', e.target.value)}
+                  placeholder="https://example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="author-name">Author Name</Label>
+                <Input
+                  id="author-name"
+                  value={formatOptions.authorName}
+                  onChange={(e) => updateFormatOption('authorName', e.target.value)}
+                  placeholder="John Doe"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="author-email">Author Email</Label>
+                <Input
+                  id="author-email"
+                  value={formatOptions.authorEmail}
+                  onChange={(e) => updateFormatOption('authorEmail', e.target.value)}
+                  placeholder="john@example.com"
                 />
               </div>
 
@@ -1404,12 +1524,80 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="updated-field">Updated Field</Label>
+                    <Label htmlFor="atom-content-field">Content Field</Label>
+                    <Select
+                      value={formatOptions.contentField || '__none__'}
+                      onValueChange={(v) => updateFormatOption('contentField', v === '__none__' ? '' : v)}
+                    >
+                      <SelectTrigger id="atom-content-field">
+                        <SelectValue placeholder="Select field" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {getAllFields().map(field => (
+                          <SelectItem key={field} value={field}>{field}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="atom-link-field">Link Field</Label>
+                    <Select
+                      value={formatOptions.linkField || '__none__'}
+                      onValueChange={(v) => updateFormatOption('linkField', v === '__none__' ? '' : v)}
+                    >
+                      <SelectTrigger id="atom-link-field">
+                        <SelectValue placeholder="Select field" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {getAllFields().map(field => (
+                          <SelectItem key={field} value={field}>{field}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="updated-field">Updated Date Field</Label>
                     <Select
                       value={formatOptions.updatedField || '__none__'}
                       onValueChange={(v) => updateFormatOption('updatedField', v === '__none__' ? '' : v)}
                     >
                       <SelectTrigger id="updated-field">
+                        <SelectValue placeholder="Select field" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {getAllFields().map(field => (
+                          <SelectItem key={field} value={field}>{field}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="published-field">Published Date Field</Label>
+                    <Select
+                      value={formatOptions.publishedField || '__none__'}
+                      onValueChange={(v) => updateFormatOption('publishedField', v === '__none__' ? '' : v)}
+                    >
+                      <SelectTrigger id="published-field">
+                        <SelectValue placeholder="Select field" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {getAllFields().map(field => (
+                          <SelectItem key={field} value={field}>{field}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="categories-field">Categories Field</Label>
+                    <Select
+                      value={formatOptions.categoriesField || '__none__'}
+                      onValueChange={(v) => updateFormatOption('categoriesField', v === '__none__' ? '' : v)}
+                    >
+                      <SelectTrigger id="categories-field">
                         <SelectValue placeholder="Select field" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1444,21 +1632,21 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="headers">Include headers</Label>
+              <div className="flex items-center gap-3">
                 <Switch
                   id="headers"
                   checked={formatOptions.includeHeaders}
                   onCheckedChange={(v) => updateFormatOption('includeHeaders', v)}
                 />
+                <Label htmlFor="headers">Include headers</Label>
               </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="quote">Quote strings</Label>
+              <div className="flex items-center gap-3">
                 <Switch
                   id="quote"
                   checked={formatOptions.quoteStrings}
                   onCheckedChange={(v) => updateFormatOption('quoteStrings', v)}
                 />
+                <Label htmlFor="quote">Quote strings</Label>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="line-ending">Line Ending</Label>
