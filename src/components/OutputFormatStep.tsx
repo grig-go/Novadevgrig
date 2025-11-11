@@ -1101,6 +1101,92 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                     onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
                     onTestDataSource={onTestDataSource}
                   />
+
+                  {/* Quick Actions */}
+                  <Card className="mt-4 bg-gray-50">
+                    <CardContent className="pt-6">
+                      <h4 className="text-sm font-semibold mb-3">Quick Actions</h4>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (formatOptions.jsonMappingConfig) {
+                              const configJson = JSON.stringify(formatOptions.jsonMappingConfig, null, 2);
+                              const blob = new Blob([configJson], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = 'json-mapping-config.json';
+                              a.click();
+                              URL.revokeObjectURL(url);
+
+                              toast({
+                                title: 'Success',
+                                description: 'Configuration exported',
+                              });
+                            }
+                          }}
+                          disabled={!formatOptions.jsonMappingConfig}
+                        >
+                          <FileCode className="w-4 h-4 mr-2" />
+                          Export Configuration
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = '.json';
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (file) {
+                                try {
+                                  const text = await file.text();
+                                  const config = JSON.parse(text);
+                                  updateFormatOption('jsonMappingConfig', config);
+
+                                  toast({
+                                    title: 'Success',
+                                    description: 'Configuration imported successfully',
+                                  });
+                                } catch (error) {
+                                  toast({
+                                    title: 'Error',
+                                    description: 'Failed to import configuration',
+                                    variant: 'destructive',
+                                  });
+                                }
+                              }
+                            };
+                            input.click();
+                          }}
+                        >
+                          <FileCode className="w-4 h-4 mr-2" />
+                          Import Configuration
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm('Are you sure you want to reset the mapping configuration?')) {
+                              updateFormatOption('jsonMappingConfig', null);
+                              toast({
+                                title: 'Warning',
+                                description: 'Configuration reset',
+                              });
+                            }
+                          }}
+                          disabled={!formatOptions.jsonMappingConfig}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Reset Configuration
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
