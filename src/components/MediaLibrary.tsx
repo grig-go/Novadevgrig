@@ -4,6 +4,7 @@ import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { ScrollArea } from "./ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
@@ -74,6 +75,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkActions, setShowBulkActions] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [uploadForm, setUploadForm] = useState({
     name: '',
@@ -1114,10 +1116,13 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   // Bulk operations
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
-    
-    if (!confirm(`Delete ${selectedIds.size} selected item(s)?`)) return;
-    
+    setShowDeleteDialog(true);
+  };
+
+  const confirmBulkDelete = async () => {
     const idsToDelete = Array.from(selectedIds);
+    setShowDeleteDialog(false);
+    
     const result = await bulkDelete(idsToDelete);
 
     if (result.success > 0) {
@@ -2914,6 +2919,36 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
           initialLng={selectedAsset.longitude}
         />
       )}
+
+      {/* Styled Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              Delete Selected Items?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                You are about to permanently delete <strong>{selectedIds.size}</strong> item{selectedIds.size !== 1 ? 's' : ''}.
+              </p>
+              <p className="text-destructive">
+                This action cannot be undone. All files will be removed from storage.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete {selectedIds.size} Item{selectedIds.size !== 1 ? 's' : ''}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

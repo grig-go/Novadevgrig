@@ -335,6 +335,194 @@ serve(async (req) => {
     }
 
     // ============================================================
+    // PATCH — bulk operations (delete, add tags, archive)
+    // ============================================================
+    if (method === "PATCH") {
+      const body = await req.json();
+      const { operation, ids, tags } = body;
+
+      if (!operation || !Array.isArray(ids) || ids.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Missing required parameters: operation and ids" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`📦 Bulk operation: ${operation} on ${ids.length} assets`);
+
+      // Bulk delete
+      if (operation === "delete") {
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Fetch storage path
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("storage_path")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            // Delete from database
+            const { error: dbError } = await supabase
+              .from("media_assets")
+              .delete()
+              .eq("id", id);
+
+            if (dbError) {
+              results.failed++;
+              results.errors.push(`DB delete failed for ${id}: ${dbError.message}`);
+              continue;
+            }
+
+            // Delete from storage
+            if (asset.storage_path) {
+              const { error: storageError } = await supabase.storage
+                .from("media")
+                .remove([asset.storage_path]);
+              if (storageError) {
+                console.warn(`⚠️ Storage delete failed for ${id}:`, storageError.message);
+              }
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Bulk add tags
+      if (operation === "add_tags") {
+        if (!Array.isArray(tags) || tags.length === 0) {
+          return new Response(
+            JSON.stringify({ error: "Tags array is required for add_tags operation" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Fetch current tags
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("tags")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            // Merge tags (avoid duplicates)
+            const currentTags = asset.tags || [];
+            const newTags = Array.from(new Set([...currentTags, ...tags]));
+
+            // Update tags
+            const { error: updateError } = await supabase
+              .from("media_assets")
+              .update({ tags: newTags })
+              .eq("id", id);
+
+            if (updateError) {
+              results.failed++;
+              results.errors.push(`Update failed for ${id}: ${updateError.message}`);
+              continue;
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Bulk archive (just marks items, doesn't delete)
+      if (operation === "archive") {
+        const results = {
+          success: 0,
+          failed: 0,
+          errors: [] as string[],
+        };
+
+        for (const id of ids) {
+          try {
+            // Add "archived" tag
+            const { data: asset, error: fetchError } = await supabase
+              .from("media_assets")
+              .select("tags")
+              .eq("id", id)
+              .single();
+
+            if (fetchError || !asset) {
+              results.failed++;
+              results.errors.push(`Asset ${id} not found`);
+              continue;
+            }
+
+            const currentTags = asset.tags || [];
+            if (!currentTags.includes("archived")) {
+              const newTags = [...currentTags, "archived"];
+              
+              const { error: updateError } = await supabase
+                .from("media_assets")
+                .update({ tags: newTags })
+                .eq("id", id);
+
+              if (updateError) {
+                results.failed++;
+                results.errors.push(`Archive failed for ${id}: ${updateError.message}`);
+                continue;
+              }
+            }
+
+            results.success++;
+          } catch (err) {
+            results.failed++;
+            results.errors.push(err instanceof Error ? err.message : String(err));
+          }
+        }
+
+        return new Response(JSON.stringify(results), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(
+        JSON.stringify({ error: `Unknown operation: ${operation}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ============================================================
     // Default — Method not allowed
     // ============================================================
     return new Response("Method not allowed", {

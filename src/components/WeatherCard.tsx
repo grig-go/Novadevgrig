@@ -38,7 +38,9 @@ import {
   Flame,
   Database,
   Trash2,
-  ChevronDown
+  ChevronDown,
+  Tv,
+  Check
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 
@@ -151,6 +153,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const [alertsOpen, setAlertsOpen] = useState(false);
   // State for backend data dialog
   const [backendDataOpen, setBackendDataOpen] = useState(false);
+  // State for channel assignment dialog
+  const [assignChannelOpen, setAssignChannelOpen] = useState(false);
+  const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
+  const [loadingChannels, setLoadingChannels] = useState(false);
+  const [assigningChannel, setAssigningChannel] = useState(false);
   
   // Get translations for current language
   const t = getTranslation(language);
@@ -301,6 +308,98 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
     setBackendDataOpen(true);
   };
 
+  const handleAssignChannel = async () => {
+    console.log('📺 Assign Channel clicked for location:', location.location.id);
+    setAssignChannelOpen(true);
+    
+    // Fetch channels when opening the dialog
+    if (channels.length === 0) {
+      await fetchChannels();
+    }
+  };
+
+  const fetchChannels = async () => {
+    try {
+      setLoadingChannels(true);
+      console.log('📺 Fetching channels list...');
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to fetch channels (HTTP ${response.status}):`, errorText);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Fetched channels:', result);
+      
+      if (result.ok && result.channels) {
+        setChannels(result.channels);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Error fetching channels:', error);
+      toast.error(`Failed to fetch channels: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setLoadingChannels(false);
+    }
+  };
+
+  const assignChannel = async (channelId: string) => {
+    try {
+      setAssigningChannel(true);
+      const channelName = channels.find(c => c.id === channelId)?.name || channelId;
+      console.log(`🔗 Assigning channel "${channelName}" to location "${locationNameValue}"...`);
+      
+      toast.info(`Assigning channel "${channelName}" to "${locationNameValue}"...`);
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Authorization": `Bearer ${publicAnonKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ channel_id: channelId })
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to assign channel (HTTP ${response.status}):`, errorText);
+        throw new Error(`HTTP ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ Channel assigned successfully:', result);
+      
+      toast.success(`✅ Assigned "${channelName}" to "${locationNameValue}"`);
+      setAssignChannelOpen(false);
+      
+      // Refresh the card to show updated data
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Error assigning channel:', error);
+      toast.error(`Failed to assign channel: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setAssigningChannel(false);
+    }
+  };
+
   // Check if location has any overrides (only location name override supported)
   const hasOverrides = isFieldOverridden(location.location.name);
 
@@ -331,6 +430,10 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshing ? 'Refreshing...' : t.refreshData}
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleAssignChannel}>
+          <Tv className="mr-2 h-4 w-4" />
+          Assign Channel
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={handleViewBackendData}>
           <Database className="mr-2 h-4 w-4" />
           View Backend Data
@@ -342,6 +445,61 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  // Common channel assignment dialog component
+  const renderChannelDialog = () => {
+    // Get current channel_id from location (it's returned from backend but not in type)
+    const currentChannelId = (location.location as any).channel_id;
+    
+    return (
+      <Dialog open={assignChannelOpen} onOpenChange={setAssignChannelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Channel to {locationNameValue}</DialogTitle>
+            <DialogDescription>
+              Select a channel to assign to this weather location
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {loadingChannels ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading channels...</p>
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="text-center py-8">
+                <Tv className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No active channels found</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {channels.map((channel) => {
+                  const isCurrentChannel = currentChannelId === channel.id;
+                  return (
+                    <Button
+                      key={channel.id}
+                      variant={isCurrentChannel ? "default" : "outline"}
+                      className={`w-full justify-between ${isCurrentChannel ? 'bg-primary text-primary-foreground' : ''}`}
+                      onClick={() => assignChannel(channel.id)}
+                      disabled={assigningChannel}
+                    >
+                      <div className="flex items-center">
+                        <Tv className="mr-2 h-4 w-4" />
+                        {channel.name}
+                      </div>
+                      {isCurrentChannel && (
+                        <Check className="h-4 w-4 ml-2" />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  };
 
   if (view === 'current') {
     return (
@@ -474,6 +632,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -562,6 +722,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -658,6 +820,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -780,6 +944,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -885,6 +1051,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -1030,6 +1198,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -1224,6 +1394,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {renderChannelDialog()}
       </>
     );
   }
@@ -1241,6 +1413,46 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
+      
+      {/* Channel Assignment Dialog */}
+      <Dialog open={assignChannelOpen} onOpenChange={setAssignChannelOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Channel to {locationNameValue}</DialogTitle>
+            <DialogDescription>
+              Select a channel to assign to this weather location
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {loadingChannels ? (
+              <div className="text-center py-8">
+                <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading channels...</p>
+              </div>
+            ) : channels.length === 0 ? (
+              <div className="text-center py-8">
+                <Tv className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">No active channels found</p>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {channels.map((channel) => (
+                  <Button
+                    key={channel.id}
+                    variant="outline"
+                    className="w-full justify-start"
+                    onClick={() => assignChannel(channel.id)}
+                    disabled={assigningChannel}
+                  >
+                    <Tv className="mr-2 h-4 w-4" />
+                    {channel.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

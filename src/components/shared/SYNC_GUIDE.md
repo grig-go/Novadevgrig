@@ -202,7 +202,7 @@ Track which version is used in which project:
 | Nova Dashboard | 1.0.0 | 2025-10-14 | ✓ Current |
 | Pulsar | - | - | Not using |
 | Fusion | - | - | Not using |
-| Quasar | - | - | Not using |
+| Nexus | - | - | Not using |
 
 ## Troubleshooting
 

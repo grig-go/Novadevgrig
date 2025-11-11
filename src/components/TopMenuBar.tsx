@@ -80,7 +80,7 @@ export function TopMenuBar({
           { id: 'nova', label: 'Nova', onClick: () => onNavigate('home') },
           { id: 'pulsar', label: 'Pulsar', disabled: true },
           { id: 'fusion', label: 'Fusion', disabled: true },
-          { id: 'quasar', label: 'Quasar', disabled: true },
+          { id: 'nexus', label: 'Nexus', disabled: true },
         ],
       },
     ],

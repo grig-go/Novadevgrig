@@ -52,6 +52,33 @@ export default function App() {
   const [usersData, setUsersData] = useState(mockUsersData);
   const [weatherData, setWeatherData] = useState(mockWeatherData);
 
+  // Debug dark mode
+  useEffect(() => {
+    const checkDarkMode = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      console.log('🌙 Dark mode status:', isDark);
+      console.log('📦 HTML classes:', document.documentElement.className);
+      
+      // Get computed styles
+      const styles = getComputedStyle(document.documentElement);
+      console.log('🎨 CSS Variables:');
+      console.log('  --background:', styles.getPropertyValue('--background'));
+      console.log('  --foreground:', styles.getPropertyValue('--foreground'));
+      console.log('  --border:', styles.getPropertyValue('--border'));
+    };
+    
+    checkDarkMode();
+    
+    // Set up mutation observer to watch for class changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
   // Load election data asynchronously
   useEffect(() => {
     let mounted = true;

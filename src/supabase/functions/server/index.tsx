@@ -221,6 +221,140 @@ app.get("/make-server-cbef71cf/content-pages", async (c) => {
 });
 
 // ============================================================================
+// CHANNELS ROUTES
+// ============================================================================
+
+// GET all channels
+app.get("/make-server-cbef71cf/channels", async (c) => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("channels")
+      .select("*")
+      .order("created_at", { ascending: false });
+    
+    if (error) throw error;
+    
+    return c.json({ ok: true, channels: data || [] });
+  } catch (error) {
+    console.error("Error fetching channels:", error);
+    return c.json({ ok: false, error: String(error) }, 500);
+  }
+});
+
+// GET single channel by ID
+app.get("/make-server-cbef71cf/channels/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from("channels")
+      .select("*")
+      .eq("id", id)
+      .single();
+    
+    if (error) throw error;
+    
+    return c.json({ ok: true, channel: data });
+  } catch (error) {
+    console.error("Error fetching channel:", error);
+    return c.json({ ok: false, error: String(error) }, 500);
+  }
+});
+
+// POST - Create new channel
+app.post("/make-server-cbef71cf/channels", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { name, description, type, status, config } = body;
+    
+    if (!name) {
+      return c.json(
+        { ok: false, error: "Channel name is required" },
+        400
+      );
+    }
+    
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from("channels")
+      .insert({
+        name,
+        description: description || null,
+        type: type || null,
+        status: status || "active",
+        config: config || {},
+      })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    console.log(`[CHANNELS] Created channel: ${name} (${data.id})`);
+    return c.json({ ok: true, channel: data });
+  } catch (error) {
+    console.error("Error creating channel:", error);
+    return c.json({ ok: false, error: String(error) }, 500);
+  }
+});
+
+// PATCH - Update existing channel
+app.patch("/make-server-cbef71cf/channels/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const { name, description, type, status, config } = body;
+    
+    const supabase = getSupabaseClient();
+    
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (type !== undefined) updateData.type = type;
+    if (status !== undefined) updateData.status = status;
+    if (config !== undefined) updateData.config = config;
+    
+    const { data, error } = await supabase
+      .from("channels")
+      .update(updateData)
+      .eq("id", id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    console.log(`[CHANNELS] Updated channel: ${id}`);
+    return c.json({ ok: true, channel: data });
+  } catch (error) {
+    console.error("Error updating channel:", error);
+    return c.json({ ok: false, error: String(error) }, 500);
+  }
+});
+
+// DELETE - Delete channel
+app.delete("/make-server-cbef71cf/channels/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const supabase = getSupabaseClient();
+    
+    const { error } = await supabase
+      .from("channels")
+      .delete()
+      .eq("id", id);
+    
+    if (error) throw error;
+    
+    console.log(`[CHANNELS] Deleted channel: ${id}`);
+    return c.json({ ok: true, message: "Channel deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting channel:", error);
+    return c.json({ ok: false, error: String(error) }, 500);
+  }
+});
+
+// ============================================================================
 // STARTUP / INITIALIZATION
 // ============================================================================
 // Removed obsolete:

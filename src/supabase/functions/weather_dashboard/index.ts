@@ -172,18 +172,30 @@ app.delete("/locations/:id", async (c)=>{
     return jsonErr(c, 500, "LOCATION_DELETE_FAILED", err);
   }
 });
-// PUT update location (for overrides like custom_name)
+// PUT update location (for overrides like custom_name and channel_id)
 app.put("/locations/:id", async (c)=>{
   try {
     const id = c.req.param("id");
     const body = await safeJson(c);
-    const { custom_name } = body;
-    console.log(`✏️ Updating location ${id} with custom_name: ${custom_name}`);
-    // Update the location's custom_name
-    const { data, error } = await supabase.from("weather_locations").update({
-      custom_name: custom_name || null,
+    const { custom_name, channel_id } = body;
+    
+    console.log(`✏️ Updating location ${id}`, { custom_name, channel_id });
+    
+    const updateData = {
       updated_at: new Date().toISOString()
-    }).eq("id", id).select().single();
+    };
+    
+    if (custom_name !== undefined) {
+      updateData.custom_name = custom_name || null;
+    }
+    
+    if (channel_id !== undefined) {
+      updateData.channel_id = channel_id || null;
+      console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} channel for location ${id}`);
+    }
+    
+    const { data, error } = await supabase.from("weather_locations").update(updateData).eq("id", id).select().single();
+    
     if (error) {
       console.error("Failed to update location:", error);
       return jsonErr(c, 500, "LOCATION_UPDATE_FAILED", error.message);
@@ -263,7 +275,7 @@ async function fetchWeatherAPI(provider, locations) {
   }
   const results = await Promise.all(locations.map(async (loc)=>{
     try {
-      const { id, lat, lon, name, custom_name, admin1, country } = loc;
+      const { id, lat, lon, name, custom_name, admin1, country, channel_id } = loc;
       if (!lat || !lon || lat === 0 || lon === 0) {
         console.warn(`[skip] ${name}: invalid lat/lon (${lat}, ${lon})`);
         return {
@@ -418,9 +430,30 @@ async function fetchWeatherAPI(provider, locations) {
           if (hourlyErr) console.error("❌ Hourly upsert failed:", hourlyErr);
         }
       }
-      // UPSERT daily forecast — unified CSV-style schema
       // ============================================================================
-      const dailyItems = forecast.forecast.forecastday.map((d)=>{
+      // ============================================================================
+      // 🗓️ UPSERT daily forecast — unified CSV-style schema (with safe time parser)
+      // ============================================================================
+      // Helper: safely parse "6:15 AM" or "07:45 PM" into ISO date string
+      function parseAstroTime(baseDate, timeStr) {
+        try {
+          if (!baseDate || !timeStr || typeof timeStr !== "string") return null;
+          const trimmed = timeStr.trim();
+          if (!trimmed.match(/\d/)) return null; // skip invalid strings
+          const [time, modifier] = trimmed.split(" ");
+          if (!time || !modifier) return null;
+          let [hours, minutes] = time.split(":").map(Number);
+          if (isNaN(hours)) return null;
+          if (modifier.toUpperCase() === "PM" && hours < 12) hours += 12;
+          if (modifier.toUpperCase() === "AM" && hours === 12) hours = 0;
+          const [year, month, day] = baseDate.split("-").map(Number);
+          const parsed = new Date(year, month - 1, day, hours, minutes || 0);
+          return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+        } catch  {
+          return null;
+        }
+      }
+      const dailyItems = (forecast.forecast?.forecastday || []).map((d)=>{
         const dayData = d.day || {};
         const astro = d.astro || {};
         return {
@@ -428,37 +461,45 @@ async function fetchWeatherAPI(provider, locations) {
           forecast_date: d.date,
           summary: dayData.condition?.text || null,
           icon: dayData.condition?.icon || null,
-          temp_max_value: dayData.maxtemp_f,
+          temp_max_value: dayData.maxtemp_f ?? null,
           temp_max_unit: "°F",
-          temp_min_value: dayData.mintemp_f,
+          temp_min_value: dayData.mintemp_f ?? null,
           temp_min_unit: "°F",
-          precip_probability: dayData.daily_chance_of_rain || null,
-          uv_index_max: dayData.uv || null,
-          humidity: dayData.avghumidity || null,
-          pressure_value: dayData.pressure_mb || null,
+          precip_probability: (dayData.daily_chance_of_rain ?? 0) / 100,
+          uv_index_max: dayData.uv ?? null,
+          humidity: dayData.avghumidity ?? null,
+          pressure_value: dayData.pressure_mb ?? null,
           pressure_unit: "mb",
-          visibility_value: dayData.avgvis_miles || null,
+          visibility_value: dayData.avgvis_miles ?? null,
           visibility_unit: "mi",
-          wind_speed_value: dayData.maxwind_mph,
+          wind_speed_value: dayData.maxwind_mph ?? null,
           wind_speed_unit: "mph",
-          wind_direction_deg: dayData.wind_degree || null,
+          wind_direction_deg: dayData.wind_degree ?? null,
           wind_direction_cardinal: dayData.wind_dir || null,
-          sunrise: astro.sunrise ? new Date(`${d.date}T${astro.sunrise}`).toISOString() : null,
-          sunset: astro.sunset ? new Date(`${d.date}T${astro.sunset}`).toISOString() : null,
+          sunrise: parseAstroTime(d.date, astro.sunrise),
+          sunset: parseAstroTime(d.date, astro.sunset),
           moon_phase: astro.moon_phase || null,
           moon_illumination: astro.moon_illumination || null,
           provider_id: provider.id,
           provider_type: "weatherapi",
           fetched_at: new Date().toISOString(),
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         };
       });
       if (dailyItems.length > 0) {
+        console.log(`💾 Inserting ${dailyItems.length} daily forecast rows for ${name}`);
         const { error: dailyErr } = await supabase.from("weather_daily_forecast").upsert(dailyItems, {
-          onConflict: "location_id,forecast_date"
+          onConflict: "location_id,forecast_date,provider_id"
         });
         if (dailyErr) {
-          console.error(`❌ weather_daily_forecast upsert failed for ${name}:`, dailyErr);
+          console.error(`❌ weather_daily_forecast upsert failed for ${name}:`, {
+            message: dailyErr.message || dailyErr,
+            hint: dailyErr.hint || "",
+            details: dailyErr.details || "",
+            code: dailyErr.code || "",
+            dataPreview: dailyItems?.[0] || {}
+          });
         } else {
           console.log(`✅ weather_daily_forecast upserted for ${name}`);
         }
@@ -514,7 +555,8 @@ async function fetchWeatherAPI(provider, locations) {
             country: country || location.country,
             lat,
             lon,
-            provider_id: loc.provider_id
+            provider_id: loc.provider_id,
+            channel_id: channel_id || null
           },
           data: {
             current: {
@@ -605,14 +647,40 @@ async function fetchWeatherAPI(provider, locations) {
         }
       };
     } catch (err) {
+      // ✅ Capture detailed cause and return structured info
       console.error(`❌ Weather fetch failed for ${loc.name}:`, err);
+      let reasonText = "Unknown error during fetch";
+      try {
+        if (typeof err === "string") {
+          reasonText = err;
+        } else if (err?.message) {
+          reasonText = err.message;
+        } else {
+          reasonText = JSON.stringify(err, Object.getOwnPropertyNames(err));
+        }
+      } catch (e) {
+        reasonText = "[Error stringification failed]";
+      }
       return {
         success: false,
         name: loc.name,
-        error: String(err)
+        reason: reasonText,
+        error: {
+          stack: err?.stack || null,
+          type: err?.name || "Error",
+          raw: err
+        }
       };
     }
   }));
+  // ✅ Log a summary if any failed
+  const failed = results.filter((r)=>!r.success);
+  if (failed.length > 0) {
+    console.warn(`⚠️ ${failed.length} failed fetch(es):`);
+    failed.forEach((f, i)=>{
+      console.warn(`  ${i + 1}. ${f.name} — ${f.reason}`);
+    });
+  }
   return results;
 }
 // ============================================================================
@@ -621,7 +689,7 @@ async function fetchWeatherAPI(provider, locations) {
 async function fetchFromDatabase(locations) {
   const results = await Promise.all(locations.map(async (loc)=>{
     try {
-      const { id, lat, lon, name, custom_name, admin1, country, provider_id } = loc;
+      const { id, lat, lon, name, custom_name, admin1, country, provider_id, channel_id } = loc;
       console.log(`📊 Fetching data from DB for ${name} (${id})`);
       // Fetch current weather
       const { data: currentData } = await supabase.from("weather_current").select("*").eq("location_id", id).single();
@@ -702,7 +770,8 @@ async function fetchFromDatabase(locations) {
             country: country || "",
             lat,
             lon,
-            provider_id
+            provider_id,
+            channel_id: channel_id || null
           },
           data: {
             current: currentData ? {
@@ -895,7 +964,15 @@ app.get("/weather-data", async (c)=>{
     const failed = allResults.filter((r)=>!r.success);
     console.log(`✅ Weather fetch complete: ${successful.length}/${allResults.length} successful`);
     if (failed.length > 0) {
-      console.warn(`⚠️ Failed locations:`, failed.map((f)=>f.name));
+      console.warn(`⚠️ ${failed.length} Failed location(s):`);
+      failed.forEach((f, i)=>{
+        console.warn(`  ${i + 1}. ${f.name} — ${f.error || f.reason || "Unknown error"}`);
+      });
+      // Optional: print compact JSON line for visibility in Supabase logs
+      console.warn("⚠️ Failed locations (details):", JSON.stringify(failed.map((f)=>({
+          name: f.name,
+          reason: f.reason || f.error || "Unknown error"
+        })), null, 2));
     }
     return c.json({
       ok: true,
@@ -967,6 +1044,31 @@ app.post("/providers", async (c)=>{
 app.put("/providers", async (c)=>{
   // Reuse POST logic for PUT
   return app.post("/providers", c);
+});
+// ============================================================================
+// CHANNELS (for assigning to weather locations)
+// ============================================================================
+app.get("/channels", async (c)=>{
+  try {
+    console.log("📺 Fetching channels list for weather location assignment");
+    
+    const { data, error } = await supabase.from("channels").select("id, name").eq("status", "active").order("name");
+    
+    if (error) {
+      console.error("Failed to fetch channels:", error);
+      return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", error.message);
+    }
+    
+    console.log(`✅ Found ${data?.length || 0} active channels`);
+    
+    return c.json({
+      ok: true,
+      channels: data || []
+    });
+  } catch (err) {
+    console.error("Error fetching channels:", err);
+    return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", err);
+  }
 });
 // ============================================================================
 // TEST PROVIDER
