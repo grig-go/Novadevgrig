@@ -597,14 +597,14 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   }, [autoSelectSourceId, sourceMappings]);
 
   useEffect(() => {
-    setFormData({
-      ...formData,
+    setFormData((prevFormData: any) => ({
+      ...prevFormData,
       format,
       formatOptions: {
         ...formatOptions,
         sourceMappings: format === 'RSS' ? sourceMappings : formatOptions.sourceMappings
       }
-    });
+    }));
   }, [format, formatOptions, sourceMappings]);
 
   const updateFormatOption = (key: string, value: any) => {

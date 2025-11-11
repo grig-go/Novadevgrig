@@ -326,10 +326,10 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
           {availableFields.length === 0 ? (
             <Card>
               <CardContent className="p-10 text-center">
-                <AlertCircle className="h-10 w-10 mx-auto text-gray-400 mb-3" />
-                <h3 className="font-semibold mb-2">No fields available</h3>
+                <AlertCircle className="h-10 w-10 mx-auto text-yellow-500 mb-3 mt-2" />
+                <h3 className="font-semibold mb-2">Sample Data Required</h3>
                 <p className="text-sm text-gray-600">
-                  Please configure your data sources first to see available fields for transformation.
+                  Please go back to the Output Format step and test your data sources to load sample data. This will enable field selection for transformations.
                 </p>
               </CardContent>
             </Card>
