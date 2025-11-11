@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
@@ -83,11 +84,38 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     new Set(sourceSelection.sources.map((s: any) => s.id))
   );
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'side-by-side' | 'floating'>('side-by-side');
-  const [showMiniMap, setShowMiniMap] = useState(false);
+
+  // Persist UI preferences in localStorage to match nova-old behavior
+  const [viewMode, setViewMode] = useState<'side-by-side' | 'floating'>(() => {
+    const saved = localStorage.getItem('jsonMapper.viewMode');
+    return (saved as 'side-by-side' | 'floating') || 'side-by-side';
+  });
+
+  const [showMiniMap, setShowMiniMap] = useState(() => {
+    const saved = localStorage.getItem('jsonMapper.showMiniMap');
+    return saved ? JSON.parse(saved) : false;
+  });
+
   const [expandedConfigs, setExpandedConfigs] = useState<Set<string>>(new Set());
-  const [debugMode, setDebugMode] = useState(false);
+
+  const [debugMode, setDebugMode] = useState(() => {
+    const saved = localStorage.getItem('jsonMapper.debugMode');
+    return saved ? JSON.parse(saved) : false;
+  });
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Save UI preferences to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('jsonMapper.viewMode', viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem('jsonMapper.showMiniMap', JSON.stringify(showMiniMap));
+  }, [showMiniMap]);
+
+  useEffect(() => {
+    localStorage.setItem('jsonMapper.debugMode', JSON.stringify(debugMode));
+  }, [debugMode]);
 
   const mappingsWithIds = React.useMemo(() => {
     return mappings.map((m, index) => {
@@ -318,16 +346,29 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     e.preventDefault();
     setDragOverTarget(null);
 
-    if (!draggedField) return;
+    // Try to get field from state first, then from dataTransfer
+    let field = draggedField;
+    if (!field && e.dataTransfer) {
+      try {
+        const data = e.dataTransfer.getData('application/json');
+        if (data) {
+          field = JSON.parse(data);
+        }
+      } catch (err) {
+        console.error('Failed to parse drag data:', err);
+      }
+    }
+
+    if (!field) return;
 
     const mappingId = `mapping_${targetPath.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}_${Math.round(Math.random() * 10000)}`;
 
     if (debugMode) {
       console.log(`[DROP] Creating new mapping with ID: ${mappingId}`);
-      console.log(`[DROP] Target: ${targetPath}, Source: ${draggedField.path}`);
+      console.log(`[DROP] Target: ${targetPath}, Source: ${field.path}`);
     }
 
-    let sourcePath = draggedField.path;
+    let sourcePath = field.path;
     let arrayConfig: any = null;
 
     if (sourcePath.includes('[')) {
@@ -371,10 +412,10 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
           mappingMode: sourcePath.includes('[*]') ? 'array' : 'index'
         });
 
-        sourcePath = draggedField.path;
+        sourcePath = field.path;
         if (sourcePath.includes('[*]')) {
-          Object.entries(indices).forEach(([field, index]) => {
-            sourcePath = sourcePath.replace(`${field}[*]`, `${field}[${index}]`);
+          Object.entries(indices).forEach(([fieldName, index]) => {
+            sourcePath = sourcePath.replace(`${fieldName}[*]`, `${fieldName}[${index}]`);
           });
         }
       }
@@ -382,15 +423,15 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
     const newMapping: MappingWithConfig = {
       id: mappingId,
-      sourceId: draggedField.sourceId,
-      sourceName: draggedField.sourceName,
+      sourceId: field.sourceId,
+      sourceName: field.sourceName,
       sourcePath: sourcePath,
       targetPath: targetPath,
       arrayConfig: arrayConfig
     };
 
     const updatedMappings = mappingsWithIds.filter(m =>
-      !(m.targetPath === targetPath && m.sourceId === draggedField.sourceId)
+      !(m.targetPath === targetPath && m.sourceId === field.sourceId)
     );
 
     updatedMappings.push(newMapping);
@@ -408,8 +449,18 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       if (m.id === mappingId) {
         const mapping = m as MappingWithConfig;
 
+        if (debugMode) {
+          console.log(`[UPDATE INDEX] Found mapping:`, {
+            id: mapping.id,
+            targetPath: mapping.targetPath,
+            sourcePath: mapping.sourcePath,
+            arrayConfig: mapping.arrayConfig
+          });
+        }
+
         if (mapping.arrayConfig) {
           const config = JSON.parse(mapping.arrayConfig);
+          const oldIndex = config.indices[fieldName];
           config.indices[fieldName] = newIndex;
 
           let templatePath = config.templatePath || mapping.sourcePath.replace(/\[\d+\]/g, '[*]');
@@ -418,6 +469,12 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
           Object.entries(config.indices).forEach(([field, index]) => {
             newPath = newPath.replace(`${field}[*]`, `${field}[${index}]`);
           });
+
+          if (debugMode) {
+            console.log(`[UPDATE INDEX] Changed ${fieldName} from ${oldIndex} to ${newIndex}`);
+            console.log(`[UPDATE INDEX] New path: ${newPath}`);
+            console.log(`[UPDATE INDEX] All indices:`, config.indices);
+          }
 
           return {
             ...mapping,
@@ -433,6 +490,10 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   };
 
   const toggleMappingExpanded = (mappingId: string) => {
+    if (debugMode) {
+      console.log(`[TOGGLE] Before - Mapping ID: ${mappingId}, Currently expanded:`, expandedConfigs.has(mappingId));
+    }
+
     setExpandedConfigs(prev => {
       const newSet = new Set(prev);
       if (newSet.has(mappingId)) {
@@ -440,6 +501,12 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       } else {
         newSet.add(mappingId);
       }
+
+      if (debugMode) {
+        console.log(`[TOGGLE] After - Mapping ID: ${mappingId}, Now expanded:`, newSet.has(mappingId));
+        console.log('[TOGGLE] All expanded:', Array.from(newSet));
+      }
+
       return newSet;
     });
   };
@@ -471,6 +538,12 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     mapping: MappingWithConfig;
     config: any;
   }> = ({ mapping, config }) => {
+    if (debugMode) {
+      console.log(`[RENDER ArrayIndexConfig] Mapping ID: ${mapping.id}`);
+      console.log(`[RENDER ArrayIndexConfig] Target: ${mapping.targetPath}`);
+      console.log(`[RENDER ArrayIndexConfig] Config:`, config);
+    }
+
     const [mappingMode, setMappingMode] = React.useState<'array' | 'index'>(
       config.mappingMode || 'index'
     );
@@ -530,7 +603,12 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => toggleMappingExpanded(mapping.id)}
+              onClick={() => {
+                if (debugMode) {
+                  console.log(`[CLOSE] Closing config for mapping: ${mapping.id}`);
+                }
+                toggleMappingExpanded(mapping.id);
+              }}
               className="h-6 w-6 p-0"
             >
               <X className="w-3 h-3" />
@@ -580,6 +658,9 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
                     max={getArrayLength(field) - 1}
                     onChange={(e) => {
                       const value = parseInt(e.target.value);
+                      if (debugMode) {
+                        console.log(`[INPUT CHANGE] Mapping: ${mapping.id}, Field: ${field}, Value: ${value}`);
+                      }
                       updateMappingPath(mapping.id, field, value);
                     }}
                     className="h-7 w-16 text-xs"
@@ -634,7 +715,15 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   };
 
   const OutputFieldsPanel = ({ isFloating = false }) => (
-    <Card className={isFloating ? 'fixed right-5 top-1/2 -translate-y-1/2 w-96 max-h-[70vh] z-50 shadow-2xl' : ''}>
+    <Card style={isFloating ? {
+      position: 'absolute',
+      right: '150px',
+      top: '20px',
+      width: '400px',
+      maxHeight: '80vh',
+      zIndex: 1000,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+    } : {}}>
       <CardHeader className="pb-3">
         <div className="flex justify-between items-center">
           <CardTitle className="text-base">Output Fields</CardTitle>
@@ -650,7 +739,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className={isFloating ? 'max-h-[calc(70vh-80px)] overflow-y-auto' : 'overflow-y-auto'}>
+      <CardContent style={{ maxHeight: isFloating ? 'calc(80vh - 80px)' : 'auto', overflowY: 'auto' }}>
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
           const hasMappings = targetMappings.length > 0;
@@ -687,8 +776,34 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
                     const isExpanded = expandedConfigs.has(mapping.id);
                     const config = mapping.arrayConfig ? JSON.parse(mapping.arrayConfig) : null;
 
+                    if (debugMode) {
+                      console.log(`[RENDER Mapping] ID: ${mapping.id || 'NO_ID'}, Target: ${mapping.targetPath}, Expanded: ${isExpanded}`);
+                    }
+
                     return (
-                      <div key={mapping.id}>
+                      <div
+                        key={mapping.id}
+                        className="relative"
+                        style={{
+                          border: debugMode ? '1px dotted blue' : 'none',
+                          marginTop: debugMode ? '10px' : '0'
+                        }}
+                      >
+                        {debugMode && mapping.id && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '-10px',
+                              left: '0',
+                              fontSize: '9px',
+                              background: 'yellow',
+                              padding: '2px 4px',
+                              zIndex: 10
+                            }}
+                          >
+                            ID: {mapping.id.substring(0, 8)}...
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 p-2 bg-white rounded border">
                           <Link2 className="w-3 h-3 flex-shrink-0" />
                           <span className="flex-1 text-xs">
@@ -699,6 +814,10 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
                               size="sm"
                               variant="ghost"
                               onClick={() => {
+                                if (debugMode) {
+                                  console.log(`[BUTTON CLICK] Mapping ID: ${mapping.id}`);
+                                }
+
                                 if (!mapping.arrayConfig) {
                                   const arrayFields: string[] = [];
                                   const indices: Record<string, number> = {};
@@ -714,6 +833,11 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
                                     indices: indices,
                                     templatePath: mapping.sourcePath.replace(/\[\d+\]/g, '[*]')
                                   };
+
+                                  if (debugMode) {
+                                    console.log('[CREATE CONFIG] Creating config for mapping:', mapping.id);
+                                    console.log('[CREATE CONFIG] Config:', newConfig);
+                                  }
 
                                   const updatedMappings = mappingsWithIds.map(m =>
                                     m.id === mapping.id
@@ -790,10 +914,20 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
     const totalRequired = outputTemplate.fields.filter((f: any) => f.required).length;
 
+    console.log('MiniMap rendering, showMiniMap:', showMiniMap);
+
     return (
-      <Card className="fixed bottom-5 right-5 w-52 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Mapping Progress</CardTitle>
+      <Card style={{
+        position: 'fixed',
+        bottom: '20px',
+        right: '20px',
+        width: '208px',
+        zIndex: 9999,
+        backgroundColor: 'white',
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
+      }}>
+        <CardHeader style={{ paddingBottom: '0.75rem' }}>
+          <CardTitle style={{ fontSize: '0.875rem', lineHeight: '1.25rem' }}>Mapping Progress</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -899,54 +1033,59 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         </div>
       </Alert>
 
-      <div className={`flex gap-4 min-h-[600px] relative ${viewMode === 'floating' ? '' : ''}`}>
-        {/* Source Fields Panel */}
-        <Card className={viewMode === 'floating' ? 'flex-1' : 'flex-none w-[45%] max-h-[80vh] overflow-hidden flex flex-col'}>
-          <CardHeader className="pb-3 border-b">
-            <CardTitle className="text-base">Source Fields</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 overflow-y-auto p-3">
-            {sourceSelection.sources.map((source: any) => {
-              const sourceFields = fieldsBySource[source.id] || [];
+      <div className="flex gap-4 min-h-[600px]" style={{ position: 'relative' }}>
+        {/* Source Fields Panel - wrapped in relative container for floating mode */}
+        <div style={viewMode === 'floating' ? { flex: '1 1 100%', position: 'relative' } : { flex: '0 0 45%' }}>
+          <Card className={viewMode === 'floating' ? 'max-h-[80vh] overflow-hidden flex flex-col' : 'max-h-[80vh] overflow-hidden flex flex-col'}>
+            <CardHeader className="pb-3 border-b">
+              <CardTitle className="text-base">Source Fields</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-3">
+              {sourceSelection.sources.map((source: any) => {
+                const sourceFields = fieldsBySource[source.id] || [];
 
-              return (
-                <Collapsible
-                  key={source.id}
-                  defaultOpen={expandedSources.has(source.id)}
-                  onOpenChange={() => toggleSourceExpanded(source.id)}
-                  className="mb-4"
-                >
-                  <CollapsibleTrigger className="flex items-center gap-2 p-2 w-full bg-gray-100 hover:bg-gray-200 rounded cursor-pointer">
-                    {expandedSources.has(source.id) ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                    {getSourceIcon(source.type)}
-                    <span className="flex-1 font-semibold text-sm text-left">{source.name}</span>
-                    <Badge variant="outline" className="text-xs">{sourceFields.length} fields</Badge>
-                  </CollapsibleTrigger>
+                return (
+                  <Collapsible
+                    key={source.id}
+                    defaultOpen={expandedSources.has(source.id)}
+                    onOpenChange={() => toggleSourceExpanded(source.id)}
+                    className="mb-4"
+                  >
+                    <CollapsibleTrigger className="flex items-center gap-2 p-2 w-full bg-gray-100 hover:bg-gray-200 rounded cursor-pointer">
+                      {expandedSources.has(source.id) ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                      {getSourceIcon(source.type)}
+                      <span className="flex-1 font-semibold text-sm text-left">{source.name}</span>
+                      <Badge variant="outline" className="text-xs">{sourceFields.length} fields</Badge>
+                    </CollapsibleTrigger>
 
-                  <CollapsibleContent className="pt-2 pl-8">
-                    <div className="mb-3">
-                      <div className="text-xs text-gray-500 mb-1">METADATA</div>
-                      {sourceFields
-                        .filter(f => f.isMetadata)
-                        .map(field => renderSourceField(field))}
-                    </div>
+                    <CollapsibleContent className="pt-2 pl-8">
+                      <div className="mb-3">
+                        <div className="text-xs text-gray-500 mb-1">METADATA</div>
+                        {sourceFields
+                          .filter(f => f.isMetadata)
+                          .map(field => renderSourceField(field))}
+                      </div>
 
-                    <div>
-                      <div className="text-xs text-gray-500 mb-1">DATA FIELDS</div>
-                      {sourceFields
-                        .filter(f => !f.isMetadata)
-                        .map(field => renderSourceField(field))}
-                    </div>
-                  </CollapsibleContent>
-                </Collapsible>
-              );
-            })}
-          </CardContent>
-        </Card>
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">DATA FIELDS</div>
+                        {sourceFields
+                          .filter(f => !f.isMetadata)
+                          .map(field => renderSourceField(field))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          {/* Floating Output Panel - positioned relative to Source Fields */}
+          {viewMode === 'floating' && <OutputFieldsPanel isFloating={true} />}
+        </div>
 
         {/* Center Arrow */}
         {viewMode === 'side-by-side' && (
@@ -957,17 +1096,17 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
         {/* Output Fields Panel */}
         {viewMode === 'side-by-side' && (
-          <div className="flex-none w-[45%] max-h-[80vh] overflow-hidden sticky top-5">
+          <div style={{ flex: '0 0 45%', maxHeight: '80vh', overflow: 'hidden', position: 'sticky', top: 20 }}>
             <OutputFieldsPanel />
           </div>
         )}
       </div>
 
-      {/* Floating Output Panel */}
-      {viewMode === 'floating' && <OutputFieldsPanel isFloating={true} />}
-
-      {/* Mini Map */}
-      {showMiniMap && <MiniMap />}
+      {/* Mini Map - rendered via portal to appear outside agent popup */}
+      {showMiniMap && (() => {
+        console.log('Creating MiniMap portal, showMiniMap:', showMiniMap);
+        return createPortal(<MiniMap />, document.body);
+      })()}
 
       {/* Navigation */}
       <div className="flex justify-between pt-4">
