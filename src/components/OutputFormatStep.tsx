@@ -963,7 +963,7 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   {formatOptions.sourceId && sampleData[formatOptions.sourceId] && (
                     <div className="space-y-2">
                       <Label>Response Structure Preview</Label>
-                      <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-48">
+                      <pre className="bg-gray-100 p-3 rounded text-xs overflow-auto max-h-48 whitespace-pre-wrap break-words">
                         {JSON.stringify(
                           {
                             ...(formatOptions.includeMetadata && {
@@ -1060,7 +1060,44 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   <JsonFieldMapper
                     dataSources={formData.dataSources || []}
                     sampleData={sampleData}
-                    initialConfig={formatOptions.jsonMappingConfig}
+                    initialConfig={(() => {
+                      // If we have saved config, use it
+                      if (formatOptions.jsonMappingConfig?.outputTemplate?.fields?.length > 0) {
+                        return formatOptions.jsonMappingConfig;
+                      }
+
+                      // Otherwise, create default config with default fields for "create new agent" mode
+                      return {
+                        sourceSelection: {
+                          type: 'object',
+                          primaryPath: '',
+                          sources: []
+                        },
+                        outputTemplate: {
+                          structure: {},
+                          fields: [
+                            { path: 'id', name: 'ID', type: 'string', required: false, defaultValue: null },
+                            { path: 'title', name: 'Title', type: 'string', required: true, defaultValue: null },
+                            { path: 'description', name: 'Description', type: 'string', required: false, defaultValue: null },
+                            { path: 'value', name: 'Value', type: 'string', required: false, defaultValue: null }
+                          ]
+                        },
+                        fieldMappings: [],
+                        transformations: [],
+                        outputWrapper: {
+                          enabled: false,
+                          wrapperKey: 'data',
+                          includeMetadata: false,
+                          metadataFields: {
+                            timestamp: true,
+                            source: true,
+                            count: true,
+                            version: false
+                          },
+                          customMetadata: {}
+                        }
+                      };
+                    })()}
                     onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
                     onTestDataSource={onTestDataSource}
                   />

@@ -467,7 +467,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                         {hasData && currentPath !== undefined && (
                           <div className="mt-4">
                             <Label>Data Preview:</Label>
-                            <pre className="bg-gray-100 p-3 rounded mt-2 text-xs overflow-auto max-h-40">
+                            <pre className="bg-gray-100 p-3 rounded mt-2 text-xs overflow-auto max-h-40 whitespace-pre-wrap break-words">
                               {JSON.stringify(
                                 getValueAtPath(sampleData[source.id], currentPath),
                                 null,

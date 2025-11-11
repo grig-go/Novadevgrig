@@ -146,7 +146,7 @@ export const MappingPreview: React.FC<MappingPreviewProps> = ({
               <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
             </div>
           ) : preview ? (
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-96 text-sm">
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto max-h-96 text-sm whitespace-pre-wrap break-words">
               {JSON.stringify(preview, null, 2)}
             </pre>
           ) : (
