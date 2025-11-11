@@ -24,6 +24,7 @@ import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cl
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
 import OutputFormatStep from "./OutputFormatStep";
+import TransformationStep from "./TransformationStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
 
 interface AgentWizardProps {
@@ -50,6 +51,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const { fetchViaProxy } = useFetchProxy();
 
   const [currentStep, setCurrentStep] = useState<WizardStep>('basic');
+  const [visitedSteps, setVisitedSteps] = useState<Set<WizardStep>>(() => {
+    // In edit mode, all steps are considered visited
+    if (editAgent) {
+      return new Set<WizardStep>([
+        'basic', 'dataType', 'dataSources', 'configureNewSources',
+        'relationships', 'outputFormat', 'transformations', 'security', 'review'
+      ]);
+    }
+    // In create mode, only the first step is visited
+    return new Set(['basic']);
+  });
   const [formData, setFormData] = useState<Partial<Agent>>(editAgent || {
     name: '',
     description: '',
@@ -77,7 +89,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [newRelationship, setNewRelationship] = useState<Partial<AgentDataRelationship>>({});
   const [newMapping, setNewMapping] = useState<Partial<AgentFieldMapping>>({});
   const [newFixedField, setNewFixedField] = useState({ key: '', value: '' });
-  const [newTransform, setNewTransform] = useState<Partial<AgentTransform>>({ type: 'filter' });
 
   // State for fetching data sources from Supabase
   const [availableDataSources, setAvailableDataSources] = useState<Array<{ id: string; name: string; type: string; category: string }>>([]);
@@ -387,6 +398,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       setFormData(editAgent);
       // When editing, start at the review step (Step 8) like nova-old
       setCurrentStep('review');
+      // In edit mode, mark all steps as visited
+      setVisitedSteps(new Set<WizardStep>([
+        'basic', 'dataType', 'dataSources', 'configureNewSources',
+        'relationships', 'outputFormat', 'transformations', 'security', 'review'
+      ]));
     } else if (!editAgent && open) {
       // Reset to default when creating a new agent
       setFormData({
@@ -411,6 +427,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         cache: '15M'
       });
       setCurrentStep('basic');
+      // In create mode, reset visited steps to only 'basic'
+      setVisitedSteps(new Set<WizardStep>(['basic']));
     }
   }, [editAgent, open]);
 
@@ -431,7 +449,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const handleNext = () => {
     const nextIndex = currentStepIndex + 1;
     if (nextIndex < steps.length) {
-      setCurrentStep(steps[nextIndex]);
+      const nextStep = steps[nextIndex];
+      setCurrentStep(nextStep);
+      setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, nextStep]));
     }
   };
 
@@ -606,49 +626,56 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
-  const renderStepIndicator = () => (
-    <div className="space-y-2">
-      {editAgent && (
+  const renderStepIndicator = () => {
+    return (
+      <div className="space-y-2">
         <p className="text-xs text-center text-muted-foreground">
-          Click on any step to navigate
+          {editAgent ? 'Click on any step to navigate' : 'Click on visited steps to navigate'}
         </p>
-      )}
-      <div className="flex items-center justify-center gap-2">
-        {steps.map((step, index) => (
-          <div key={step} className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => editAgent && setCurrentStep(step)}
-              disabled={!editAgent}
-              title={editAgent ? `Go to step ${index + 1}` : index < currentStepIndex ? `Step ${index + 1} (Completed)` : ''}
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
-                editAgent ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-default'
-              } ${
-                index < currentStepIndex
-                  ? 'bg-blue-600 text-white'
-                  : index === currentStepIndex
-                    ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-              }`}>
-              {index < currentStepIndex ? (
-                <>
-                  <Check className="w-4 h-4 group-hover:hidden" />
-                  <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
-                </>
-              ) : (
-                index + 1
-              )}
-            </button>
-            {index < steps.length - 1 && (
-              <div className={`w-8 h-0.5 ${
-                index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
-              }`} />
-            )}
-          </div>
-        ))}
+        <div className="flex items-center justify-center gap-2">
+          {steps.map((step, index) => {
+            const isClickable = editAgent || visitedSteps.has(step);
+            return (
+              <div key={step} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => isClickable && setCurrentStep(step)}
+                  disabled={!isClickable}
+                  title={
+                    isClickable
+                      ? `Go to step ${index + 1}`
+                      : `Complete previous steps first`
+                  }
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all group relative ${
+                    isClickable ? 'cursor-pointer hover:scale-110 hover:shadow-md' : 'cursor-not-allowed opacity-50'
+                  } ${
+                    index < currentStepIndex
+                      ? 'bg-blue-600 text-white'
+                      : index === currentStepIndex
+                        ? 'bg-blue-600 text-white ring-2 ring-blue-600 ring-offset-2'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  }`}>
+                  {index < currentStepIndex ? (
+                    <>
+                      <Check className="w-4 h-4 group-hover:hidden" />
+                      <span className="hidden group-hover:block text-xs font-semibold">{index + 1}</span>
+                    </>
+                  ) : (
+                    index + 1
+                  )}
+                </button>
+                {index < steps.length - 1 && (
+                  <div className={`w-8 h-0.5 ${
+                    index < currentStepIndex ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'
+                  }`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const generateSlugFromName = (name: string) => {
     return name.toLowerCase()
@@ -1992,101 +2019,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const renderTransformations = () => {
-    const addTransform = () => {
-      if (newTransform.type) {
-        setFormData({
-          ...formData,
-          transforms: [
-            ...(formData.transforms || []),
-            {
-              type: newTransform.type,
-              config: newTransform.config || {}
-            }
-          ]
-        });
-        setNewTransform({ type: 'filter' });
-      }
-    };
-
-    const removeTransform = (index: number) => {
-      setFormData({
-        ...formData,
-        transforms: formData.transforms?.filter((_, i) => i !== index)
-      });
-    };
-
     return (
-      <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Add optional transformations to filter, sort, or modify the output data
-        </p>
-
-        {/* Existing Transforms */}
-        {formData.transforms && formData.transforms.length > 0 && (
-          <div className="space-y-2">
-            {formData.transforms.map((transform, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 bg-muted rounded-lg"
-              >
-                <div>
-                  <Badge variant="outline" className="capitalize">{transform.type}</Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {JSON.stringify(transform.config)}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => removeTransform(index)}
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add New Transform */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <Label>Add Transformation</Label>
-            <Select
-              value={newTransform.type}
-              onValueChange={(value: any) => setNewTransform({ type: value, config: {} })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="filter">Filter</SelectItem>
-                <SelectItem value="map">Map</SelectItem>
-                <SelectItem value="sort">Sort</SelectItem>
-                <SelectItem value="deduplicate">Deduplicate</SelectItem>
-                <SelectItem value="extract">Extract</SelectItem>
-                <SelectItem value="format">Format</SelectItem>
-              </SelectContent>
-            </Select>
-            <Textarea
-              placeholder='Configuration (JSON): e.g., {"field": "status", "value": "active"}'
-              rows={3}
-              value={JSON.stringify(newTransform.config || {}, null, 2)}
-              onChange={(e) => {
-                try {
-                  const config = JSON.parse(e.target.value);
-                  setNewTransform({ ...newTransform, config });
-                } catch (err) {
-                  // Invalid JSON, ignore
-                }
-              }}
-            />
-            <Button onClick={addTransform} size="sm" className="w-full">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Transformation
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <TransformationStep
+        formData={formData}
+        setFormData={setFormData}
+        sampleData={sampleData}
+      />
     );
   };
 

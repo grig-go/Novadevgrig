@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible';
 import { findArraysAndObjects } from '../utils/pathHelpers';
+import { useToast } from '../../ui/use-toast';
 
 interface SourceSelectorProps {
   dataSources: any[];
@@ -75,6 +76,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
 
   const [testingSource, setTestingSource] = useState<string | null>(null);
   const [justTestedSource, setJustTestedSource] = useState<string | null>(null);
+  const { toast } = useToast();
 
   // Watch for sampleData changes after testing to trigger auto-detection
   useEffect(() => {
@@ -96,6 +98,48 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     } finally {
       setTestingSource(null);
     }
+  };
+
+  const testAndDiscoverSelected = async () => {
+    if (!onTestDataSource) return;
+
+    // Filter to only test selected sources that don't have sample data yet
+    const sourcesToTest = Array.from(selectedSources)
+      .map(sourceId => dataSources.find(ds => ds.id === sourceId))
+      .filter((source): source is any => source !== undefined && !sampleData[source.id]);
+
+    if (sourcesToTest.length === 0) {
+      toast({
+        title: 'All selected sources tested',
+        description: 'All selected data sources already have sample data',
+      });
+      return;
+    }
+
+    setTestingSource('all');
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const source of sourcesToTest) {
+      try {
+        await onTestDataSource(source);
+        setJustTestedSource(source.id);
+        successCount++;
+        // Small delay to allow state updates
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        failCount++;
+        console.error(`Failed to test ${source.name}:`, error);
+      }
+    }
+
+    setTestingSource(null);
+
+    toast({
+      title: 'Bulk test complete',
+      description: `Successfully tested ${successCount} source(s)${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      variant: failCount > 0 ? 'destructive' : 'default',
+    });
   };
 
   useEffect(() => {
@@ -368,6 +412,26 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           <div className="flex justify-between items-center">
             <CardTitle className="text-base">Select Data Sources</CardTitle>
             <div className="flex gap-2">
+              {selectedSources.size > 0 && (Array.from(selectedSources) as string[]).some((sourceId: string) => !sampleData[sourceId]) && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={testAndDiscoverSelected}
+                  disabled={testingSource !== null}
+                >
+                  {testingSource === 'all' ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-2" />
+                      Test & Discover Selected
+                    </>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

@@ -727,7 +727,7 @@ export function AgentsDashboardWithSupabase({
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Agent</DialogTitle>
             <DialogDescription className="pt-3">

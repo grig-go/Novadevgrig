@@ -642,6 +642,51 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     }
   };
 
+  const testAndDiscoverAll = async () => {
+    if (!onTestDataSource || !formData.dataSources) return;
+
+    const sourcesToTest = formData.dataSources.filter((source: any) => {
+      const hasFields = source.fields && source.fields.length > 0;
+      return !hasFields; // Only test sources without fields
+    });
+
+    if (sourcesToTest.length === 0) {
+      toast({
+        title: 'All sources tested',
+        description: 'All data sources already have fields discovered',
+      });
+      return;
+    }
+
+    setTestingSource('all');
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const source of sourcesToTest) {
+      try {
+        await onTestDataSource(source);
+        successCount++;
+
+        // Trigger auto-selection for RSS format after successful test
+        if (format === 'RSS') {
+          setAutoSelectSourceId(source.id);
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        failCount++;
+        console.error(`Failed to test ${source.name}:`, error);
+      }
+    }
+
+    setTestingSource(null);
+
+    toast({
+      title: 'Bulk test complete',
+      description: `Successfully tested ${successCount} source(s)${failCount > 0 ? `, ${failCount} failed` : ''}`,
+      variant: failCount > 0 ? 'destructive' : 'default',
+    });
+  };
+
   const getAllFields = () => {
     const fields: string[] = [];
 
@@ -809,8 +854,32 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
       {formData.dataSources && formData.dataSources.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Data Source Fields</CardTitle>
-            <CardDescription>Test your data sources to discover available fields</CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-base">Data Source Fields</CardTitle>
+                <CardDescription>Test your data sources to discover available fields</CardDescription>
+              </div>
+              {formData.dataSources.some((source: any) => !source.fields || source.fields.length === 0) && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={testAndDiscoverAll}
+                  disabled={testingSource !== null}
+                >
+                  {testingSource === 'all' ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-4 h-4 mr-2" />
+                      Test & Discover All
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {formData.dataSources.map((source: any) => {
