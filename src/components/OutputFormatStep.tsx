@@ -37,6 +37,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { useToast } from './ui/use-toast';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { JsonFieldMapper } from './JsonFieldMapper/JsonFieldMapper';
+import { OpenAPIImport } from './JsonFieldMapper/components/OpenAPIImport';
 
 // Helper function to extract field paths with data examples
 function extractFieldPaths(obj: any, prefix = ''): Array<{ path: string; display: string }> {
@@ -506,13 +507,14 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   });
 
   const [testingSource, setTestingSource] = useState<string | null>(null);
-  const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced'>(() => {
+  const [jsonConfigMode, setJsonConfigMode] = useState<'simple' | 'advanced' | 'openapi'>(() => {
     // If we have saved jsonMappingConfig, start in advanced mode
     if (formData.formatOptions?.jsonMappingConfig) {
       return 'advanced';
     }
     return 'simple';
   });
+  const [importedOpenAPISchema, setImportedOpenAPISchema] = useState<any>(null);
 
   // RSS Multi-source state
   const [sourceMappings, setSourceMappings] = useState<RSSSourceMapping[]>(() => {
@@ -870,12 +872,21 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                       </div>
                     </Label>
                   </div>
-                  <div className="flex items-start space-x-2">
+                  <div className="flex items-start space-x-2 mb-3">
                     <RadioGroupItem value="advanced" id="advanced" className="border-2 border-gray-700 mt-0.5" />
                     <Label htmlFor="advanced" className="font-normal cursor-pointer">
                       <div>
                         <span className="font-semibold">Advanced Field Mapping</span>
                         <p className="text-sm text-gray-500">Visual field mapping with transformations, conditions, and custom output structure</p>
+                      </div>
+                    </Label>
+                  </div>
+                  <div className="flex items-start space-x-2">
+                    <RadioGroupItem value="openapi" id="openapi" className="border-2 border-gray-700 mt-0.5" />
+                    <Label htmlFor="openapi" className="font-normal cursor-pointer">
+                      <div>
+                        <span className="font-semibold">Import from OpenAPI/Swagger</span>
+                        <p className="text-sm text-gray-500">Import an existing API specification (OpenAPI 3.0, Swagger 2.0, or JSON Schema)</p>
                       </div>
                     </Label>
                   </div>
@@ -1053,6 +1064,64 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                     onChange={(config: any) => updateFormatOption('jsonMappingConfig', config)}
                     onTestDataSource={onTestDataSource}
                   />
+                </div>
+              )}
+
+              {jsonConfigMode === 'openapi' && (
+                <div className="mt-4">
+                  {!importedOpenAPISchema ? (
+                    <OpenAPIImport
+                      onImport={(schema, mappingConfig) => {
+                        setImportedOpenAPISchema(schema);
+                        updateFormatOption('importedSchema', schema);
+                        updateFormatOption('mappingConfig', mappingConfig);
+
+                        toast({
+                          title: 'Success',
+                          description: 'Schema imported successfully',
+                        });
+                      }}
+                      onCancel={() => setJsonConfigMode('simple')}
+                    />
+                  ) : (
+                    <div className="space-y-4">
+                      <Alert className="bg-green-50 border-green-200">
+                        <div className="flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-semibold">Schema Imported</p>
+                            <p className="text-sm mt-1">
+                              Your OpenAPI/Swagger schema has been imported. You can now use it to define your output structure.
+                            </p>
+                          </div>
+                        </div>
+                      </Alert>
+
+                      <div className="flex gap-3">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setImportedOpenAPISchema(null);
+                            updateFormatOption('importedSchema', null);
+                            updateFormatOption('mappingConfig', null);
+                          }}
+                        >
+                          Import Different Schema
+                        </Button>
+                      </div>
+
+                      {/* TODO: Show field mapping interface for imported schema */}
+                      <Alert className="bg-blue-50 border-blue-200">
+                        <div className="flex items-start gap-2">
+                          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                          <AlertDescription className="flex-1">
+                            Field mapping interface for imported schemas is coming soon.
+                            For now, you can use the Advanced Field Mapping mode to manually configure your output.
+                          </AlertDescription>
+                        </div>
+                      </Alert>
+                    </div>
+                  )}
                 </div>
               )}
             </>
