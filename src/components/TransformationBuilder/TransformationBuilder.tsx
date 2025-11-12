@@ -37,6 +37,7 @@ import {
   Eraser
 } from 'lucide-react';
 import { getAvailableTransformations } from '../../utils/transformations';
+import AITransformationOptions from './AITransformationOptions';
 
 // Icon mapping from Blueprint.js to Lucide React
 const iconMap: Record<string, any> = {
@@ -421,51 +422,15 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
 
       case 'ai-transform':
         return (
-          <div className="space-y-3">
-            <div>
-              <Label>AI Prompt</Label>
-              <Textarea
-                value={transformOptions.prompt || ''}
-                onChange={(e) => handleOptionsChange({ ...transformOptions, prompt: e.target.value })}
-                placeholder="Describe how to transform the data..."
-                rows={4}
-              />
-            </div>
-            <div>
-              <Label>System Prompt (optional)</Label>
-              <Textarea
-                value={transformOptions.systemPrompt || ''}
-                onChange={(e) => handleOptionsChange({ ...transformOptions, systemPrompt: e.target.value })}
-                placeholder="Additional context for AI..."
-                rows={2}
-              />
-            </div>
-            <div>
-              <Label>Output Format</Label>
-              <Select
-                value={transformOptions.outputFormat || 'text'}
-                onValueChange={(value) => handleOptionsChange({ ...transformOptions, outputFormat: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text</SelectItem>
-                  <SelectItem value="json">JSON</SelectItem>
-                  <SelectItem value="number">Number</SelectItem>
-                  <SelectItem value="boolean">Boolean</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="cache-results"
-                checked={transformOptions.cacheResults !== false}
-                onCheckedChange={(checked) => handleOptionsChange({ ...transformOptions, cacheResults: checked })}
-              />
-              <Label htmlFor="cache-results" className="cursor-pointer">Cache Results</Label>
-            </div>
-          </div>
+          <AITransformationOptions
+            prompt={transformOptions.prompt || ''}
+            systemPrompt={transformOptions.systemPrompt}
+            outputFormat={transformOptions.outputFormat}
+            fieldContext={availableFields}
+            examples={transformOptions.examples}
+            cacheResults={transformOptions.cacheResults}
+            onChange={handleOptionsChange}
+          />
         );
 
       default:

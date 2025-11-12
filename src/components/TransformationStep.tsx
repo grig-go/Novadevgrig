@@ -51,6 +51,14 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
   const [availableFields, setAvailableFields] = useState<FieldInfo[]>([]);
   const [isLoadingFields, setIsLoadingFields] = useState(false);
 
+  // Sync transformations TO parent formData when local state changes
+  useEffect(() => {
+    setFormData((prevFormData: Partial<Agent>) => ({
+      ...prevFormData,
+      transforms: transformations
+    }));
+  }, [transformations, setFormData]);
+
   // Function to extract fields from data
   const extractFieldsFromData = (data: any, prefix = ''): string[] => {
     const fields: string[] = [];
@@ -287,7 +295,7 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
             <div className="flex-1">
               <h4 className="font-semibold">Sample Data Required</h4>
               <AlertDescription className="mt-1">
-                Please go back to the Output Format step and test your data sources to load sample data.
+                Please go back to the "Output Format" step and click "Test & Discover All" to load sample data first.
                 This will enable field selection for transformations.
               </AlertDescription>
             </div>
@@ -407,7 +415,7 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
             </div>
           ) : (
             <Card>
-              <CardContent className="p-12 text-center">
+              <CardContent className="p-12 pt-6 text-center">
                 <div className="mx-auto w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
                   <Repeat className="h-8 w-8 text-blue-500" />
                 </div>

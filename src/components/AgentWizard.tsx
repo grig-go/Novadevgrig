@@ -5,26 +5,24 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Textarea } from "./ui/textarea";
-import { Checkbox } from "./ui/checkbox";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
 import {
   Agent,
   AgentFormat,
   AgentStatus,
-  AgentCacheType,
-  AgentAuthType,
   AgentDataType,
   AgentDataSource,
   AgentDataRelationship,
   AgentFieldMapping,
   AgentTransform
 } from "../types/agents";
-import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, Key, AlertCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
+import SecurityStep from "./SecurityStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
 
 interface AgentWizardProps {
@@ -529,6 +527,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       dataSources: formData.dataSources || [],
       relationships: formData.relationships || [],
       format: formData.format || 'JSON',
+      formatOptions: formData.formatOptions || {},
       itemPath: formData.itemPath,
       fieldMappings: formData.fieldMappings || [],
       fixedFields: formData.fixedFields || {},
@@ -2028,87 +2027,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     );
   };
 
-  const renderSecurity = () => (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="requires-auth"
-          checked={formData.requiresAuth || false}
-          onCheckedChange={(checked) => setFormData({ ...formData, requiresAuth: checked as boolean })}
-        />
-        <Label htmlFor="requires-auth" className="cursor-pointer">
-          Require authentication to access this feed
-        </Label>
-      </div>
-
-      {formData.requiresAuth && (
-        <>
-          <div>
-            <Label htmlFor="auth">Authentication Type</Label>
-            <Select
-              value={formData.auth}
-              onValueChange={(value: AgentAuthType) => setFormData({ ...formData, auth: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                <SelectItem value="basic">Basic Auth</SelectItem>
-                <SelectItem value="bearer">Bearer Token</SelectItem>
-                <SelectItem value="api_key">API Key</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {formData.auth === 'api_key' && (
-            <div>
-              <Label htmlFor="api-key">API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={formData.apiKey || ''}
-                onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder="Enter API key"
-              />
-            </div>
-          )}
-        </>
-      )}
-
-      <div>
-        <Label htmlFor="cache">Cache Duration</Label>
-        <Select
-          value={formData.cache}
-          onValueChange={(value: AgentCacheType) => setFormData({ ...formData, cache: value })}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="OFF">Off</SelectItem>
-            <SelectItem value="5M">5 minutes</SelectItem>
-            <SelectItem value="15M">15 minutes</SelectItem>
-            <SelectItem value="30M">30 minutes</SelectItem>
-            <SelectItem value="1H">1 hour</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="p-4 bg-muted rounded-lg">
-        <div className="flex items-start gap-2">
-          <Key className="w-4 h-4 mt-0.5 text-muted-foreground" />
-          <div className="text-sm">
-            <p className="font-medium mb-1">Security Note</p>
-            <p className="text-muted-foreground">
-              This agent will be accessible at a generated endpoint. Enable authentication 
-              to restrict access and protect sensitive data.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 
   const renderReview = () => {
     const IconComponent = formData.dataType ? dataTypeIcons[formData.dataType] : null;
@@ -2417,7 +2335,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           {currentStep === 'relationships' && renderRelationships()}
           {currentStep === 'outputFormat' && renderOutputFormat()}
           {currentStep === 'transformations' && renderTransformations()}
-          {currentStep === 'security' && renderSecurity()}
+          {currentStep === 'security' && (
+            <SecurityStep
+              formData={formData}
+              setFormData={setFormData}
+              agentId={editAgent?.id}
+            />
+          )}
           {currentStep === 'review' && renderReview()}
         </div>
 

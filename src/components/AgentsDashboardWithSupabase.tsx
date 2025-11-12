@@ -114,7 +114,7 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     dataSources: connectedDataSources,
     relationships: [],
     fieldMappings: [],
-    transforms: []
+    transforms: endpoint.transform_config?.transformations || []
   };
 }
 
@@ -143,11 +143,29 @@ function convertAgentToAPIEndpoint(agent: Agent): Partial<APIEndpoint> {
       generateDocs: agent.generateDocs !== undefined ? agent.generateDocs : (generateDocs !== undefined ? generateDocs : true),
       // Store all format-specific options in schema.metadata (matching nova-old structure)
       schema: {
-        metadata: metadata
+        metadata: {
+          ...metadata,
+          // Explicitly preserve RSS-specific fields (matching nova-old structure)
+          channelTitle: metadata.channelTitle,
+          channelDescription: metadata.channelDescription,
+          channelLink: metadata.channelLink,
+          titleField: metadata.titleField,
+          descriptionField: metadata.descriptionField,
+          linkField: metadata.linkField,
+          pubDateField: metadata.pubDateField,
+          guidField: metadata.guidField,
+          mergeStrategy: metadata.mergeStrategy,
+          maxItemsPerSource: metadata.maxItemsPerSource,
+          maxTotalItems: metadata.maxTotalItems,
+          sourceMappings: metadata.sourceMappings || []
+        }
       },
       mapping: [] // Preserve mapping array structure from nova-old
     },
-    transform_config: {},
+    transform_config: {
+      transformations: agent.transforms || [],
+      pipeline: []
+    },
     relationship_config: {},
     cache_config: {
       enabled: agent.cache !== 'OFF',
