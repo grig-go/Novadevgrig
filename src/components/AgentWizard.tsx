@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -22,7 +22,7 @@ import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
-import SecurityStep from "./SecurityStep";
+import SecurityStep, { SecurityStepRef } from "./SecurityStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
 
 interface AgentWizardProps {
@@ -82,6 +82,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     status: 'ACTIVE',
     cache: '15M'
   });
+
+  // Ref to SecurityStep to sync auth data before saving
+  const securityStepRef = useRef<SecurityStepRef>(null);
 
   // State for adding new items in various steps
   const [newRelationship, setNewRelationship] = useState<Partial<AgentDataRelationship>>({});
@@ -461,6 +464,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleSave = async (closeDialog: boolean = true) => {
+    // Cleanup any draft created for testing in SecurityStep
+    await securityStepRef.current?.cleanupDraft();
+
+    // Sync auth settings from SecurityStep before saving
+    securityStepRef.current?.syncAuthToFormData();
+
     // First, save new data sources to the database
     const savedDataSourceIds: string[] = [];
 
@@ -535,6 +544,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       auth: formData.auth || 'none',
       apiKey: formData.apiKey,
       requiresAuth: formData.requiresAuth,
+      authConfig: formData.authConfig, // Include auth credentials
       status: formData.status || 'ACTIVE',
       cache: formData.cache || '15M',
       url: `${window.location.origin}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
@@ -2337,6 +2347,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           {currentStep === 'transformations' && renderTransformations()}
           {currentStep === 'security' && (
             <SecurityStep
+              ref={securityStepRef}
               formData={formData}
               setFormData={setFormData}
               agentId={editAgent?.id}

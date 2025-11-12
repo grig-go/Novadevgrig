@@ -100,6 +100,7 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     formatOptions: formatOptions, // Map schema_config.schema.metadata to formatOptions
     auth: endpoint.auth_config?.type || 'none',
     requiresAuth: endpoint.auth_config?.required || false,
+    authConfig: endpoint.auth_config?.config || undefined, // Include auth credentials
     status: endpoint.active ? 'ACTIVE' : 'PAUSED',
     cache: endpoint.cache_config?.enabled
       ? (endpoint.cache_config.ttl === 300 ? '5M' :
@@ -173,7 +174,8 @@ function convertAgentToAPIEndpoint(agent: Agent): Partial<APIEndpoint> {
     },
     auth_config: {
       required: agent.requiresAuth || false,
-      type: agent.auth as 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2' | 'custom'
+      type: agent.auth as 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2' | 'custom',
+      config: (agent as any).authConfig || {}
     },
     rate_limit_config: {
       enabled: false,

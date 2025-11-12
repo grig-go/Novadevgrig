@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -12,11 +12,17 @@ import { supabase } from '../utils/supabase/client';
 import { useToast } from './ui/use-toast';
 import { CurlCommandGenerator } from './CurlCommandGenerator';
 import type { Agent } from '../types/agent';
+import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants';
 
 interface SecurityStepProps {
   formData: Partial<Agent>;
   setFormData: (data: Partial<Agent>) => void;
   agentId?: string;
+}
+
+export interface SecurityStepRef {
+  syncAuthToFormData: () => void;
+  cleanupDraft: () => Promise<void>;
 }
 
 interface APIKey {
@@ -33,11 +39,11 @@ interface BasicAuthUser {
   password: string;
 }
 
-export const SecurityStep: React.FC<SecurityStepProps> = ({
+export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
   formData,
   setFormData,
   agentId
-}) => {
+}, ref) => {
   const { toast } = useToast();
   const [authEnabled, setAuthEnabled] = useState(formData.requiresAuth || false);
   const [authType, setAuthType] = useState<'api_key' | 'bearer' | 'basic' | 'oauth2' | 'custom'>(
@@ -73,11 +79,33 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
+  // Store latest auth settings in ref for unmount sync
+  const authSettingsRef = useRef({
+    authEnabled,
+    authType,
+    apiKeys,
+    bearerTokens,
+    basicAuthUsers,
+    apiKeyHeaderName
+  });
+
+  // Update ref whenever auth settings change
+  useEffect(() => {
+    authSettingsRef.current = {
+      authEnabled,
+      authType,
+      apiKeys,
+      bearerTokens,
+      basicAuthUsers,
+      apiKeyHeaderName
+    };
+  }, [authEnabled, authType, apiKeys, bearerTokens, basicAuthUsers, apiKeyHeaderName]);
+
   // Initialize authentication data from formData
   useEffect(() => {
     if (formData.authConfig) {
-      if (authType === 'api_key' && formData.authConfig.api_keys) {
-        setApiKeys(formData.authConfig.api_keys);
+      if (authType === 'api_key' && formData.authConfig.keys) {
+        setApiKeys(formData.authConfig.keys); // Use 'keys' to match nova-old structure
       }
       if (authType === 'bearer' && formData.authConfig.allowed_tokens) {
         setBearerTokens(formData.authConfig.allowed_tokens.join('\n'));
@@ -98,11 +126,23 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
         const draftData = {
           slug: formData.slug || `draft-${Date.now()}`,
           name: formData.name || 'Draft Agent',
+          description: formData.description || 'Draft for authentication testing',
+          output_format: 'json' as const,
           auth_config: {
             required: authEnabled,
             type: authType,
             config: getAuthConfig()
-          }
+          },
+          active: true,  // Must be active for testing
+          schema_config: {
+            type: 'custom',
+            schema: {},
+            mapping: []
+          },
+          transform_config: { transformations: [] },
+          relationship_config: { relationships: [] },
+          cache_config: { enabled: false, ttl: 300 },
+          rate_limit_config: { enabled: false, requests_per_minute: 60 }
         };
 
         if (draftId) {
@@ -114,24 +154,49 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
 
           if (error) throw error;
         } else {
-          // Create new draft
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) {
-            throw new Error('Not authenticated');
+          // Check if a draft already exists for this slug and user
+          let userId = DEV_USER_ID;
+
+          if (!isDevelopment || !SKIP_AUTH_IN_DEV) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+              throw new Error('Not authenticated');
+            }
+            userId = user.id;
           }
 
-          const { data, error } = await supabase
+          const { data: existingDraft } = await supabase
             .from('api_endpoints')
-            .insert({
-              ...draftData,
-              user_id: user.id,
-              is_draft: true
-            })
-            .select()
-            .single();
+            .select('id')
+            .eq('slug', formData.slug)
+            .eq('user_id', userId)
+            .eq('is_draft', true)
+            .maybeSingle();
 
-          if (error) throw error;
-          if (data) setDraftId(data.id);
+          if (existingDraft) {
+            // Update existing draft
+            const { error } = await supabase
+              .from('api_endpoints')
+              .update(draftData)
+              .eq('id', existingDraft.id);
+
+            if (error) throw error;
+            setDraftId(existingDraft.id);
+          } else {
+            // Create new draft
+            const { data, error } = await supabase
+              .from('api_endpoints')
+              .insert({
+                ...draftData,
+                user_id: userId,
+                is_draft: true
+              })
+              .select()
+              .single();
+
+            if (error) throw error;
+            if (data) setDraftId(data.id);
+          }
         }
 
         setLastSaved(new Date());
@@ -160,22 +225,46 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
     };
   }, [draftId]);
 
-  // Update parent formData when auth settings change
+  // Sync auth settings to parent formData only on unmount to avoid infinite loop
   useEffect(() => {
-    setFormData({
-      ...formData,
-      requiresAuth: authEnabled,
-      auth: authType,
-      authConfig: authEnabled ? getAuthConfig() : undefined
-    });
-  }, [authEnabled, authType, apiKeys, bearerTokens, basicAuthUsers, apiKeyHeaderName]);
+    return () => {
+      // Use the ref to get the latest auth settings (avoids stale closure)
+      const authSettings = authSettingsRef.current;
+      const authConfig = authSettings.authEnabled ? (() => {
+        switch (authSettings.authType) {
+          case 'api_key':
+            return {
+              header_name: authSettings.apiKeyHeaderName,
+              keys: authSettings.apiKeys
+            };
+          case 'bearer':
+            return {
+              allowed_tokens: authSettings.bearerTokens.split('\n').filter(t => t.trim())
+            };
+          case 'basic':
+            return {
+              users: authSettings.basicAuthUsers
+            };
+          default:
+            return {};
+        }
+      })() : undefined;
+
+      setFormData(prev => ({
+        ...prev,  // IMPORTANT: Preserve all existing formData fields
+        requiresAuth: authSettings.authEnabled,
+        auth: authSettings.authType,
+        authConfig
+      }));
+    };
+  }, []);
 
   const getAuthConfig = () => {
     switch (authType) {
       case 'api_key':
         return {
           header_name: apiKeyHeaderName,
-          api_keys: apiKeys
+          keys: apiKeys // Use 'keys' to match nova-old structure
         };
       case 'bearer':
         return {
@@ -189,6 +278,51 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
         return {};
     }
   };
+
+  // Expose method to sync auth settings to parent (for "Save" button)
+  useImperativeHandle(ref, () => ({
+    syncAuthToFormData: () => {
+      // Use the ref to get the latest auth settings
+      const authSettings = authSettingsRef.current;
+      const authConfig = authSettings.authEnabled ? (() => {
+        switch (authSettings.authType) {
+          case 'api_key':
+            return {
+              header_name: authSettings.apiKeyHeaderName,
+              keys: authSettings.apiKeys
+            };
+          case 'bearer':
+            return {
+              allowed_tokens: authSettings.bearerTokens.split('\n').filter((t: string) => t.trim())
+            };
+          case 'basic':
+            return {
+              users: authSettings.basicAuthUsers
+            };
+          default:
+            return {};
+        }
+      })() : undefined;
+
+      setFormData(prev => ({
+        ...prev,  // IMPORTANT: Preserve all existing formData fields
+        requiresAuth: authSettings.authEnabled,
+        auth: authSettings.authType,
+        authConfig
+      }));
+    },
+    cleanupDraft: async () => {
+      // Delete the draft from database before saving the real agent
+      if (draftId) {
+        await supabase
+          .from('api_endpoints')
+          .delete()
+          .eq('id', draftId);
+        setDraftId(null); // Clear the draft ID
+        console.log('Draft cleaned up before save');
+      }
+    }
+  }));
 
   // Generate a random API key
   const generateApiKey = () => {
@@ -558,10 +692,12 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
 
                 {basicAuthUsers.length === 0 ? (
                   <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      No users configured. Add at least one username/password pair.
-                    </AlertDescription>
+                    <div className="flex gap-3">
+                      <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                      <AlertDescription>
+                        No users configured. Add at least one username/password pair.
+                      </AlertDescription>
+                    </div>
                   </Alert>
                 ) : (
                   <div className="space-y-2">
@@ -599,10 +735,12 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
               </CardHeader>
               <CardContent>
                 <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    OAuth 2.0 configuration will be available in a future update.
-                  </AlertDescription>
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <AlertDescription>
+                      OAuth 2.0 configuration will be available in a future update.
+                    </AlertDescription>
+                  </div>
                 </Alert>
               </CardContent>
             </Card>
@@ -616,10 +754,12 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
               </CardHeader>
               <CardContent>
                 <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Custom authentication configuration will be available in a future update.
-                  </AlertDescription>
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <AlertDescription>
+                      Custom authentication configuration will be available in a future update.
+                    </AlertDescription>
+                  </div>
                 </Alert>
               </CardContent>
             </Card>
@@ -723,6 +863,8 @@ export const SecurityStep: React.FC<SecurityStepProps> = ({
       </Alert>
     </div>
   );
-};
+});
+
+SecurityStep.displayName = 'SecurityStep';
 
 export default SecurityStep;

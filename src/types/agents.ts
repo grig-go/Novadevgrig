@@ -93,6 +93,7 @@ export interface Agent {
   auth: AgentAuthType;
   apiKey?: string;
   requiresAuth?: boolean;
+  authConfig?: Record<string, any>; // Authentication configuration (API keys, tokens, users)
   // Runtime
   status: AgentStatus;
   cache: AgentCacheType;
