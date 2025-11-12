@@ -1496,7 +1496,10 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           {/* Filters */}
           {renderElectionFilters()}
 
-          <ElectionSummary races={displayRaces} onUpdateRace={handleUpdateRace} />
+          {/* Full width summary - breaks out of container */}
+          <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen px-8">
+            <ElectionSummary races={displayRaces} onUpdateRace={handleUpdateRace} />
+          </div>
         </TabsContent>
 
         <TabsContent value="all-races" className="space-y-6">
