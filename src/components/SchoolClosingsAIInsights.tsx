@@ -214,204 +214,218 @@ export function SchoolClosingsAIInsights({
   if (listView) {
     return (
       <div className="space-y-4 border rounded-lg p-6 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/10 dark:to-blue-950/10">
-        <div className="flex items-center gap-3">
-          <Brain className="w-5 h-5 text-purple-600" />
-          <h3>AI School Closing Insights</h3>
-          <Badge variant="secondary">
-            {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
-          </Badge>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg shadow-lg">
+              <Brain className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold">AI School Closing Insights</h3>
+            <Badge variant="secondary" className="text-sm">
+              {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
+            </Badge>
+          </div>
           
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsDialogOpen(true)}
-          >
-            <Brain className="w-4 h-4 mr-2" />
-            Add AI Insights
-          </Button>
-          
-          {/* Search */}
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search insights..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="default" 
+              size="sm"
+              onClick={() => setIsDialogOpen(true)}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              Add AI Insights
+            </Button>
+            
+            {/* Search */}
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search insights..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
           </div>
         </div>
 
         {/* Saved Insights */}
         {loadingInsights ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-600 mr-2" />
-            <span className="text-muted-foreground">Loading insights...</span>
+            <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
           </div>
         ) : filteredInsights.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">
-            {searchQuery ? (
-              <>
-                <Search className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No insights found matching "{searchQuery}"</p>
-              </>
-            ) : (
-              <>
-                <Brain className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No saved insights yet</p>
-                <p className="text-sm mt-2">Click "Add AI Insights" to get started</p>
-              </>
-            )}
+          <div className="text-center py-12">
+            <Brain className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              {searchQuery ? 'No insights match your search' : 'No saved insights yet'}
+            </p>
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory max-w-[calc(4*350px+3*1rem)]">
-            {filteredInsights.map((insight, index) => (
-              <Collapsible
-                key={insight.id || `insight-${index}`}
-                open={expandedInsights.has(insight.id)}
-                onOpenChange={() => toggleInsightExpansion(insight.id)}
-                className="min-w-[350px] max-w-[350px] flex-shrink-0 snap-start"
-              >
-                <Card className="overflow-hidden h-full border-l-4 border-purple-400 hover:shadow-lg transition-shadow">
-                  <CardHeader className="pb-3">
-                    <div className="space-y-3">
-                      {/* Header Row with Title and Actions */}
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory">
+            {filteredInsights.map((insight, index) => {
+              const response = insight.response || '';
+              
+              // Detect sentiment/urgency keywords
+              const hasAlert = /emergency|severe|critical|alert|urgent|warning/i.test(response);
+              const hasTrending = /increase|rising|surge|growing|trending|spike/i.test(response);
+              
+              // Extract key numbers
+              const percentages = response.match(/(\d+)%/g) || [];
+              const numbers = response.match(/(\d+)\s*(schools?|districts?|closures?|delays?)/gi) || [];
+              
+              // Extract preview text (first meaningful sentence)
+              const sentences = response.split(/[.!?]\s+/);
+              const preview = sentences.find(s => s.length > 20)?.substring(0, 100) || '';
+              
+              // Determine card styling based on sentiment
+              const borderColor = hasAlert ? 'border-red-400' : 
+                                 hasTrending ? 'border-blue-400' : 
+                                 'border-purple-400';
+              
+              const bgGradient = hasAlert ? 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20' : 
+                                hasTrending ? 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20' : 
+                                'bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20';
+              
+              const isExpanded = expandedInsights.has(insight.id);
+              
+              return (
+                <Collapsible
+                  key={insight.id || `insight-${index}`}
+                  open={isExpanded}
+                  onOpenChange={() => toggleInsightExpansion(insight.id)}
+                >
+                  <Card 
+                    className={`border-l-4 ${borderColor} ${bgGradient} min-w-[380px] max-w-[380px] flex-shrink-0 snap-start shadow-md hover:shadow-lg transition-all`}
+                  >
+                    <CardHeader className="pb-3">
                       <div className="flex items-start justify-between gap-2">
-                        <CollapsibleTrigger className="flex items-center gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity text-left">
-                          <div className="p-1.5 rounded-md bg-purple-100 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 shrink-0">
-                            {expandedInsights.has(insight.id) ? (
-                              <ChevronDown className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                        <CollapsibleTrigger className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity text-left">
+                          <div className={`p-1.5 rounded-lg border shrink-0 ${
+                            hasAlert 
+                              ? 'bg-red-100 dark:bg-red-950/50 border-red-300 dark:border-red-700' 
+                              : 'bg-purple-100 dark:bg-purple-950/50 border-purple-300 dark:border-purple-700'
+                          }`}>
+                            {isExpanded ? (
+                              <ChevronDown className={`w-4 h-4 ${hasAlert ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-purple-400'}`} />
                             ) : (
-                              <ChevronRight className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+                              <ChevronRight className={`w-4 h-4 ${hasAlert ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-purple-400'}`} />
                             )}
                           </div>
-                          <CardTitle className="text-sm leading-snug line-clamp-2">{insight.question}</CardTitle>
+                          <div className="flex-1">
+                            <CardTitle className="text-base leading-tight line-clamp-2 mb-2">{insight.question}</CardTitle>
+                          </div>
                         </CollapsibleTrigger>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteInsight(insight.id);
                           }}
-                          className="h-7 w-7 shrink-0 -mr-1 inline-flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+                          className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-destructive/10 transition-colors"
                           aria-label="Delete insight"
                         >
-                          <X className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                          <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
                         </button>
                       </div>
 
-                      {/* Visual Summary - Only shown when collapsed */}
-                      {!expandedInsights.has(insight.id) && (() => {
-                        // Extract visual insights from response
-                        const response = insight.response || '';
-                        const percentages = response.match(/(\d+)%/g) || [];
-                        const numbers = response.match(/(\d+)\s*(schools?|districts?|closures?|delays?)/gi) || [];
-                        
-                        // Detect sentiment/urgency keywords
-                        const hasAlert = /emergency|severe|critical|alert|urgent|warning/i.test(response);
-                        const hasTrending = /increase|rising|surge|growing|trending|spike/i.test(response);
-                        const hasNegative = /decline|decrease|improve|clearing|resolution/i.test(response);
-                        
-                        // Extract key phrases (first sentence)
-                        const firstSentence = response.split(/[.!?]\s/)[0];
-                        const summary = firstSentence.length > 100 ? firstSentence.substring(0, 100) + '...' : firstSentence;
-                        
-                        return (
-                          <div className="space-y-2.5">
-                            {/* Status Banner - Prominent visual indicator */}
-                            {(hasAlert || hasTrending || hasNegative) && (
-                              <div className={`px-3 py-2 rounded-lg border-l-4 ${
-                                hasAlert 
-                                  ? 'bg-red-50 dark:bg-red-950/30 border-red-500' 
-                                  : hasTrending 
-                                  ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-500' 
-                                  : 'bg-yellow-50 dark:bg-yellow-950/30 border-yellow-500'
-                              }`}>
-                                <div className="flex items-center gap-2">
-                                  {hasAlert && <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />}
-                                  {hasTrending && !hasAlert && <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
-                                  {hasNegative && !hasAlert && !hasTrending && <Target className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />}
-                                  <span className={`text-xs ${
-                                    hasAlert 
-                                      ? 'text-red-700 dark:text-red-300' 
-                                      : hasTrending 
-                                      ? 'text-blue-700 dark:text-blue-300' 
-                                      : 'text-yellow-700 dark:text-yellow-300'
-                                  }`}>
-                                    {hasAlert ? 'Critical Alert' : hasTrending ? 'Trending Closures' : 'Status Update'}
-                                  </span>
-                                </div>
+                      {/* Status Banner - Always visible when not expanded */}
+                      {!isExpanded && hasAlert && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-700">
+                          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          <span className="text-xs font-semibold text-red-700 dark:text-red-300">Critical Alert</span>
+                        </div>
+                      )}
+                      
+                      {/* Preview Text - When not expanded */}
+                      {!isExpanded && preview && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {preview}...
+                        </p>
+                      )}
+                      
+                      {/* Metadata Row */}
+                      <div className="flex items-center gap-2 flex-wrap pt-2">
+                        <Badge variant="outline" className="text-xs">
+                          <School className="w-3 h-3 mr-1" />
+                          {insight.closing_ids?.length || 0}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(insight.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </CardHeader>
+
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 space-y-3">
+                        {/* Key Metrics Grid */}
+                        {(percentages.length > 0 || numbers.length > 0) && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {percentages.slice(0, 2).map((pct, idx) => (
+                              <div key={`pct-${idx}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-950/40 dark:to-purple-900/20 border border-purple-200 dark:border-purple-700">
+                                <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">{pct}</span>
                               </div>
-                            )}
-                            
-                            {/* Key Metrics - Compact 2x2 Grid */}
-                            {(percentages.length > 0 || numbers.length > 0) && (
-                              <div className="grid grid-cols-2 gap-2">
-                                {percentages.slice(0, 2).map((pct, idx) => (
-                                  <div key={`pct-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-950/40 dark:to-purple-950/20 border border-purple-200 dark:border-purple-800">
-                                    <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                                    <span className="text-xs text-purple-700 dark:text-purple-300">{pct}</span>
-                                  </div>
-                                ))}
-                                {numbers.slice(0, 2).map((num, idx) => (
-                                  <div key={`num-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-950/40 dark:to-blue-950/20 border border-blue-200 dark:border-blue-800">
-                                    <School className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-                                    <span className="text-xs text-blue-700 dark:text-blue-300 truncate">{num}</span>
-                                  </div>
-                                ))}
+                            ))}
+                            {numbers.slice(0, 2).map((num, idx) => (
+                              <div key={`num-${idx}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-950/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-700">
+                                <School className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 truncate">{num}</span>
                               </div>
-                            )}
-                            
-                            {/* Summary Text - One-liner */}
-                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                              {summary}
-                            </p>
-                            
-                            {/* Metadata Footer */}
-                            <div className="flex items-center gap-2 pt-1">
-                              <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted/50">
-                                <School className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">{insight.closing_ids?.length || 0}</span>
-                              </div>
-                              <span className="text-xs text-muted-foreground ml-auto">
-                                {new Date(insight.created_at).toLocaleDateString()}
-                              </span>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Full Response */}
+                        <div className="p-4 rounded-lg bg-white/80 dark:bg-black/20 border">
+                          <div className="prose prose-sm max-w-none dark:prose-invert">
+                            <div className="space-y-2">
+                              {response.split('\n').map((line, lineIdx) => {
+                                if (!line.trim()) return null;
+                                
+                                // Check if it's a numbered bullet point
+                                const bulletMatch = line.match(/^(\d+)\.\s*\*\*(.+?)\*\*:?\s*(.*)$/);
+                                if (bulletMatch) {
+                                  const [, number, title, content] = bulletMatch;
+                                  return (
+                                    <div key={lineIdx} className="flex gap-2">
+                                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
+                                        {number}
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="font-semibold text-sm">{title}</p>
+                                        {content && <p className="text-xs text-muted-foreground mt-0.5">{content}</p>}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Regular bullet points
+                                if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+                                  return (
+                                    <div key={lineIdx} className="flex gap-2 pl-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 flex-shrink-0"></div>
+                                      <p className="text-sm flex-1">{line.replace(/^[-•]\s*/, '')}</p>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <p key={lineIdx} className="text-sm">{line}</p>
+                                );
+                              })}
                             </div>
                           </div>
-                        );
-                      })()}
-                    </div>
-                  </CardHeader>
-
-                  {/* Expanded Content */}
-                  <CollapsibleContent>
-                    <CardContent className="pt-0 pb-4">
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800">
-                          <div className="text-sm whitespace-pre-wrap leading-relaxed">
-                            {insight.response}
-                          </div>
                         </div>
-                        
-                        {/* Metadata in expanded view */}
-                        <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
-                          <div className="flex items-center gap-2">
-                            <School className="w-3.5 h-3.5" />
-                            <span>{insight.closing_ids?.length || 0} closings analyzed</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="w-3.5 h-3.5" />
-                            <span>{insight.model}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            ))}
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            })}
           </div>
         )}
 
+        {/* Dialog */}
         <SchoolClosingsAIInsightsDialog
           closings={closings}
           open={isDialogOpen}

@@ -70,7 +70,7 @@ export function SchoolClosingsAIInsightsDialog({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,

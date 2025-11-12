@@ -270,13 +270,29 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
       if (!response.ok) throw new Error(`Failed to save insight: ${response.status}`);
 
       const data = await response.json();
-      setSavedInsights(prev => [data.insight, ...prev]);
+      console.log('✅ Insight saved, adding to list:', data.insight);
+      console.log('📊 Current insights count:', savedInsights.length);
+      
+      setSavedInsights(prev => {
+        const newInsights = [data.insight, ...prev];
+        console.log('📊 New insights count:', newInsights.length);
+        return newInsights;
+      });
+      
       setInsightSaved(true);
       toast.success('Insight saved successfully!');
       
       setTimeout(() => {
         setIsDialogOpen(false);
-      }, 500);
+        // Reset form
+        setAiResponse(null);
+        setCurrentQuestion("");
+        setCurrentModel("");
+        setChatMessage("");
+        setSelectedLocations([]);
+        setSelectedInsightType("");
+        setInsightSaved(false);
+      }, 1000);
       
     } catch (error) {
       console.error('Error saving insight:', error);

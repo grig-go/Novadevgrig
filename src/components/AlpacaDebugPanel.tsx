@@ -28,7 +28,7 @@ export function AlpacaDebugPanel() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks/debug`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/debug`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,

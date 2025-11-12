@@ -251,8 +251,8 @@ export default function App() {
       // Determine if this is a crypto or stock based on ID format
       const isCrypto = securityId.startsWith('crypto:');
       const endpoint = isCrypto 
-        ? `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto/${securityId.replace('crypto:', '')}`
-        : `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks/${securityId}`;
+        ? `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${securityId.replace('crypto:', '')}`
+        : `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/${securityId}`;
       
       // Call backend to delete from database
       const response = await fetch(endpoint, {

@@ -43,7 +43,7 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
   const handleCustomNameSave = async (customName: string | null) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto/${crypto.cgId}/custom-name`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${crypto.cgId}/custom-name`,
         {
           method: 'POST',
           headers: {
@@ -80,7 +80,7 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/crypto/${crypto.cgId}`,
+        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${crypto.cgId}`,
         {
           method: 'DELETE',
           headers: {

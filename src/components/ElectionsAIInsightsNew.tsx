@@ -1,16 +1,18 @@
 import { useState, useMemo, useEffect } from "react";
-import { Card, CardContent } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "./ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { ScrollArea } from "./ui/scroll-area";
+import { Textarea } from "./ui/textarea";
 import { Race, getFieldValue } from "../types/election";
 import { 
-  Brain, ChevronDown, ChevronLeft, Loader2, Send, X, Search, Trash2, Vote
+  Brain, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, X, Search, Trash2, Vote, AlertTriangle, Target, TrendingUp
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
@@ -124,7 +126,7 @@ export function ElectionAIInsights({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -367,7 +369,7 @@ export function ElectionAIInsights({
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
         {
           method: 'POST',
           headers: {
@@ -661,15 +663,31 @@ export function ElectionAIInsights({
 
   if (listView) {
     return (
-      <div className="space-y-4 border rounded-lg p-6">
-        <div className="flex items-center gap-3">
-          <Brain className="w-5 h-5 text-purple-600" />
-          <h3 className="font-semibold">AI Election Insights</h3>
-          <Badge variant="secondary">
-            {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
-          </Badge>
+      <div className="space-y-4 border rounded-lg p-6 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/10 dark:to-blue-950/10">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg shadow-lg">
+              <Brain className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold">AI Election Insights</h3>
+            <Badge variant="secondary" className="text-sm">
+              {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
+            </Badge>
+          </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <div className="flex items-center gap-3">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search insights..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-[250px]"
+              />
+            </div>
+            
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button 
                   variant="outline" 
@@ -840,56 +858,65 @@ export function ElectionAIInsights({
                     </Popover>
                   </div>
                   
-                  <div className="space-y-2 relative">
+                  <div className="space-y-2">
                     <label className="text-sm font-medium">Races</label>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
-                      <Input
-                        placeholder="Search races..."
-                        value={raceSearchQuery}
-                        onChange={(e) => setRaceSearchQuery(e.target.value)}
-                        onFocus={() => setIsRacePopoverOpen(true)}
-                        className="pl-9 pr-20"
-                      />
-                      {selectedRaces.length > 0 && (
-                        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <Badge variant="secondary" className="text-xs">
-                            {selectedRaces.length} selected
-                          </Badge>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Selected Races Badges */}
-                    {selectedRaces.length > 0 && (
-                      <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-2 border rounded-md bg-muted/20">
-                        {selectedRaces.map((raceId) => (
-                          <Badge
-                            key={raceId}
-                            variant="secondary"
-                            className="gap-1 max-w-full"
-                          >
-                            <span className="truncate">{getSelectedRaceName(raceId)}</span>
-                            <X
-                              className="w-3 h-3 cursor-pointer hover:text-destructive"
-                              onClick={() => toggleRaceSelection(raceId)}
-                            />
-                          </Badge>
-                        ))}
+                    <Popover open={isRacePopoverOpen} onOpenChange={setIsRacePopoverOpen}>
+                      <PopoverTrigger asChild>
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={clearAllRaces}
-                          className="h-5 text-xs px-2"
+                          variant="outline"
+                          role="combobox"
+                          className="w-full justify-between h-auto min-h-9"
                         >
-                          Clear all
+                          {selectedRaces.length === 0 ? (
+                            <span className="text-muted-foreground">Select races</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Vote className="w-4 h-4" />
+                              <span>{selectedRaces.length} selected</span>
+                            </div>
+                          )}
+                          <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
-                      </div>
-                    )}
-                    
-                    {/* Race Search Results */}
-                    {isRacePopoverOpen && (
-                      <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }}>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search races..."
+                              value={raceSearchQuery}
+                              onChange={(e) => setRaceSearchQuery(e.target.value)}
+                              className="pl-8 h-8"
+                            />
+                          </div>
+                        </div>
+                        {selectedRaces.length > 0 && (
+                          <div className="p-2 border-b bg-muted/30">
+                            <div className="flex flex-wrap gap-1">
+                              {selectedRaces.slice(0, 3).map((raceId) => (
+                                <Badge
+                                  key={raceId}
+                                  variant="secondary"
+                                  className="gap-1 text-xs"
+                                >
+                                  {getSelectedRaceName(raceId).substring(0, 20)}...
+                                  <X
+                                    className="w-3 h-3 cursor-pointer hover:text-destructive"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleRaceSelection(raceId);
+                                    }}
+                                  />
+                                </Badge>
+                              ))}
+                              {selectedRaces.length > 3 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{selectedRaces.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <ScrollArea className="max-h-[300px]">
                           <div className="p-2">
                             {searchFilteredRaces.length === 0 ? (
@@ -901,36 +928,33 @@ export function ElectionAIInsights({
                                 <div
                                   key={race.id}
                                   className="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-accent rounded-sm"
-                                  onClick={() => {
-                                    toggleRaceSelection(race.id);
-                                  }}
+                                  onClick={() => toggleRaceSelection(race.id)}
                                 >
                                   <Checkbox
                                     checked={selectedRaces.includes(race.id)}
                                     onCheckedChange={() => toggleRaceSelection(race.id)}
                                   />
                                   <Vote className="w-4 h-4 text-blue-600 shrink-0" />
-                                  <span className="flex-1 text-sm">{getSelectedRaceName(race.id)}</span>
+                                  <span className="flex-1 text-sm truncate">{getSelectedRaceName(race.id)}</span>
                                 </div>
                               ))
                             )}
                           </div>
                         </ScrollArea>
-                        <div className="p-2 border-t flex justify-between items-center bg-muted/50">
-                          <span className="text-xs text-muted-foreground">
-                            {searchFilteredRaces.length} race{searchFilteredRaces.length !== 1 ? 's' : ''}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setIsRacePopoverOpen(false)}
-                            className="h-7 text-xs"
-                          >
-                            Close
-                          </Button>
-                        </div>
-                      </div>
-                    )}
+                        {selectedRaces.length > 0 && (
+                          <div className="p-2 border-t">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={clearAllRaces}
+                              className="w-full"
+                            >
+                              Clear all ({selectedRaces.length})
+                            </Button>
+                          </div>
+                        )}
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   
                   <div className="space-y-2">
@@ -1083,102 +1107,184 @@ export function ElectionAIInsights({
                 )}
               </DialogContent>
             </Dialog>
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search insights..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+          </div>
         </div>
 
         {/* Insights List */}
         {loadingInsights ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
           </div>
         ) : filteredInsights.length === 0 ? (
           <div className="text-center py-12">
-            <Brain className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="mb-2">No insights found</h3>
-            <p className="text-sm text-muted-foreground">
-              {searchQuery ? 'Try a different search term' : 'Click "Add AI Insights" to create your first insight'}
+            <Brain className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              {searchQuery ? 'No insights match your search' : 'No saved insights yet'}
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredInsights.map((insight) => {
-              const isExpanded = expandedInsights.has(insight.id);
+          <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory">
+            {filteredInsights.map((insight, index) => {
+              const response = insight.insight || '';
               const question = insight.metadata?.question || insight.topic || 'No question';
               const insightType = insight.metadata?.insightType || insight.category || 'general';
-              const provider = insight.metadata?.provider || 'Unknown';
               const model = insight.metadata?.model || '';
+              const selectedRaceIds = insight.metadata?.selectedRaces || [];
+              
+              // Detect sentiment/urgency keywords
+              const hasAlert = /emergency|severe|critical|alert|urgent|warning|landslide|contested|disputed/i.test(response);
+              const hasTrending = /lead|ahead|surge|gaining|trending|competitive|tight|close/i.test(response);
+              
+              // Extract key numbers
+              const percentages = response.match(/(\d+(?:\.\d+)?)%/g) || [];
+              const voteShares = response.match(/(\d+(?:,\d{3})*)\s*(votes|voters)/gi) || [];
+              
+              // Extract preview text (first meaningful sentence)
+              const sentences = response.split(/[.!?]\s+/);
+              const preview = sentences.find(s => s.length > 20)?.substring(0, 100) || '';
+              
+              // Determine card styling based on sentiment
+              const borderColor = hasAlert ? 'border-red-400' : 
+                                 hasTrending ? 'border-blue-400' : 
+                                 'border-purple-400';
+              
+              const bgGradient = hasAlert ? 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/20' : 
+                                hasTrending ? 'bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20' : 
+                                'bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20';
+              
+              const isExpanded = expandedInsights.has(insight.id);
               
               return (
-                <div
-                  key={insight.id}
-                  className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+                <Collapsible
+                  key={insight.id || `insight-${index}`}
+                  open={isExpanded}
+                  onOpenChange={() => toggleInsightExpansion(insight.id)}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded">
-                      <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex-1">
-                          <h4 className="font-medium mb-1">{question}</h4>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="outline" className="text-xs">
-                              {insightType}
-                            </Badge>
-                            {provider && (
-                              <span>{provider}</span>
+                  <Card 
+                    className={`border-l-4 ${borderColor} ${bgGradient} min-w-[380px] max-w-[380px] flex-shrink-0 snap-start shadow-md hover:shadow-lg transition-all`}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <CollapsibleTrigger className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity text-left">
+                          <div className={`p-1.5 rounded-lg border shrink-0 ${
+                            hasAlert 
+                              ? 'bg-red-100 dark:bg-red-950/50 border-red-300 dark:border-red-700' 
+                              : 'bg-purple-100 dark:bg-purple-950/50 border-purple-300 dark:border-purple-700'
+                          }`}>
+                            {isExpanded ? (
+                              <ChevronDown className={`w-4 h-4 ${hasAlert ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-purple-400'}`} />
+                            ) : (
+                              <ChevronRight className={`w-4 h-4 ${hasAlert ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-purple-400'}`} />
                             )}
-                            {model && (
-                              <>
-                                <span>•</span>
-                                <span>{model}</span>
-                              </>
-                            )}
-                            <span>•</span>
-                            <span>{new Date(insight.created_at).toLocaleDateString()}</span>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleInsightExpansion(insight.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <ChevronDown 
-                              className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
-                            />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDeleteInsight(insight.id)}
-                            className="h-8 w-8 p-0 hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                          <div className="flex-1">
+                            <CardTitle className="text-base leading-tight line-clamp-2 mb-2">{question}</CardTitle>
+                          </div>
+                        </CollapsibleTrigger>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteInsight(insight.id);
+                          }}
+                          className="h-7 w-7 shrink-0 inline-flex items-center justify-center rounded-md hover:bg-destructive/10 transition-colors"
+                          aria-label="Delete insight"
+                        >
+                          <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                        </button>
                       </div>
-                      {isExpanded && (
-                        <div className="mt-3 pt-3 border-t">
-                          <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap text-sm">
-                            {insight.insight}
-                          </div>
+
+                      {/* Status Banner - Always visible when not expanded */}
+                      {!isExpanded && hasAlert && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-700">
+                          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                          <span className="text-xs font-semibold text-red-700 dark:text-red-300">Critical Alert</span>
                         </div>
                       )}
-                    </div>
-                  </div>
-                </div>
+                      
+                      {/* Preview Text - When not expanded */}
+                      {!isExpanded && preview && (
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {preview}...
+                        </p>
+                      )}
+                      
+                      {/* Metadata Row */}
+                      <div className="flex items-center gap-2 flex-wrap pt-2">
+                        <Badge variant="outline" className="text-xs">
+                          <Vote className="w-3 h-3 mr-1" />
+                          {selectedRaceIds.length || 0}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(insight.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </CardHeader>
+
+                    <CollapsibleContent>
+                      <CardContent className="pt-0 space-y-3">
+                        {/* Key Metrics Grid */}
+                        {(percentages.length > 0 || voteShares.length > 0) && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {percentages.slice(0, 2).map((pct, idx) => (
+                              <div key={`pct-${idx}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-950/40 dark:to-purple-900/20 border border-purple-200 dark:border-purple-700">
+                                <Target className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                                <span className="text-sm font-semibold text-purple-700 dark:text-purple-300">{pct}</span>
+                              </div>
+                            ))}
+                            {voteShares.slice(0, 2).map((votes, idx) => (
+                              <div key={`votes-${idx}`} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-950/40 dark:to-blue-900/20 border border-blue-200 dark:border-blue-700">
+                                <Vote className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                <span className="text-sm font-semibold text-blue-700 dark:text-blue-300 truncate">{votes}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Full Response */}
+                        <div className="p-4 rounded-lg bg-white/80 dark:bg-black/20 border">
+                          <div className="prose prose-sm max-w-none dark:prose-invert">
+                            <div className="space-y-2">
+                              {response.split('\n').map((line, lineIdx) => {
+                                if (!line.trim()) return null;
+                                
+                                // Check if it's a numbered bullet point
+                                const bulletMatch = line.match(/^(\d+)\.\s*\*\*(.+?)\*\*:?\s*(.*)$/);
+                                if (bulletMatch) {
+                                  const [, number, title, content] = bulletMatch;
+                                  return (
+                                    <div key={lineIdx} className="flex gap-2">
+                                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
+                                        {number}
+                                      </div>
+                                      <div className="flex-1">
+                                        <p className="font-semibold text-sm">{title}</p>
+                                        {content && <p className="text-xs text-muted-foreground mt-0.5">{content}</p>}
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                // Regular bullet points
+                                if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
+                                  return (
+                                    <div key={lineIdx} className="flex gap-2 pl-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 flex-shrink-0"></div>
+                                      <p className="text-sm flex-1">{line.replace(/^[-•]\s*/, '')}</p>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <p key={lineIdx} className="text-sm">{line}</p>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
               );
             })}
           </div>

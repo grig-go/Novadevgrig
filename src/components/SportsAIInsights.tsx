@@ -85,7 +85,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -294,7 +294,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       console.log('Sending AI request with context:', context);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
         {
           method: 'POST',
           headers: {

@@ -17,6 +17,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
@@ -47,6 +57,17 @@ import {
   Zap,
   Video,
   LayoutDashboard,
+  Globe,
+  Sparkles,
+  Cpu,
+  Gem,
+  Wind,
+  Wand2,
+  Palette,
+  Settings,
+  Box,
+  Clapperboard,
+  Film,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
@@ -104,6 +125,10 @@ export function AIConnectionsDashboard() {
   const [debugData, setDebugData] = useState<any>(null);
   const [loadingDebug, setLoadingDebug] = useState(false);
 
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [providerToDelete, setProviderToDelete] = useState<AIProviderWithMaskedKey | null>(null);
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
@@ -140,7 +165,7 @@ export function AIConnectionsDashboard() {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -161,7 +186,7 @@ export function AIConnectionsDashboard() {
         await initializeClaude();
         // Re-fetch after initialization
         const retryResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -186,7 +211,7 @@ export function AIConnectionsDashboard() {
   const initializeClaude = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/initialize`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/initialize`,
         {
           method: "POST",
           headers: {
@@ -314,7 +339,7 @@ export function AIConnectionsDashboard() {
       console.log('📤 Sending POST payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
         {
           method: "POST",
           headers: {
@@ -327,13 +352,14 @@ export function AIConnectionsDashboard() {
 
       console.log('📥 POST response status:', response.status);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ POST failed:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      const result = await response.json();
+      console.log('✅ Full API Response:', result);
+
+      // Check if the backend returned an error
+      if (!result.ok) {
+        throw new Error(result.detail || result.error || 'Failed to add provider');
       }
 
-      const result = await response.json();
       console.log('✅ Provider saved:', result);
 
       toast.success("AI provider added successfully");
@@ -371,19 +397,43 @@ export function AIConnectionsDashboard() {
 
     setSaving(true);
     try {
-      const updatePayload = {
-        ...formData,
+      // Build update payload, only including API key/secret if they were changed
+      const updatePayload: any = {
+        name: formData.name,
+        providerName: formData.providerName,
+        type: formData.type,
+        description: formData.description,
+        endpoint: formData.endpoint,
+        model: formData.model,
+        enabled: formData.enabled,
+        rateLimitPerMinute: formData.rateLimitPerMinute,
+        maxTokens: formData.maxTokens,
+        temperature: formData.temperature,
+        topP: formData.topP,
+        dashboardAssignments: formData.dashboardAssignments,
         availableModels,
       };
+      
+      // Only include apiKey if it was changed (not empty)
+      if (formData.apiKey && formData.apiKey.trim() !== "") {
+        updatePayload.apiKey = formData.apiKey;
+      }
+      
+      // Only include apiSecret if it was changed (not empty)
+      if (formData.apiSecret && formData.apiSecret.trim() !== "") {
+        updatePayload.apiSecret = formData.apiSecret;
+      }
       
       console.log('📤 Sending update payload:', {
         dashboardAssignments: updatePayload.dashboardAssignments,
         hasDashboardAssignments: !!updatePayload.dashboardAssignments,
-        assignmentCount: updatePayload.dashboardAssignments?.length || 0
+        assignmentCount: updatePayload.dashboardAssignments?.length || 0,
+        hasApiKey: !!updatePayload.apiKey,
+        hasApiSecret: !!updatePayload.apiSecret
       });
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedProvider.id}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}`,
         {
           method: "PUT",
           headers: {
@@ -394,9 +444,15 @@ export function AIConnectionsDashboard() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const result = await response.json();
+      console.log('✅ Full API Response:', result);
+
+      // Check if the backend returned an error
+      if (!result.ok) {
+        throw new Error(result.detail || result.error || 'Failed to update provider');
       }
+
+      console.log('✅ Provider updated:', result);
 
       toast.success("AI provider updated successfully");
       setEditDialogOpen(false);
@@ -410,16 +466,14 @@ export function AIConnectionsDashboard() {
     }
   };
 
-  const handleDeleteProvider = async (providerId: string) => {
-    if (!confirm("Are you sure you want to delete this AI provider?")) {
-      return;
-    }
+  const handleDeleteProvider = async () => {
+    if (!providerToDelete) return;
 
-    console.log('🗑️ Deleting AI provider:', providerId);
+    console.log('🗑️ Deleting AI provider:', providerToDelete.id);
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${providerId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${providerToDelete.id}`,
         {
           method: "DELETE",
           headers: {
@@ -430,16 +484,19 @@ export function AIConnectionsDashboard() {
 
       console.log('📤 Delete response status:', response.status);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Delete failed:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      const result = await response.json();
+      console.log('✅ Full API Response:', result);
+
+      // Check if the backend returned an error
+      if (!result.ok) {
+        throw new Error(result.detail || result.error || 'Failed to delete provider');
       }
 
-      const result = await response.json();
       console.log('✅ Delete successful:', result);
 
       toast.success("AI provider deleted successfully");
+      setDeleteDialogOpen(false);
+      setProviderToDelete(null);
       fetchProviders();
     } catch (error) {
       console.error("❌ Error deleting AI provider:", error);
@@ -456,7 +513,7 @@ export function AIConnectionsDashboard() {
       
       // First, reveal the API key to test with
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${provider.id}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${provider.id}/reveal`,
         {
           method: "POST",
           headers: {
@@ -473,7 +530,7 @@ export function AIConnectionsDashboard() {
 
       // Test the connection by fetching models
       const testResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/fetch-models`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/fetch-models`,
         {
           method: "POST",
           headers: {
@@ -541,7 +598,7 @@ export function AIConnectionsDashboard() {
   const handleToggleEnabled = async (provider: AIProviderWithMaskedKey) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${provider.id}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${provider.id}`,
         {
           method: "PUT",
           headers: {
@@ -567,15 +624,20 @@ export function AIConnectionsDashboard() {
   };
 
   const handleRevealApiKey = async () => {
-    if (!selectedProvider || showApiKey) {
+    if (!selectedProvider) {
+      return;
+    }
+
+    if (showApiKey) {
       setShowApiKey(false);
+      // Keep any changes the user made to the revealed key in formData
       return;
     }
 
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedProvider.id}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}/reveal`,
         {
           method: "POST",
           headers: {
@@ -601,8 +663,13 @@ export function AIConnectionsDashboard() {
   };
 
   const handleRevealApiSecret = async () => {
-    if (!selectedProvider || showApiSecret) {
+    if (!selectedProvider) {
+      return;
+    }
+
+    if (showApiSecret) {
       setShowApiSecret(false);
+      // Keep any changes the user made to the revealed secret in formData
       return;
     }
 
@@ -614,7 +681,7 @@ export function AIConnectionsDashboard() {
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedProvider.id}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}/reveal`,
         {
           method: "POST",
           headers: {
@@ -746,7 +813,7 @@ export function AIConnectionsDashboard() {
     try {
       console.log('🌐 Fetching models from API...');
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/fetch-models`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/fetch-models`,
         {
           method: "POST",
           headers: {
@@ -766,7 +833,8 @@ export function AIConnectionsDashboard() {
       
       // Check if the backend returned an error
       if (!data.ok) {
-        throw new Error(data.error || 'Failed to fetch models');
+        const errorMsg = data.detail || data.error || 'Failed to fetch models';
+        throw new Error(errorMsg);
       }
       
       console.log('✅ Models fetched successfully:', {
@@ -792,7 +860,16 @@ export function AIConnectionsDashboard() {
         providerName,
         hasApiKey: !!apiKey
       });
-      toast.error(`Failed to fetch models: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Provide helpful message for authentication errors
+      if (errorMessage.includes('authentication_error') || errorMessage.includes('invalid x-api-key') || errorMessage.includes('401')) {
+        toast.error(`Invalid API key for ${providerName}. Please enter a valid API key from the provider's website.`);
+      } else {
+        toast.error(`Failed to fetch models: ${errorMessage}`);
+      }
+      
       // Fall back to hardcoded models if available
       const hardcodedModels = getHardcodedModels(providerName);
       console.log('📦 Falling back to hardcoded models:', hardcodedModels.length);
@@ -826,7 +903,7 @@ export function AIConnectionsDashboard() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -878,6 +955,35 @@ export function AIConnectionsDashboard() {
         return <Brain className="w-4 h-4" />;
       default:
         return <Zap className="w-4 h-4" />;
+    }
+  };
+
+  const getProviderBrandIcon = (providerName: AIProviderName) => {
+    switch (providerName) {
+      case "claude":
+        return <Globe className="w-4 h-4" />;
+      case "openai":
+        return <Sparkles className="w-4 h-4" />;
+      case "gemini":
+        return <Gem className="w-4 h-4" />;
+      case "mistral":
+        return <Wind className="w-4 h-4" />;
+      case "cohere":
+        return <Cpu className="w-4 h-4" />;
+      case "stability":
+        return <Wand2 className="w-4 h-4" />;
+      case "dalle":
+        return <Palette className="w-4 h-4" />;
+      case "midjourney":
+        return <ImageIcon className="w-4 h-4" />;
+      case "runway":
+        return <Clapperboard className="w-4 h-4" />;
+      case "pika":
+        return <Film className="w-4 h-4" />;
+      case "custom":
+        return <Settings className="w-4 h-4" />;
+      default:
+        return <Box className="w-4 h-4" />;
     }
   };
 
@@ -1146,7 +1252,7 @@ export function AIConnectionsDashboard() {
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {getProviderIcon(provider.type)}
+                        {getProviderBrandIcon(provider.providerName)}
                         <span>{provider.name}</span>
                       </div>
                     </TableCell>
@@ -1227,7 +1333,10 @@ export function AIConnectionsDashboard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteProvider(provider.id)}
+                            onClick={() => {
+                              setProviderToDelete(provider);
+                              setDeleteDialogOpen(true);
+                            }}
                             title="Delete provider"
                           >
                             <Trash2 className="w-4 h-4 text-destructive" />
@@ -1578,18 +1687,31 @@ export function AIConnectionsDashboard() {
 
             <div className="grid gap-2">
               <Label htmlFor="edit-api-key">API Key</Label>
-              {selectedProvider?.apiKeyConfigured && (
-                <div className="text-xs mb-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Current:</span>
-                    <code className="bg-muted px-1.5 py-0.5 rounded flex-1">
-                      {showApiKey ? revealedApiKey : selectedProvider.apiKeyMasked}
-                    </code>
+              <div className="relative">
+                <Input
+                  id="edit-api-key"
+                  type={showApiKey ? "text" : "password"}
+                  value={showApiKey ? revealedApiKey : (formData.apiKey || "")}
+                  onChange={(e) => {
+                    if (showApiKey) {
+                      // When revealed, allow editing the revealed key
+                      setRevealedApiKey(e.target.value);
+                      setFormData({ ...formData, apiKey: e.target.value });
+                    } else {
+                      // When hidden, edit the form data
+                      setFormData({ ...formData, apiKey: e.target.value });
+                    }
+                  }}
+                  placeholder={selectedProvider?.apiKeyConfigured ? (showApiKey ? "" : selectedProvider.apiKeyMasked) : "Enter API key"}
+                  className="pr-20"
+                />
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                  {selectedProvider?.apiKeyConfigured && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0"
+                      className="h-7 w-7 p-0"
                       onClick={handleRevealApiKey}
                       disabled={loadingReveal}
                     >
@@ -1601,27 +1723,20 @@ export function AIConnectionsDashboard() {
                         <Eye className="h-3 w-3" />
                       )}
                     </Button>
-                    {showApiKey && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0"
-                        onClick={() => handleCopyToClipboard(revealedApiKey, "API Key")}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
+                  )}
+                  {showApiKey && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => handleCopyToClipboard(revealedApiKey, "API Key")}
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  )}
                 </div>
-              )}
-              <Input
-                id="edit-api-key"
-                type="password"
-                value={formData.apiKey}
-                onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder={selectedProvider?.apiKeyConfigured ? "Leave empty to keep current" : "Enter API key"}
-              />
+              </div>
               <p className="text-xs text-muted-foreground">
                 {selectedProvider?.apiKeyConfigured
                   ? "Leave empty to keep existing key, or enter a new one to update."
@@ -1632,17 +1747,30 @@ export function AIConnectionsDashboard() {
             {selectedProvider?.apiSecretConfigured && (
               <div className="grid gap-2">
                 <Label htmlFor="edit-api-secret">API Secret</Label>
-                <div className="text-xs mb-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Current:</span>
-                    <code className="bg-muted px-1.5 py-0.5 rounded flex-1">
-                      {showApiSecret ? revealedApiSecret : "****...****"}
-                    </code>
+                <div className="relative">
+                  <Input
+                    id="edit-api-secret"
+                    type={showApiSecret ? "text" : "password"}
+                    value={showApiSecret ? revealedApiSecret : (formData.apiSecret || "")}
+                    onChange={(e) => {
+                      if (showApiSecret) {
+                        // When revealed, allow editing the revealed secret
+                        setRevealedApiSecret(e.target.value);
+                        setFormData({ ...formData, apiSecret: e.target.value });
+                      } else {
+                        // When hidden, edit the form data
+                        setFormData({ ...formData, apiSecret: e.target.value });
+                      }
+                    }}
+                    placeholder={showApiSecret ? "" : "****...****"}
+                    className="pr-20"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 w-6 p-0"
+                      className="h-7 w-7 p-0"
                       onClick={handleRevealApiSecret}
                       disabled={loadingReveal}
                     >
@@ -1659,7 +1787,7 @@ export function AIConnectionsDashboard() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-6 w-6 p-0"
+                        className="h-7 w-7 p-0"
                         onClick={() => handleCopyToClipboard(revealedApiSecret, "API Secret")}
                       >
                         <Copy className="h-3 w-3" />
@@ -1667,13 +1795,6 @@ export function AIConnectionsDashboard() {
                     )}
                   </div>
                 </div>
-                <Input
-                  id="edit-api-secret"
-                  type="password"
-                  value={formData.apiSecret}
-                  onChange={(e) => setFormData({ ...formData, apiSecret: e.target.value })}
-                  placeholder="Leave empty to keep current"
-                />
                 <p className="text-xs text-muted-foreground">
                   Leave empty to keep existing secret, or enter a new one to update.
                 </p>
@@ -2205,6 +2326,30 @@ export function AIConnectionsDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete AI Provider</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{providerToDelete?.name}</strong>?
+              <br />
+              <br />
+              This action cannot be undone. All dashboard assignments and configurations for this provider will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteProvider}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -201,7 +201,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       try {
         setLoadingAIProviders(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -629,7 +629,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       console.log(`   • Provider ID: ${selectedAIProvider}`);
       
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
         {
           method: 'POST',
           headers: {
@@ -769,7 +769,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       // Step 1: Get raw API key
       console.log('🔑 Step 1: Fetching API key from backend...');
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
         {
           method: 'POST',
           headers: {
