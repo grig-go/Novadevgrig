@@ -131,7 +131,8 @@ app.post("/manual", async (c)=>{
 });
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
-// POST /fetch - Fetch XML and populate table (region_id only, flexible config)
+// ----------------------------------------------------------------------------
+// POST /fetch - Fetch XML and populate table (region_id + zone_id support)
 // ----------------------------------------------------------------------------
 app.post("/fetch", async (c)=>{
   console.log("⏰ [school_closing] /fetch triggered at", new Date().toISOString());
@@ -147,10 +148,13 @@ app.post("/fetch", async (c)=>{
       parseTagValue: true
     });
     let totalInserted = 0;
-    // 2️⃣ If sample_url exists — ignore regions, use it directly
+    // ----------------------------------------------------------------------------
+    // 2️⃣ If sample_url exists — ignore regions and use directly
+    // ----------------------------------------------------------------------------
     if (config.sample_url && config.sample_url.trim() !== "") {
       const url = config.sample_url;
       const regionId = "42"; // fixed demo region
+      const zoneId = ""; // not used for sample mode
       console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
       console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
       const res = await fetch(url);
@@ -169,6 +173,7 @@ app.post("/fetch", async (c)=>{
       const rows = records.map((item)=>({
           provider_id: "school_provider:news12_closings",
           region_id: regionId,
+          zone_id: zoneId,
           state: item.STATE || null,
           city: item.CITY || null,
           county_name: item.COUNTY_NAME || null,
@@ -189,36 +194,53 @@ app.post("/fetch", async (c)=>{
       console.log(`✅ Sample mode: ${rows.length} records upserted`);
       totalInserted = rows.length;
     } else {
+      // ----------------------------------------------------------------------------
       // 3️⃣ Live mode: use base_url + endpoint
-      let regionIds = [];
-      if (Array.isArray(config.region_ids)) {
-        regionIds = config.region_ids;
-      } else if (typeof config.region_id === "string" && config.region_id.includes(",")) {
-        regionIds = config.region_id.split(",").map((r)=>r.trim());
-      } else if (config.region_id) {
-        regionIds = [
-          config.region_id
-        ];
+      // ----------------------------------------------------------------------------
+      let regionZonePairs = [];
+      // ✅ New structured regions array
+      if (Array.isArray(config.regions)) {
+        regionZonePairs = config.regions.map((r)=>({
+            region_id: r.region_id,
+            zone_id: r.zone_id || ""
+          }));
+        console.log("✅ Using structured regions array:", regionZonePairs);
       } else {
-        console.warn("⚠️ No region_id found in config — using null region");
-        regionIds = [
-          null
+        // ⚙️ Legacy fallback (region_id/zone_id strings)
+        const regionIds = (config.region_id || "").split(",").map((r)=>r.trim()).filter(Boolean);
+        const zoneIds = (config.zone_id || "").split(",").map((z)=>z.trim());
+        regionZonePairs = regionIds.map((region_id, i)=>({
+            region_id,
+            zone_id: zoneIds[i] || ""
+          }));
+        if (regionZonePairs.length === 0) regionZonePairs = [
+          {
+            region_id: "42",
+            zone_id: ""
+          }
         ];
+        console.log("⚠️ Using legacy region/zone config:", regionZonePairs);
       }
-      for (const regionId of regionIds){
-        const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId=";
-        const endpoint = regionId ? endpointTemplate.replace("{region_id}", regionId) : endpointTemplate.replace("sRegionId={region_id}", "");
+      // ----------------------------------------------------------------------------
+      // Fetch each region/zone pair
+      // ----------------------------------------------------------------------------
+      for (const pair of regionZonePairs){
+        const { region_id, zone_id } = pair;
         const baseUrl = provider.base_url && provider.base_url.trim() !== "" ? provider.base_url : null;
         if (!baseUrl) {
-          console.warn("⚠️ No base_url found — skipping region", regionId);
+          console.warn("⚠️ No base_url found — skipping region", region_id);
           continue;
         }
-        const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
-        console.log(`🌐 Fetching XML for region_id: ${regionId}`);
+        const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId={zone_id}";
+        // Replace placeholders
+        let endpoint = endpointTemplate.replace("{region_id}", region_id || "").replace("{zone_id}", zone_id || "");
+        if (!endpoint.startsWith("/")) endpoint = `/${endpoint}`;
+        const url = `${baseUrl}${endpoint}`;
+        console.log(`🌐 Fetching XML for region_id=${region_id}, zone_id=${zone_id}`);
         console.log(`🔗 URL: ${url}`);
         const res = await fetch(url);
         if (!res.ok) {
-          console.warn(`⚠️ Region ${regionId} failed: HTTP ${res.status}`);
+          console.warn(`⚠️ Region ${region_id} failed: HTTP ${res.status}`);
           continue;
         }
         const xmlText = await res.text();
@@ -227,14 +249,16 @@ app.post("/fetch", async (c)=>{
         if (!Array.isArray(records)) records = [
           records
         ].filter(Boolean);
-        console.log(`📚 Region ${regionId}: ${records.length} records found`);
+        console.log(`📚 Region ${region_id}: ${records.length} records found`);
         if (records.length === 0) continue;
-        // 🧹 Clean existing rows
-        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
-        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${regionId}:`, deleteError);
+        // 🧹 Clean existing rows for same provider + region + zone
+        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id);
+        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        // 🧩 Prepare and upsert new records
         const rows = records.map((item)=>({
             provider_id: "school_provider:news12_closings",
-            region_id: regionId,
+            region_id,
+            zone_id,
             state: item.STATE || null,
             city: item.CITY || null,
             county_name: item.COUNTY_NAME || null,
@@ -242,7 +266,7 @@ app.post("/fetch", async (c)=>{
             type: "School",
             status_day: item.STATUS_DAY || null,
             status_description: item.STATUS_DESCRIPTION || null,
-            notes: `Fetched from News12 XML feed (region ${regionId})`,
+            notes: `Fetched from News12 XML feed (region ${region_id}, zone ${zone_id})`,
             source_format: "xml",
             fetched_at: new Date().toISOString(),
             raw_data: item
@@ -251,11 +275,17 @@ app.post("/fetch", async (c)=>{
           onConflict: "provider_id,organization_name,status_day",
           ignoreDuplicates: false
         });
-        if (upsertError) throw upsertError;
-        console.log(`✅ Region ${regionId}: ${rows.length} records upserted`);
+        if (upsertError) {
+          console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
+          continue;
+        }
+        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${rows.length} records upserted`);
         totalInserted += rows.length;
       }
-    }
+    } // 👈 closes live mode else block
+    // ----------------------------------------------------------------------------
+    // Final summary and response
+    // ----------------------------------------------------------------------------
     console.log(`🎉 Done. Total upserted: ${totalInserted}`);
     return c.json({
       ok: true,

@@ -14,6 +14,11 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { ScrollArea } from "./ui/scroll-area";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "./ui/popover";
+import {
   Table,
   TableBody,
   TableCell,
@@ -61,6 +66,8 @@ import {
   Video,
   Music,
   Loader2,
+  ChevronDown,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
@@ -374,7 +381,9 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
 
       // Region filter (multi-select)
       const matchesRegion =
-        regionFilter.length === 0 || regionFilter.includes(school.region_id);
+        regionFilter.length === 0 || 
+        regionFilter.includes(school.region_id) ||
+        school.region_id === "manual"; // Always show manual entries
 
       return (
         matchesSearch &&
@@ -804,46 +813,62 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="region_id">Region ID</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Select region identifiers for school closings data
-                      </p>
-                      
-                      <div className="border rounded-md">
-                        <ScrollArea className="h-[140px]">
-                          <div className="p-2 space-y-2">
-                            {uniqueRegions.map((region) => (
-                              <div key={region} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`region-${region}`}
-                                  checked={regionFilter.includes(region)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setRegionFilter([...regionFilter, region]);
-                                    } else {
+                      <Label>Region ID</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                          >
+                            <span className="truncate">
+                              {regionFilter.length === 0
+                                ? "Select region identifiers for school closings data"
+                                : `${regionFilter.length} region${regionFilter.length !== 1 ? 's' : ''} selected`}
+                            </span>
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[200px] p-0" align="start">
+                          <ScrollArea className="h-[200px]">
+                            <div className="p-2 space-y-1">
+                              {uniqueRegions.map((region) => (
+                                <div
+                                  key={region}
+                                  className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer"
+                                  onClick={() => {
+                                    if (regionFilter.includes(region)) {
                                       setRegionFilter(regionFilter.filter((r) => r !== region));
+                                    } else {
+                                      setRegionFilter([...regionFilter, region]);
                                     }
                                   }}
-                                />
-                                <label
-                                  htmlFor={`region-${region}`}
-                                  className="text-sm cursor-pointer flex-1"
                                 >
-                                  {region}
-                                </label>
-                              </div>
-                            ))}
-                            {uniqueRegions.length === 0 && (
-                              <p className="text-sm text-muted-foreground p-2">No regions available</p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      </div>
-                      {regionFilter.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          {regionFilter.length} region{regionFilter.length !== 1 ? 's' : ''} selected
-                        </p>
-                      )}
+                                  <Checkbox
+                                    id={`region-${region}`}
+                                    checked={regionFilter.includes(region)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setRegionFilter([...regionFilter, region]);
+                                      } else {
+                                        setRegionFilter(regionFilter.filter((r) => r !== region));
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`region-${region}`}
+                                    className="text-sm cursor-pointer flex-1"
+                                  >
+                                    {region}
+                                  </label>
+                                </div>
+                              ))}
+                              {uniqueRegions.length === 0 && (
+                                <p className="text-sm text-muted-foreground p-2">No regions available</p>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="space-y-2">

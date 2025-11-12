@@ -145,7 +145,10 @@ export function FeedsDashboardWithSupabase({
     region_id: "",
     sample_url: "",
     selectedRegions: [] as string[],
+    selectedZones: [] as string[],
+    regionZonePairs: [] as { region_id: string; zone_id: string }[],
     newRegion: "",
+    newZone: "",
   });
 
   // Sports leagues state
@@ -280,9 +283,28 @@ export function FeedsDashboardWithSupabase({
         
         // Initialize form data
         const config = fullProvider.config || {};
-        const regionIds = config.region_id 
-          ? (Array.isArray(config.region_id) ? config.region_id : config.region_id.split(',').map((r: string) => r.trim()).filter(Boolean))
-          : [];
+        
+        // Handle both old and new config structures
+        let pairs: { region_id: string; zone_id: string }[] = [];
+        if (config.regions && Array.isArray(config.regions)) {
+          // New structure: regions array
+          pairs = config.regions;
+        } else if (config.region_id) {
+          // Old structure: comma-separated strings (for backwards compatibility)
+          const regionIds = Array.isArray(config.region_id) 
+            ? config.region_id 
+            : config.region_id.split(',').map((r: string) => r.trim()).filter(Boolean);
+          const zoneIds = config.zone_id 
+            ? (Array.isArray(config.zone_id) ? config.zone_id : config.zone_id.split(',').map((z: string) => z.trim()).filter(Boolean))
+            : [];
+          pairs = regionIds.map((region: string, index: number) => ({
+            region_id: region,
+            zone_id: zoneIds[index] || ""
+          }));
+        }
+        
+        const regionIds = pairs.map(p => p.region_id);
+        const zoneIds = pairs.map(p => p.zone_id);
         
         setEditFormData({
           is_active: fullProvider.is_active,
@@ -301,7 +323,10 @@ export function FeedsDashboardWithSupabase({
           region_id: config.region_id || "",
           sample_url: config.sample_url || "",
           selectedRegions: regionIds,
+          selectedZones: zoneIds,
+          regionZonePairs: pairs,
           newRegion: "",
+          newZone: "",
         });
         
         // If sports provider, load available leagues
@@ -389,8 +414,9 @@ export function FeedsDashboardWithSupabase({
       } else if (editProvider.category === 'sports') {
         configObj.leagues = editFormData.selectedLeagues.map(id => Number(id));
       } else if (editProvider.category === 'school_closings') {
+        // Structure config with regions array
         configObj.endpoint = editFormData.endpoint;
-        configObj.region_id = editFormData.selectedRegions.join(',');
+        configObj.regions = editFormData.regionZonePairs;
         configObj.sample_url = editFormData.sample_url;
       }
 
@@ -1410,43 +1436,60 @@ export function FeedsDashboardWithSupabase({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="region_id">Region ID</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor="region_id">Region ID</Label>
+                      </div>
+                      <div>
+                        <Label htmlFor="zone_id">Zone ID (Optional)</Label>
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <Input
                         id="region_id"
                         type="number"
                         value={editFormData.newRegion}
                         onChange={(e) => setEditFormData({ ...editFormData, newRegion: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && editFormData.newRegion.trim()) {
-                            e.preventDefault();
-                            if (!editFormData.selectedRegions.includes(editFormData.newRegion.trim())) {
-                              setEditFormData({
-                                ...editFormData,
-                                selectedRegions: [...editFormData.selectedRegions, editFormData.newRegion.trim()],
-                                newRegion: "",
-                              });
-                              toast.success(`Added region: ${editFormData.newRegion.trim()}`);
-                            }
-                          }
-                        }}
                         placeholder="42"
+                        className="flex-1"
+                      />
+                      <Input
+                        id="zone_id"
+                        type="number"
+                        value={editFormData.newZone}
+                        onChange={(e) => setEditFormData({ ...editFormData, newZone: e.target.value })}
+                        placeholder="1"
+                        className="flex-1"
                       />
                       <Button
                         type="button"
                         size="default"
                         onClick={() => {
                           if (editFormData.newRegion.trim()) {
-                            if (!editFormData.selectedRegions.includes(editFormData.newRegion.trim())) {
+                            const existingPair = editFormData.regionZonePairs.find(
+                              (p) => p.region_id === editFormData.newRegion.trim()
+                            );
+                            if (!existingPair) {
                               setEditFormData({
                                 ...editFormData,
+                                regionZonePairs: [
+                                  ...editFormData.regionZonePairs,
+                                  {
+                                    region_id: editFormData.newRegion.trim(),
+                                    zone_id: editFormData.newZone.trim(),
+                                  },
+                                ],
                                 selectedRegions: [...editFormData.selectedRegions, editFormData.newRegion.trim()],
+                                selectedZones: [...editFormData.selectedZones, editFormData.newZone.trim()],
                                 newRegion: "",
+                                newZone: "",
                               });
-                              toast.success(`Added region: ${editFormData.newRegion.trim()}`);
+                              toast.success(`Added region: ${editFormData.newRegion.trim()}${editFormData.newZone.trim() ? ` with zone: ${editFormData.newZone.trim()}` : ''}`);
                             } else {
                               toast.error("Region already added");
                             }
+                          } else {
+                            toast.error("Region ID is required");
                           }
                         }}
                       >
@@ -1457,13 +1500,18 @@ export function FeedsDashboardWithSupabase({
                       The region identifier for school closings data
                     </p>
 
-                    {editFormData.selectedRegions.length > 0 && (
+                    {editFormData.regionZonePairs.length > 0 && (
                       <div className="border rounded-md mt-2">
                         <ScrollArea className="h-[120px]">
                           <div className="p-2 space-y-2">
-                            {editFormData.selectedRegions.map((region) => (
-                              <div key={region} className="flex items-center justify-between space-x-2 p-2 hover:bg-muted rounded-md transition-colors">
-                                <span className="text-sm">{region}</span>
+                            {editFormData.regionZonePairs.map((pair, index) => (
+                              <div key={index} className="flex items-center justify-between space-x-2 p-2 hover:bg-muted rounded-md transition-colors">
+                                <div className="flex-1">
+                                  <span className="text-sm font-medium">Region: {pair.region_id}</span>
+                                  {pair.zone_id && (
+                                    <span className="text-sm text-muted-foreground ml-2">| Zone: {pair.zone_id}</span>
+                                  )}
+                                </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1471,9 +1519,11 @@ export function FeedsDashboardWithSupabase({
                                   onClick={() => {
                                     setEditFormData({
                                       ...editFormData,
-                                      selectedRegions: editFormData.selectedRegions.filter((r) => r !== region),
+                                      regionZonePairs: editFormData.regionZonePairs.filter((_, i) => i !== index),
+                                      selectedRegions: editFormData.selectedRegions.filter((r) => r !== pair.region_id),
+                                      selectedZones: editFormData.selectedZones.filter((_, i) => i !== index),
                                     });
-                                    toast.success(`Removed region: ${region}`);
+                                    toast.success(`Removed region: ${pair.region_id}`);
                                   }}
                                   className="h-6 w-6 p-0"
                                 >
@@ -1486,9 +1536,9 @@ export function FeedsDashboardWithSupabase({
                       </div>
                     )}
                     
-                    {editFormData.selectedRegions.length > 0 && (
+                    {editFormData.regionZonePairs.length > 0 && (
                       <p className="text-xs text-muted-foreground">
-                        {editFormData.selectedRegions.length} region{editFormData.selectedRegions.length !== 1 ? 's' : ''} selected
+                        {editFormData.regionZonePairs.length} region{editFormData.regionZonePairs.length !== 1 ? 's' : ''} selected
                       </p>
                     )}
                   </div>
