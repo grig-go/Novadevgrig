@@ -94,6 +94,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
 
   const fetchBackendData = async (skipRefresh = false) => {
     try {
+      console.log('📡 Fetching backend data from finance_dashboard...');
       setLoading(true);
       setError(null);
       
@@ -165,13 +166,15 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         return result;
       });
       
+      console.log(`📊 Loaded ${securities.length} securities from finance_dashboard`);
+      console.log('📊 Securities data:', securities.map(s => ({ symbol: s.security.symbol, name: s.security.name.value, type: s.security.type })));
       setBackendSecurities(securities);
       
       // Count total overrides from backend (securities with custom names)
       const overrideCount = securities.filter(sec => sec.security.name.isOverridden).length;
       setBackendOverrideCount(overrideCount);
       
-      console.log(`📊 Loaded ${securities.length} securities from finance_dashboard (${overrideCount} with custom names)`);
+      console.log(`📊 Total overrides: ${overrideCount}`);
       
       // If not skipping refresh, auto-refresh prices after initial load
       if (!skipRefresh && securities.length > 0) {
@@ -822,6 +825,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
               <SecuritySearch 
                 onAddSecurity={() => {
                   // Refetch backend data to show newly added security
+                  console.log('🔄 Security added, refetching backend data...');
                   fetchBackendData();
                   // Also call parent callback if provided
                   if (onAddSecurity) onAddSecurity({} as any);
@@ -833,6 +837,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
               <SecuritySearch 
                 onAddSecurity={() => {
                   // Refetch backend data to show newly added crypto
+                  console.log('🔄 Crypto added, refetching backend data...');
                   fetchBackendData();
                   // Also call parent callback if provided
                   if (onAddSecurity) onAddSecurity({} as any);
@@ -888,16 +893,10 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
             </Card>
           </motion.div>
 
-          <FinanceAIInsights 
-            securities={filteredSecurities} 
-            compact={true} 
-            onClick={() => setShowAIInsights(!showAIInsights)}
-          />
-
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.3 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
             whileHover={{ y: -4, transition: { duration: 0.2 } }}
           >
             <Card 
@@ -961,6 +960,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
               </CardContent>
             </Card>
           </motion.div>
+
+          <FinanceAIInsights 
+            securities={filteredSecurities} 
+            compact={true} 
+            onClick={() => setShowAIInsights(!showAIInsights)}
+          />
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}

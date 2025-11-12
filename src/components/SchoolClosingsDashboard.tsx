@@ -687,103 +687,54 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
           <div className="space-y-4">
             {/* Search and View Toggle Row */}
             <div className="flex items-center gap-4">
-              <motion.div 
-                className="flex-1 relative"
-                whileHover={{ scale: 1.01 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
-                <motion.div
-                  animate={{ x: [0, 2, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                </motion.div>
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by school name, city, county, state, or zip..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400 }}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="relative"
               >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="relative"
-                >
-                  <motion.div
-                    animate={{ rotate: showFilters ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 200 }}
+                <Filter className="w-4 h-4 mr-2" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
                   >
-                    <Filter className="w-4 h-4 mr-2" />
-                  </motion.div>
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      transition={{ type: "spring", stiffness: 500 }}
-                    >
-                      <Badge
-                        variant="destructive"
-                        className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
-                      >
-                        {activeFilterCount}
-                      </Badge>
-                    </motion.div>
-                  )}
-                </Button>
-              </motion.div>
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
               <div className="flex items-center gap-1 border rounded-lg p-1">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                <Button
+                  variant={viewMode === "card" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("card")}
                 >
-                  <Button
-                    variant={viewMode === "card" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("card")}
-                  >
-                    <Grid3x3 className="w-4 h-4" />
-                  </Button>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  <Grid3x3 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("list")}
                 >
-                  <Button
-                    variant={viewMode === "list" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("list")}
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </motion.div>
+                  <List className="w-4 h-4" />
+                </Button>
               </div>
             </div>
 
             {/* Filters Section */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3, type: "spring", stiffness: 200 }}
-                  className="overflow-hidden"
-                >
-                  <motion.div 
-                    className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t"
-                    initial={{ y: -20 }}
-                    animate={{ y: 0 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
-                  >
+            {showFilters && (
+              <div className="overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t">
                     <div className="space-y-2">
                       <Label>Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -911,33 +862,21 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         </SelectContent>
                       </Select>
                     </div>
-                  </motion.div>
+                </div>
 
-                  {activeFilterCount > 0 && (
-                    <motion.div 
-                      className="mt-4 flex justify-end"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 }}
+                {activeFilterCount > 0 && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearFilters}
                     >
-                      <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 400 }}
-                      >
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleClearFilters}
-                        >
-                          Clear All Filters
-                        </Button>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      Clear All Filters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

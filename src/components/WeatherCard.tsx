@@ -809,10 +809,17 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-3 max-h-80 overflow-y-auto">
-            {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => (
+            {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => {
+              // Parse date as local date to avoid timezone offset issues
+              const dateStr = getFieldValue(day.date);
+              const [year, month, dayNum] = dateStr.split('-').map(Number);
+              const localDate = new Date(year, month - 1, dayNum);
+              const formattedDate = localDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+              
+              return (
               <div key={index} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium w-16">{formatDate(getFieldValue(day.date))}</span>
+                  <span className="text-sm font-medium w-16">{formattedDate}</span>
                   {getWeatherIcon(getFieldValue(day.icon), 20)}
                   <span className="text-sm text-muted-foreground">{getFieldValue(day.summary)}</span>
                 </div>
@@ -831,7 +838,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="text-xs text-muted-foreground">

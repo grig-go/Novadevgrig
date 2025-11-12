@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -83,6 +83,26 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const [savedInsights, setSavedInsights] = useState<any[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Ref for the asset dropdown container
+  const assetDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assetDropdownRef.current && !assetDropdownRef.current.contains(event.target as Node)) {
+        setIsAssetPopoverOpen(false);
+      }
+    };
+
+    if (isAssetPopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isAssetPopoverOpen]);
 
   // Handle preselected security
   useEffect(() => {
@@ -555,7 +575,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
                       
                       {/* Asset Selection Results */}
                       {isAssetPopoverOpen && (
-                        <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }}>
+                        <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }} ref={assetDropdownRef}>
                           <div className="max-h-[400px] overflow-y-auto">
                             {/* Cryptocurrencies Group */}
                             {availableSecurities.filter(s => s.security.type === 'CRYPTO').length > 0 && (

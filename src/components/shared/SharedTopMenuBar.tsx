@@ -146,7 +146,7 @@ export function SharedTopMenuBar({
 
   return (
     <div className="sticky top-0 z-50 border-b bg-card shadow-md">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 bg-white dark:bg-black">
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
           <div 

@@ -2808,18 +2808,6 @@
     --tw-gradient-stops: var(--tw-gradient-via-stops);
   }
 
-  .via-purple-500\/5 {
-    --tw-gradient-via: color-mix(in srgb, oklch(.627 .265 303.9) 5%, transparent);
-    --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
-    --tw-gradient-stops: var(--tw-gradient-via-stops);
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .via-purple-500\/5 {
-      --tw-gradient-via: color-mix(in oklab, var(--color-purple-500) 5%, transparent);
-    }
-  }
-
   .via-transparent {
     --tw-gradient-via: transparent;
     --tw-gradient-via-stops: var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-via) var(--tw-gradient-via-position), var(--tw-gradient-to) var(--tw-gradient-to-position);
@@ -3808,6 +3796,15 @@
   }
 
   @media (hover: hover) {
+    .group-hover\:scale-105:is(:where(.group):hover *) {
+      --tw-scale-x: 105%;
+      --tw-scale-y: 105%;
+      --tw-scale-z: 105%;
+      scale: var(--tw-scale-x) var(--tw-scale-y);
+    }
+  }
+
+  @media (hover: hover) {
     .group-hover\:opacity-80:is(:where(.group):hover *) {
       opacity: .8;
     }
@@ -4081,6 +4078,18 @@
   }
 
   @media (hover: hover) {
+    .hover\:bg-muted\/30:hover {
+      background-color: var(--muted);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-muted\/30:hover {
+        background-color: color-mix(in oklab, var(--muted) 30%, transparent);
+      }
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-muted\/50:hover {
       background-color: var(--muted);
     }
@@ -4318,18 +4327,6 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:shadow-gray-500\/10:hover {
         --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-gray-500) 10%, transparent) var(--tw-shadow-alpha), transparent);
-      }
-    }
-  }
-
-  @media (hover: hover) {
-    .hover\:shadow-green-500\/10:hover {
-      --tw-shadow-color: color-mix(in srgb, oklch(.723 .219 149.579) 10%, transparent);
-    }
-
-    @supports (color: color-mix(in lab, red, red)) {
-      .hover\:shadow-green-500\/10:hover {
-        --tw-shadow-color: color-mix(in oklab, color-mix(in oklab, var(--color-green-500) 10%, transparent) var(--tw-shadow-alpha), transparent);
       }
     }
   }
@@ -4967,6 +4964,10 @@
     .dark\:bg-amber-950\/20:is(.dark *) {
       background-color: color-mix(in oklab, var(--color-amber-950) 20%, transparent);
     }
+  }
+
+  .dark\:bg-black:is(.dark *) {
+    background-color: var(--color-black);
   }
 
   .dark\:bg-blue-900:is(.dark *) {
@@ -6148,25 +6149,25 @@
 }
 
 .dark {
-  --background: #252525;
-  --foreground: #fafafa;
-  --card: #252525;
-  --card-foreground: #fafafa;
-  --popover: #252525;
-  --popover-foreground: #fafafa;
-  --primary: #fafafa;
-  --primary-foreground: #353535;
-  --secondary: #595959;
-  --secondary-foreground: #fafafa;
-  --muted: #595959;
-  --muted-foreground: #b5b5b5;
-  --accent: #595959;
-  --accent-foreground: #fafafa;
+  --background: #0f1419;
+  --foreground: #e4e8f0;
+  --card: #1c2333;
+  --card-foreground: #e4e8f0;
+  --popover: #1c2333;
+  --popover-foreground: #e4e8f0;
+  --primary: #5b7cff;
+  --primary-foreground: #fff;
+  --secondary: #2a3040;
+  --secondary-foreground: #e4e8f0;
+  --muted: #2a3040;
+  --muted-foreground: #8a92a8;
+  --accent: #2a3040;
+  --accent-foreground: #e4e8f0;
   --destructive: oklch(.396 .141 25.723);
   --destructive-foreground: oklch(.637 .237 25.331);
-  --border: #595959;
-  --input: #595959;
-  --ring: #707070;
+  --border: #2a3040;
+  --input: #2a3040;
+  --ring: #5b7cff;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
   --chart-1: oklch(.488 .243 264.376);
@@ -6174,14 +6175,14 @@
   --chart-3: oklch(.769 .188 70.08);
   --chart-4: oklch(.627 .265 303.9);
   --chart-5: oklch(.645 .246 16.439);
-  --sidebar: #353535;
-  --sidebar-foreground: #fafafa;
-  --sidebar-primary: oklch(.488 .243 264.376);
-  --sidebar-primary-foreground: #fafafa;
-  --sidebar-accent: #595959;
-  --sidebar-accent-foreground: #fafafa;
-  --sidebar-border: #595959;
-  --sidebar-ring: #707070;
+  --sidebar: #000;
+  --sidebar-foreground: #e4e8f0;
+  --sidebar-primary: #5b7cff;
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: #2a3040;
+  --sidebar-accent-foreground: #e4e8f0;
+  --sidebar-border: #2a3040;
+  --sidebar-ring: #5b7cff;
 }
 
 html {

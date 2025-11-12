@@ -32,8 +32,8 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
   const [loadingProvider, setLoadingProvider] = useState(true);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<string>("");
-  const [currentModel, setCurrentModel] = useState<string>("");
+  const [currentQuestion, setCurrentQuestion] = useState("");
+  const [currentModel, setCurrentModel] = useState("");
   const [savingInsight, setSavingInsight] = useState(false);
   const [insightSaved, setInsightSaved] = useState(false);
   const [savedInsights, setSavedInsights] = useState<any[]>([]);
@@ -96,7 +96,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
         setLoadingInsights(true);
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights`,
+          `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -249,7 +249,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
         {
           method: 'POST',
           headers: {
@@ -289,7 +289,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather/${insightId}`,
         {
           method: 'DELETE',
           headers: {
@@ -413,7 +413,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-[400px] p-0" align="start">
-                      <ScrollArea className="max-h-[300px]">
+                      <ScrollArea className="h-[300px]">
                         <div className="p-2">
                           {locations.map((location) => (
                             <div
@@ -426,7 +426,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
                                 onCheckedChange={() => toggleLocationSelection(location.location.id)}
                               />
                               <Cloud className="w-4 h-4 text-blue-600" />
-                              <span className="flex-1">{getFieldValue(location.location.name)}</span>
+                              <span className="flex-1">{getSelectedLocationName(location.location.id)}</span>
                             </div>
                           ))}
                         </div>
@@ -544,7 +544,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
                       )}
                     </Button>
                   </div>
-                  <ScrollArea className="max-h-[300px] p-4 bg-muted rounded-lg">
+                  <ScrollArea className="h-[300px] p-4 bg-muted rounded-lg">
                     <div className="prose prose-sm max-w-none dark:prose-invert">
                       <p className="whitespace-pre-wrap">{aiResponse}</p>
                     </div>

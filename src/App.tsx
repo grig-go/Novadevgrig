@@ -123,9 +123,8 @@ export default function App() {
         const articlesResponse = await fetch(
           `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored?limit=1000`,
           {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Cache-Control': 'no-cache'
+            headers: { 
+              Authorization: `Bearer ${publicAnonKey}`,
             }
           }
         );

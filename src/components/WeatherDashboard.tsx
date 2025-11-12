@@ -70,7 +70,7 @@ export function WeatherDashboard({
   
   // Pagination state - using simple useState like Media Library
   const [currentPage, setCurrentPage] = useState(1);
-  const locationsPerPage = 9;
+  const [locationsPerPage, setLocationsPerPage] = useState(9);
   const previousLocationCountRef = useRef<number>(0);
   
   // Destructure from the hook stats
@@ -779,6 +779,11 @@ export function WeatherDashboard({
         onPageChange={handlePageChange}
         sortOrder={sortOrder}
         onSortChange={setSortOrder}
+        itemsPerPage={locationsPerPage}
+        onItemsPerPageChange={(value) => {
+          setLocationsPerPage(value);
+          setCurrentPage(1); // Reset to first page when changing items per page
+        }}
       />
 
 

@@ -582,6 +582,142 @@ app.delete("/ai_insights/school-closings/:id", async (c) => {
 });
 
 // =============================================================================
+// WEATHER AI INSIGHTS ROUTES
+// =============================================================================
+
+// Get all weather AI insights
+app.get("/ai_insights/weather", async (c) => {
+  try {
+    console.log("📡 [ai_insights] Fetching weather AI insights...");
+
+    const { data, error } = await supabase
+      .from("ai_insights_weather")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("❌ [ai_insights] Error fetching weather insights:", error);
+      return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", error.message);
+    }
+
+    console.log(`✅ [ai_insights] Fetched ${data?.length || 0} weather insights`);
+    return c.json({ 
+      ok: true,
+      insights: data || [] 
+    });
+  } catch (error) {
+    console.error("❌ [ai_insights] Exception fetching weather insights:", error);
+    return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", error);
+  }
+});
+
+// Get single weather AI insight by ID
+app.get("/ai_insights/weather/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    console.log(`📡 [ai_insights] Fetching weather insight with ID: ${id}`);
+    
+    const { data, error } = await supabase
+      .from("ai_insights_weather")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return jsonErr(c, 404, "INSIGHT_NOT_FOUND", `Insight ${id} not found`);
+      }
+      return jsonErr(c, 500, "INSIGHT_FETCH_FAILED", error.message);
+    }
+
+    console.log(`✅ [ai_insights] Weather insight fetched`);
+    return c.json({
+      ok: true,
+      data
+    });
+  } catch (error) {
+    return jsonErr(c, 500, "INSIGHT_FETCH_FAILED", error);
+  }
+});
+
+// Save a new weather AI insight
+app.post("/ai_insights/weather", async (c) => {
+  try {
+    const body = await safeJson(c);
+    const { question, response, selectedLocations, aiProvider, model, insightType, category, topic, provider } = body;
+    
+    if (!question || !response) {
+      return jsonErr(c, 400, "INVALID_INPUT", "question and response are required");
+    }
+
+    console.log(`💾 [ai_insights] Saving weather AI insight: "${question.substring(0, 50)}..."`);
+
+    const { data, error } = await supabase
+      .from("ai_insights_weather")
+      .insert({
+        topic: topic || question,
+        insight: response,
+        category: category || insightType || "general",
+        metadata: JSON.stringify({
+          question,
+          response,
+          selectedLocations: selectedLocations || [],
+          aiProvider: aiProvider || provider || null,
+          model: model || null,
+          insightType: insightType || null
+        }),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ [ai_insights] Error saving weather insight:", error);
+      return jsonErr(c, 500, "INSIGHT_CREATE_FAILED", error.message);
+    }
+
+    console.log(`✅ [ai_insights] Weather insight saved with ID: ${data.id}`);
+
+    return c.json({
+      ok: true,
+      insight: data
+    });
+  } catch (error) {
+    console.error("❌ [ai_insights] Exception saving weather insight:", error);
+    return jsonErr(c, 500, "INSIGHT_CREATE_FAILED", error);
+  }
+});
+
+// Delete a weather AI insight
+app.delete("/ai_insights/weather/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    console.log(`📡 [ai_insights] Deleting weather insight with ID: ${id}`);
+
+    const { error } = await supabase
+      .from("ai_insights_weather")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      console.error("❌ [ai_insights] Error deleting weather insight:", error);
+      return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", error.message);
+    }
+
+    console.log(`✅ [ai_insights] Weather insight deleted`);
+
+    return c.json({
+      ok: true,
+      message: `Insight ${id} deleted successfully`
+    });
+  } catch (error) {
+    console.error("❌ [ai_insights] Exception deleting weather insight:", error);
+    return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", error);
+  }
+});
+
+// =============================================================================
 // AI CHAT ENDPOINT (For All Dashboards)
 // =============================================================================
 

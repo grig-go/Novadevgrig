@@ -452,13 +452,13 @@ export function FeedsDashboardWithSupabase({
       return;
     }
     
-    if (!addFormData.base_url && addFormData.type !== 'local') {
+    if (!addFormData.base_url && addFormData.type !== 'local' && addFormData.type !== 'csv') {
       toast.error("Base URL is required for API providers");
       return;
     }
     
-    if (!addFormData.source_url && addFormData.type === 'local') {
-      toast.error("Source URL is required for local providers");
+    if (!addFormData.source_url && (addFormData.type === 'local' || addFormData.type === 'csv')) {
+      toast.error("Source URL is required for local/CSV providers");
       return;
     }
     
@@ -1124,7 +1124,7 @@ export function FeedsDashboardWithSupabase({
               </div>
 
               {/* Base URL or Storage Path depending on provider type */}
-              {editProvider.type === 'local' ? (
+              {(editProvider.type === 'local' || editProvider.type === 'csv') ? (
                 <div className="space-y-4 p-4 border rounded-lg">
                   <h3 className="font-semibold">Local Provider Paths</h3>
                   <div className="space-y-2">
@@ -1133,10 +1133,10 @@ export function FeedsDashboardWithSupabase({
                       id="source_url"
                       value={editFormData.source_url}
                       onChange={(e) => setEditFormData({ ...editFormData, source_url: e.target.value })}
-                      placeholder="file:///C:/path/to/data.csv"
+                      placeholder="file:///C:/path/to/data.csv or https://example.com/data.csv"
                     />
                     <p className="text-xs text-muted-foreground">
-                      File URL format (e.g., file:///C:/Users/...)
+                      File URL format (e.g., file:///C:/Users/...) or HTTP URL
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1884,6 +1884,7 @@ export function FeedsDashboardWithSupabase({
                   <SelectContent>
                     <SelectItem value="api">API</SelectItem>
                     <SelectItem value="local">Local File</SelectItem>
+                    <SelectItem value="csv">CSV File</SelectItem>
                     <SelectItem value="sportmonks">SportMonks</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1981,7 +1982,7 @@ export function FeedsDashboardWithSupabase({
             </div>
 
             {/* Base URL or Source URL depending on provider type */}
-            {addFormData.type === 'local' ? (
+            {(addFormData.type === 'local' || addFormData.type === 'csv') ? (
               <div className="space-y-4 p-4 border rounded-lg">
                 <h3 className="font-semibold">Local Provider Paths</h3>
                 <div className="space-y-2">
@@ -1990,10 +1991,10 @@ export function FeedsDashboardWithSupabase({
                     id="add_source_url"
                     value={addFormData.source_url}
                     onChange={(e) => setAddFormData({ ...addFormData, source_url: e.target.value })}
-                    placeholder="file:///C:/path/to/data.csv"
+                    placeholder="file:///C:/path/to/data.csv or https://example.com/data.csv"
                   />
                   <p className="text-xs text-muted-foreground">
-                    File URL format (e.g., file:///C:/Users/...)
+                    File URL format (e.g., file:///C:/Users/...) or HTTP URL
                   </p>
                 </div>
                 <div className="space-y-2">

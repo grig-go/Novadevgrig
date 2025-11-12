@@ -131,66 +131,92 @@ app.post("/manual", async (c)=>{
 });
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
-// POST /fetch - Fetch XML and populate table (with conflict-safe upsert)
+// ----------------------------------------------------------------------------
+// POST /fetch - Fetch XML and populate table (region_id only, flexible config)
 // ----------------------------------------------------------------------------
 app.post("/fetch", async (c)=>{
-  console.log("🚀 Fetch route triggered");
+  console.log("⏰ [school_closing] /fetch triggered at", new Date().toISOString());
+  console.log("📡 Request method:", c.req.method);
   try {
-    const sampleUrl = "https://bgkjcngrslxyqjitksim.supabase.co/storage/v1/object/sign/weather/new12_school_closing.xml?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNDBiMDBkMC1mNWI1LTRiMmYtYjYxZC05MjZkMmU5ODlkYTQiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ3ZWF0aGVyL25ldzEyX3NjaG9vbF9jbG9zaW5nLnhtbCIsImlhdCI6MTc2Mjg4Mjk3OSwiZXhwIjoxNzY1NDc0OTc5fQ.220g1loL4jda8ON5JE4hacwH9noeOOm1vIsoTMJgels";
-    console.log("🌐 Fetching XML from:", sampleUrl);
-    const res = await fetch(sampleUrl);
-    console.log("🔎 Response status:", res.status);
-    if (!res.ok) throw new Error(`Failed to fetch XML: HTTP ${res.status}`);
-    const xmlText = await res.text();
-    console.log("📄 XML length:", xmlText.length);
+    // 1️⃣ Load provider config
+    const { data: provider, error: providerError } = await supabase.from("data_providers").select("config, base_url").eq("id", "school_provider:news12_closings").single();
+    if (providerError) throw providerError;
+    if (!provider) throw new Error("Provider not found");
+    const config = typeof provider.config === "string" ? JSON.parse(provider.config) : provider.config || {};
+    // 2️⃣ Build list of region IDs (supports string, array, or none)
+    let regionIds = [];
+    if (Array.isArray(config.region_ids)) {
+      regionIds = config.region_ids;
+    } else if (typeof config.region_id === "string" && config.region_id.includes(",")) {
+      regionIds = config.region_id.split(",").map((r)=>r.trim());
+    } else if (config.region_id) {
+      regionIds = [
+        config.region_id
+      ];
+    } else {
+      console.warn("⚠️ No region_id found in config — using null region");
+      regionIds = [
+        null
+      ];
+    }
     const parser = new XMLParser({
       ignoreAttributes: false,
-      parseTagValue: true,
-      parseAttributeValue: false
+      parseTagValue: true
     });
-    const parsed = parser.parse(xmlText);
-    console.log("🧩 Parsed root keys:", Object.keys(parsed || {}));
-    // ✅ Correct path for your News12 XML
-    let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || parsed?.DataSet?.diffgr?.NewDataSet?.closings || [];
-    if (!Array.isArray(records)) records = [
-      records
-    ].filter(Boolean);
-    console.log(`📚 Extracted ${records.length} closings records`);
-    if (records.length === 0) {
-      console.warn("⚠️ No valid records found in XML");
-      return c.json({
-        message: "⚠️ No records found in XML"
-      }, 200);
+    let totalInserted = 0;
+    // 3️⃣ Loop through region IDs
+    for (const regionId of regionIds){
+      const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId=";
+      // replace placeholder if regionId exists, otherwise strip param
+      const endpoint = regionId ? endpointTemplate.replace("{region_id}", regionId) : endpointTemplate.replace("sRegionId={region_id}", "");
+      const url = `${provider.base_url}${endpoint}`;
+      console.log(`🌐 Fetching XML for region_id: ${regionId ?? "null"}`);
+      console.log(`🔗 URL: ${url}`);
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`⚠️ Region ${regionId ?? "null"} failed: HTTP ${res.status}`);
+        continue;
+      }
+      const xmlText = await res.text();
+      const parsed = parser.parse(xmlText);
+      let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
+      if (!Array.isArray(records)) records = [
+        records
+      ].filter(Boolean);
+      console.log(`📚 Region ${regionId ?? "null"}: ${records.length} records found`);
+      if (records.length === 0) continue;
+      // 4️⃣ Normalize and upsert
+      const rows = records.map((item)=>({
+          provider_id: "school_provider:news12_closings",
+          region_id: regionId,
+          state: item.STATE || null,
+          city: item.CITY || null,
+          county_name: item.COUNTY_NAME || null,
+          organization_name: item.ORG_NAME || null,
+          type: "School",
+          status_day: item.STATUS_DAY || null,
+          status_description: item.STATUS_DESCRIPTION || null,
+          notes: `Fetched from News12 XML feed (region ${regionId ?? "none"})`,
+          source_format: "xml",
+          fetched_at: new Date().toISOString(),
+          raw_data: item
+        }));
+      const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+        onConflict: "provider_id,organization_name,status_day",
+        ignoreDuplicates: false
+      });
+      if (upsertError) {
+        console.error(`❌ Upsert error for region ${regionId ?? "null"}:`, upsertError);
+        continue;
+      }
+      console.log(`✅ Region ${regionId ?? "null"}: ${rows.length} records upserted`);
+      totalInserted += rows.length;
     }
-    console.log("🧩 First record preview:", JSON.stringify(records[0], null, 2).substring(0, 400));
-    // ✅ Normalize data for upsert
-    const rows = records.map((item)=>({
-        provider_id: "school_provider:news12_closings",
-        region_id: "42",
-        state: item.STATE || null,
-        city: item.CITY || null,
-        county_name: item.COUNTY_NAME || null,
-        organization_name: item.ORG_NAME || null,
-        type: "School",
-        status_day: item.STATUS_DAY || null,
-        status_description: item.STATUS_DESCRIPTION || null,
-        notes: "Fetched from News12 XML feed",
-        source_format: "xml",
-        fetched_at: new Date().toISOString(),
-        raw_data: item
-      }));
-    console.log(`🧾 Prepared ${rows.length} row objects for upsert`);
-    // ✅ Use upsert with conflict resolution to prevent duplicates
-    const { data, error } = await supabase.from("school_closings").upsert(rows, {
-      onConflict: "provider_id,organization_name,status_day",
-      ignoreDuplicates: false
-    }).select();
-    if (error) throw error;
-    console.log(`✅ Upsert complete: ${data?.length || rows.length} rows inserted/updated`);
+    console.log(`🎉 Done. Total upserted: ${totalInserted}`);
     return c.json({
       ok: true,
-      message: `✅ Upserted ${data?.length || rows.length} records`,
-      count: data?.length || rows.length
+      message: `✅ Upserted ${totalInserted} records from ${regionIds.length} region(s)`,
+      count: totalInserted
     });
   } catch (err) {
     console.error("❌ Fetch error:", err);

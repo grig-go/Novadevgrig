@@ -48,6 +48,8 @@ interface WeatherFiltersProps {
   onPageChange: (page: number) => void;
   sortOrder: "asc" | "desc";
   onSortChange: (order: "asc" | "desc") => void;
+  itemsPerPage: number;
+  onItemsPerPageChange: (value: number) => void;
 }
 
 export function WeatherFilters({
@@ -61,6 +63,8 @@ export function WeatherFilters({
   onPageChange,
   sortOrder,
   onSortChange,
+  itemsPerPage,
+  onItemsPerPageChange,
 }: WeatherFiltersProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<string>("all");
@@ -269,9 +273,22 @@ export function WeatherFilters({
           </div>
 
           {/* Pagination - Media Library Style */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-4">
+              <Select value={itemsPerPage.toString()} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Items per page" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="6">6 per page</SelectItem>
+                  <SelectItem value="9">9 per page</SelectItem>
+                  <SelectItem value="12">12 per page</SelectItem>
+                  <SelectItem value="15">15 per page</SelectItem>
+                  <SelectItem value="24">24 per page</SelectItem>
+                  <SelectItem value="50">50 per page</SelectItem>
+                </SelectContent>
+              </Select>
+              {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -319,12 +336,12 @@ export function WeatherFilters({
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Showing {totalResults} location{totalResults !== 1 ? "s" : ""}
-                </div>
+              )}
+              <div className="text-sm text-muted-foreground">
+                Showing {totalResults} location{totalResults !== 1 ? "s" : ""}
               </div>
             </div>
-          )}
+          </div>
         </div>
       </CardContent>
     </Card>
