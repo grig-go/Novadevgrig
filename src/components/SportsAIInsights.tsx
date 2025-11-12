@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
+import { motion } from "framer-motion";
 
 interface SportsAIInsightsProps {
   entities: SportsEntityWithOverrides[];
@@ -496,8 +497,23 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
 
   if (compact) {
     return (
-      <Card className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]" onClick={onClick}>
-        <CardContent className="p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ 
+          duration: 0.5,
+          delay: 0.3,
+          type: "spring",
+          stiffness: 100,
+          damping: 15
+        }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group cursor-pointer" onClick={onClick}>
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               {loadingInsights ? (
@@ -512,12 +528,24 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
                 </>
               ) : (
                 <>
-                  <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+                  <motion.div 
+                    className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  >
                     <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  </div>
+                  </motion.div>
                   <div>
                     <p className="text-sm text-muted-foreground">AI Insights</p>
-                    <p className="text-2xl font-semibold">{savedInsights.length}</p>
+                    <motion.p 
+                      className="text-2xl font-semibold"
+                      key={savedInsights.length}
+                      initial={{ scale: 1.2, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                    >
+                      {savedInsights.length}
+                    </motion.p>
                   </div>
                 </>
               )}
@@ -526,6 +554,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
           </div>
         </CardContent>
       </Card>
+      </motion.div>
     );
   }
 

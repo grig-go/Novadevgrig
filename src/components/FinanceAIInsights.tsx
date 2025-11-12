@@ -439,7 +439,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
 
   if (compact) {
     return (
-      <Card className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02]" onClick={onClick}>
+      <Card className="cursor-pointer hover:shadow-lg transition-all hover:scale-[1.02] h-full" onClick={onClick}>
         <CardContent className="p-6">
           <div className="space-y-3">
             <div className="flex items-center gap-3">

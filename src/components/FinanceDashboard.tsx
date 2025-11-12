@@ -11,6 +11,7 @@ import { Button } from "./ui/button";
 import { TrendingUp, TrendingDown, Minus, Building2, Database, Brain, Rss, CheckCircle2, AlertCircle, Eye, Loader2, RefreshCw, X } from "lucide-react";
 import { projectId, publicAnonKey, projectId3, publicAnonKey3 } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
+import { motion } from "motion/react";
 
 interface FinanceDashboardProps {
   securities: FinanceSecurityWithSnapshot[];
@@ -848,21 +849,44 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         </div>
 
         {/* Market Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                  <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-3">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+          >
+            <Card className="overflow-hidden relative group hover:shadow-lg transition-all duration-300 h-full">
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                initial={false}
+              />
+              <CardContent className="p-6 relative z-10">
+                <div className="flex items-center gap-4">
+                  <motion.div 
+                    className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                  >
+                    <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  </motion.div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Securities</p>
+                    <motion.p 
+                      className="text-2xl font-semibold"
+                      key={marketSummary.totalSecurities}
+                      initial={{ scale: 1.2, color: "#3b82f6" }}
+                      animate={{ scale: 1, color: "currentColor" }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      {marketSummary.totalSecurities}
+                    </motion.p>
+                    <p className="text-xs text-muted-foreground">Stocks, ETFs & Crypto</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Securities</p>
-                  <p className="text-2xl font-semibold">{marketSummary.totalSecurities}</p>
-                  <p className="text-xs text-muted-foreground">Stocks, ETFs & Crypto</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
 
           <FinanceAIInsights 
             securities={filteredSecurities} 
@@ -870,61 +894,116 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
             onClick={() => setShowAIInsights(!showAIInsights)}
           />
 
-          <Card 
-            className={`cursor-pointer transition-all hover:shadow-md ${
-              backendOverrideCount > 0 
-                ? 'hover:border-amber-600' 
-                : ''
-            }`}
-            onClick={handleOpenOverridesDialog}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.3 }}
+            whileHover={{ y: -4, transition: { duration: 0.2 } }}
           >
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-lg ${
-                  backendOverrideCount > 0 
-                    ? 'bg-amber-100 dark:bg-amber-900/20' 
-                    : 'bg-gray-100 dark:bg-gray-900/20'
-                }`}>
-                  <Database className={`w-6 h-6 ${
-                    backendOverrideCount > 0 
-                      ? 'text-amber-600 dark:text-amber-400' 
-                      : 'text-gray-600 dark:text-gray-400'
-                  }`} />
+            <Card 
+              className={`cursor-pointer transition-all overflow-hidden relative group hover:shadow-lg h-full ${
+                backendOverrideCount > 0 
+                  ? 'hover:border-amber-600' 
+                  : ''
+              }`}
+              onClick={handleOpenOverridesDialog}
+            >
+              {backendOverrideCount > 0 && (
+                <motion.div
+                  className="absolute inset-0 bg-amber-500/10"
+                  animate={{
+                    opacity: [0.3, 0.6, 0.3],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                />
+              )}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                initial={false}
+              />
+              <CardContent className="p-6 relative z-10">
+                <div className="flex items-center gap-4">
+                  <motion.div 
+                    className={`p-3 rounded-lg ${
+                      backendOverrideCount > 0 
+                        ? 'bg-amber-100 dark:bg-amber-900/20' 
+                        : 'bg-gray-100 dark:bg-gray-900/20'
+                    }`}
+                    whileHover={{ scale: 1.1, rotate: -5 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                  >
+                    <Database className={`w-6 h-6 ${
+                      backendOverrideCount > 0 
+                        ? 'text-amber-600 dark:text-amber-400' 
+                        : 'text-gray-600 dark:text-gray-400'
+                    }`} />
+                  </motion.div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Data Overrides</p>
+                    <motion.p 
+                      className="text-2xl font-semibold"
+                      key={backendOverrideCount}
+                      initial={{ scale: 1.2, color: backendOverrideCount > 0 ? "#f59e0b" : "currentColor" }}
+                      animate={{ scale: 1, color: "currentColor" }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      {backendOverrideCount}
+                    </motion.p>
+                    <p className="text-xs text-muted-foreground">
+                      {backendOverrideCount > 0 ? 'Custom names set' : 'No changes made'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Data Overrides</p>
-                  <p className="text-2xl font-semibold">
-                    {backendOverrideCount}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {backendOverrideCount > 0 ? 'Custom names set' : 'No changes made'}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-          <Card 
-            className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
-            onClick={onNavigateToFeeds}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+            whileHover={{ y: -4, transition: { duration: 0.2 } }}
           >
-            <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
-                  <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            <Card 
+              className={`overflow-hidden relative group transition-all hover:shadow-lg h-full ${onNavigateToFeeds ? "cursor-pointer" : ""}`}
+              onClick={onNavigateToFeeds}
+            >
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                initial={false}
+              />
+              <CardContent className="p-6 relative z-10">
+                <div className="flex items-center gap-4">
+                  <motion.div 
+                    className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 300 }}
+                  >
+                    <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  </motion.div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Data Providers</p>
+                    <motion.p 
+                      className="text-2xl font-semibold"
+                      key={`${providerStats?.activeProviders}-${providerStats?.totalProviders}`}
+                      initial={{ scale: 1.2, color: "#a855f7" }}
+                      animate={{ scale: 1, color: "currentColor" }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      {providerStats?.activeProviders || 0}/{providerStats?.totalProviders || 0}
+                    </motion.p>
+                    <p className="text-xs text-muted-foreground">
+                      {providerStats?.activeProviders || 0} active
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Data Providers</p>
-                  <p className="text-2xl font-semibold">
-                    {providerStats?.activeProviders || 0}/{providerStats?.totalProviders || 0}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {providerStats?.activeProviders || 0} active
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
       </div>
 

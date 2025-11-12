@@ -21,6 +21,7 @@ import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { useWeatherData } from "../utils/useWeatherData";
 import { useLocalStorage } from "../utils/useLocalStorage";
+import { motion } from "motion/react";
 
 import { 
   RefreshCw, 
@@ -489,45 +490,107 @@ export function WeatherDashboard({
 
   const renderSummaryCards = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      <Card>
-        <CardContent className="p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <motion.div 
+              className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Thermometer className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Total Locations</p>
-              <p className="text-2xl font-semibold">{stats.totalLocations}</p>
+              <motion.p 
+                className="text-2xl font-semibold"
+                key={stats.totalLocations}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 0.3 }}
+              >
+                {stats.totalLocations}
+              </motion.p>
               <p className="text-xs text-muted-foreground">Monitoring sites</p>
             </div>
           </div>
         </CardContent>
       </Card>
+      </motion.div>
 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
       <Card 
-        className={`cursor-pointer transition-all hover:shadow-md ${
+        className={`h-full relative overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl group ${
           stats.locationsWithOverrides > 0 
-            ? 'hover:border-amber-600' 
-            : ''
+            ? 'hover:shadow-amber-500/10 hover:border-amber-600' 
+            : 'hover:shadow-gray-500/10'
         }`}
         onClick={handleOpenOverridesDialog}
       >
-        <CardContent className="p-6">
+        {stats.locationsWithOverrides > 0 && (
+          <motion.div
+            className="absolute inset-0 bg-amber-500/10"
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+        )}
+        <motion.div
+          className={`absolute inset-0 bg-gradient-to-br ${
+            stats.locationsWithOverrides > 0 
+              ? 'from-amber-500/5' 
+              : 'from-gray-500/5'
+          } via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-lg ${
-              stats.locationsWithOverrides > 0 
-                ? 'bg-amber-100 dark:bg-amber-900/20' 
-                : 'bg-gray-100 dark:bg-gray-900/20'
-            }`}>
+            <motion.div 
+              className={`p-3 rounded-lg ${
+                stats.locationsWithOverrides > 0 
+                  ? 'bg-amber-100 dark:bg-amber-900/20' 
+                  : 'bg-gray-100 dark:bg-gray-900/20'
+              }`}
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Database className={`w-6 h-6 ${
                 stats.locationsWithOverrides > 0 
                   ? 'text-amber-600 dark:text-amber-400' 
                   : 'text-gray-600 dark:text-gray-400'
               }`} />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Overrides</p>
-              <p className="text-2xl font-semibold">{stats.locationsWithOverrides}</p>
+              <motion.p 
+                className="text-2xl font-semibold"
+                key={stats.locationsWithOverrides}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 0.3 }}
+              >
+                {stats.locationsWithOverrides}
+              </motion.p>
               <p className="text-xs text-muted-foreground">
                 {stats.locationsWithOverrides > 0 
                   ? `${stats.locationsWithOverrides} location${stats.locationsWithOverrides !== 1 ? 's' : ''} modified` 
@@ -538,6 +601,7 @@ export function WeatherDashboard({
           </div>
         </CardContent>
       </Card>
+      </motion.div>
 
       <WeatherAIInsights 
         locations={filteredLocations} 
@@ -545,18 +609,42 @@ export function WeatherDashboard({
         onClick={() => setShowAIInsights(!showAIInsights)}
       />
 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.3, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
       <Card 
-        className={onNavigateToFeeds ? "cursor-pointer hover:shadow-md transition-shadow" : ""}
+        className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group ${
+          onNavigateToFeeds ? "cursor-pointer" : ""
+        }`}
         onClick={onNavigateToFeeds}
       >
-        <CardContent className="p-6">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
+            <motion.div 
+              className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Wind className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Providers</p>
-              <p className="text-2xl font-semibold">{stats.providers.length}</p>
+              <motion.p 
+                className="text-2xl font-semibold"
+                key={stats.providers.length}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 0.3 }}
+              >
+                {stats.providers.length}
+              </motion.p>
               <p className="text-xs text-muted-foreground">
                 {stats.providers[0] || 'No provider'}
               </p>
@@ -564,6 +652,7 @@ export function WeatherDashboard({
           </div>
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   );
 
@@ -724,22 +813,33 @@ export function WeatherDashboard({
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {paginatedLocations.map((location) => (
-          <WeatherCard
+        {paginatedLocations.map((location, index) => (
+          <motion.div
             key={location.location.id}
-            location={location}
-            onUpdate={handleUpdateLocation}
-            onDelete={handleDeleteLocation}
-            onRefresh={refreshWeatherData}
-            onAIInsights={handleOpenAIInsights}
-            view={currentView}
-            language={currentLanguage}
-            providerTemperatureUnit={providerTemperatureUnit}
-          />
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ 
+              duration: 0.3, 
+              delay: index * 0.02, 
+              type: "spring", 
+              stiffness: 100 
+            }}
+          >
+            <WeatherCard
+              location={location}
+              onUpdate={handleUpdateLocation}
+              onDelete={handleDeleteLocation}
+              onRefresh={refreshWeatherData}
+              onAIInsights={handleOpenAIInsights}
+              view={currentView}
+              language={currentLanguage}
+              providerTemperatureUnit={providerTemperatureUnit}
+            />
+          </motion.div>
         ))}
       </div>
 
-      {filteredLocations.length === 0 && (
+      {!loading && filteredLocations.length === 0 && (
         <Card>
           <CardContent className="p-12 text-center">
             <Cloud className="w-16 h-16 text-muted-foreground mx-auto mb-4" />

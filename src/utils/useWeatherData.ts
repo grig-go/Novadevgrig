@@ -15,8 +15,34 @@ export interface WeatherDataStats {
   };
 }
 
+const CACHE_KEY = 'weather-data-cache';
+
+// Load cached data from localStorage
+function loadCachedData(): WeatherDataStats | null {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (error) {
+    console.error('Error loading cached weather data:', error);
+  }
+  return null;
+}
+
+// Save data to localStorage
+function saveCachedData(data: WeatherDataStats) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving cached weather data:', error);
+  }
+}
+
 export function useWeatherData() {
-  const [stats, setStats] = useState<WeatherDataStats>({
+  // Initialize with cached data if available, otherwise empty
+  const cachedData = loadCachedData();
+  const [stats, setStats] = useState<WeatherDataStats>(cachedData || {
     locations: [],
     totalLocations: 0,
     activeAlerts: 0,
@@ -107,7 +133,7 @@ export function useWeatherData() {
         (loc) => loc.data?.alerts && loc.data.alerts.length > 0
       ).length;
 
-      setStats({
+      const newStats: WeatherDataStats = {
         locations: weatherLocations,
         totalLocations: weatherLocations.length,
         activeAlerts,
@@ -115,7 +141,10 @@ export function useWeatherData() {
         loading: false,
         error: null,
         providerSettings: result.providerSettings,
-      });
+      };
+
+      setStats(newStats);
+      saveCachedData(newStats);
     } catch (error) {
       console.error("Error fetching weather data:", error);
       setStats((prev) => ({

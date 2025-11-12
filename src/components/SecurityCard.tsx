@@ -15,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { TrendingUp, TrendingDown, BarChart3, Coins, Building2, Star, Trash2, MoreHorizontal, CheckCircle, XCircle, Newspaper, Brain, Package, LineChart } from "lucide-react";
 import { toast } from "sonner@2.0.3";
+import { motion } from "framer-motion";
 
 interface SecurityCardProps {
   security: FinanceSecurityWithSnapshot;
@@ -301,338 +302,381 @@ export function SecurityCard({ security, onUpdate, onDelete, onSaveCustomName, o
   // Safety check: if no snapshot data, show minimal card
   if (!snapshot) {
     return (
-      <Card className="hover:shadow-lg transition-shadow">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={getTypeColor()}>
-              {getTypeIcon()}
-              <span className="ml-1">{sec.type}</span>
-            </Badge>
-            <h3>{sec.name.value}</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">No snapshot data available</p>
-        </CardHeader>
-      </Card>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className={getTypeColor()}>
+                {getTypeIcon()}
+                <span className="ml-1">{sec.type}</span>
+              </Badge>
+              <h3>{sec.name.value}</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">No snapshot data available</p>
+          </CardHeader>
+        </Card>
+      </motion.div>
     );
   }
 
+  const changeValue = getFieldValue(snapshot.changePct) || 0;
+  const isPositive = changeValue > 0;
+  const isNegative = changeValue < 0;
+
   return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-3">
-            {cryptoProfile && (
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={cryptoProfile.cgImage} alt={cryptoProfile.cgSymbol} />
-                <AvatarFallback>
-                  {sec.symbol?.slice(0, 2) || sec.name.value.slice(0, 2)}
-                </AvatarFallback>
-              </Avatar>
-            )}
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                {getTypeIcon()}
-                <SimpleInlineEditField
-                  value={getFieldValue(sec.name)}
-                  onSave={handleSaveCustomName}
-                  disabled={isSavingCustomName}
-                />
-                <OverrideIndicator 
-                  field={sec.name} 
-                  fieldName="Name" 
-                  onRevert={handleRevertCustomName} 
-                />
-              </div>
-              {sec.symbol && (
-                <p className="text-sm text-muted-foreground font-mono">{sec.symbol}</p>
-              )}
-              {cryptoProfile && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <span>Rank #{cryptoProfile.cgRank}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge className={`gap-1 ${getTypeColor()}`}>
-              {getTypeIcon()}
-              {sec.type}
-            </Badge>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 relative z-10">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => updateStatus('active')}
-                  className={(getFieldValue(sec.status) || 'active') === 'active' ? 'bg-accent' : ''}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
-                  Active
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleShowNews}
-                >
-                  <Newspaper className="w-4 h-4 mr-2 text-blue-600" />
-                  News
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleShowAIInsights}
-                >
-                  <Brain className="w-4 h-4 mr-2 text-purple-600" />
-                  AI Insights
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleShowChart}
-                >
-                  <LineChart className="w-4 h-4 mr-2 text-blue-600" />
-                  Chart
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={handleShowDeleteDialog}
-                  className="text-destructive cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Price */}
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm text-muted-foreground">Price</span>
-          <div className="flex items-center gap-1">
-            <InlineNumberEdit
-              field={snapshot.last}
-              fieldName="Last Price"
-              onUpdate={(newPrice) => updateSnapshotField('last', newPrice)}
-              min={0}
-              step={sec.type === 'CRYPTO' ? 0.0001 : 0.01}
-            >
-              <span className="text-2xl font-semibold">
-                ${formatPrice(getFieldValue(snapshot.last))}
-              </span>
-            </InlineNumberEdit>
-            <OverrideIndicator field={snapshot.last} fieldName="Last Price" onRevert={() => revertSnapshotField('last')} />
-          </div>
-        </div>
-
-        {/* Change */}
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">Change</span>
-          <div className="flex items-center gap-2">
-            <InlineNumberEdit
-              field={snapshot.changePct}
-              fieldName="Change %"
-              onUpdate={(newPct) => updateSnapshotField('changePct', newPct)}
-              step={0.01}
-            >
-              <div className={`flex items-center gap-1 ${getChangeColor(getFieldValue(snapshot.changePct))}`}>
-                {getFieldValue(snapshot.changePct) > 0 ? (
-                  <TrendingUp className="w-4 h-4" />
-                ) : getFieldValue(snapshot.changePct) < 0 ? (
-                  <TrendingDown className="w-4 h-4" />
-                ) : null}
-                <span className="font-semibold">
-                  {formatChange(getFieldValue(snapshot.changePct), true)}
-                </span>
-              </div>
-            </InlineNumberEdit>
-            <OverrideIndicator field={snapshot.changePct} fieldName="Change %" onRevert={() => revertSnapshotField('changePct')} />
-            
-            <InlineNumberEdit
-              field={snapshot.changeAbs}
-              fieldName="Change $"
-              onUpdate={(newAbs) => updateSnapshotField('changeAbs', newAbs)}
-              step={0.01}
-            >
-              <span className={`text-sm ${getChangeColor(getFieldValue(snapshot.changeAbs))}`}>
-                ({formatChange(getFieldValue(snapshot.changeAbs))})
-              </span>
-            </InlineNumberEdit>
-            <OverrideIndicator field={snapshot.changeAbs} fieldName="Change Abs" onRevert={() => revertSnapshotField('changeAbs')} />
-          </div>
-        </div>
-
-        {/* Performance Metrics */}
-        {(snapshot.change1wPct || snapshot.change1yPct) && (
-          <div className="space-y-2 pt-2 border-t">
-            <h4 className="text-sm font-medium text-muted-foreground">Performance</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {snapshot.change1wPct && (
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground mb-1">1W</span>
-                  <span className={`font-semibold ${getChangeColor(getFieldValue(snapshot.change1wPct))}`}>
-                    {formatChange(getFieldValue(snapshot.change1wPct), true)}
-                  </span>
-                </div>
-              )}
-              {snapshot.change1yPct && (
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground mb-1">1Y</span>
-                  <span className={`font-semibold ${getChangeColor(getFieldValue(snapshot.change1yPct))}`}>
-                    {formatChange(getFieldValue(snapshot.change1yPct), true)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Analyst Rating (for stocks) */}
-        {analystRating && (
-          <div className="space-y-2 pt-2 border-t">
-            <div className="flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-500" />
-              <h4 className="text-sm font-medium">Analyst Rating</h4>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Rating</span>
-                <div className="flex items-center gap-1">
-                  <InlineEditField
-                    field={analystRating.rating}
-                    fieldName="Rating"
-                    onUpdate={(newRating) => updateAnalystField('rating', newRating)}
-                  >
-                    <span className="font-medium">{getFieldValue(analystRating.rating)}</span>
-                  </InlineEditField>
-                  <OverrideIndicator field={analystRating.rating} fieldName="Rating" onRevert={() => revertAnalystField('rating')} />
-                </div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Target</span>
-                <div className="flex items-center gap-1">
-                  <InlineNumberEdit
-                    field={analystRating.targetPrice}
-                    fieldName="Target Price"
-                    onUpdate={(newTarget) => updateAnalystField('targetPrice', newTarget)}
-                    min={0}
-                    step={0.01}
-                  >
-                    <span className="font-medium">
-                      ${getFieldValue(analystRating.targetPrice).toFixed(2)}
-                    </span>
-                  </InlineNumberEdit>
-                  <OverrideIndicator field={analystRating.targetPrice} />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 52-Week Range */}
-        {(snapshot.yearHigh || snapshot.yearLow) && (
-          <div className="space-y-2 pt-2 border-t">
-            <h4 className="text-sm font-medium text-muted-foreground">52-Week Range</h4>
-            <div className="grid grid-cols-2 gap-3">
-              {snapshot.yearLow && (
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground mb-1">Low</span>
-                  <span className="font-semibold">
-                    ${formatPrice(getFieldValue(snapshot.yearLow))}
-                  </span>
-                </div>
-              )}
-              {snapshot.yearHigh && (
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground mb-1">High</span>
-                  <span className="font-semibold">
-                    ${formatPrice(getFieldValue(snapshot.yearHigh))}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-
-      {/* News Dialog */}
-      <Dialog open={isNewsOpen} onOpenChange={setIsNewsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Newspaper className="w-5 h-5" />
-              News for {getFieldValue(sec.name)}
-            </DialogTitle>
-            <DialogDescription>
-              Latest news and updates for {sec.symbol || sec.uniqueKey}
-            </DialogDescription>
-          </DialogHeader>
-          <SecurityNewsContent 
-            symbol={sec.symbol || sec.uniqueKey} 
-            name={getFieldValue(sec.name)} 
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+    >
+      <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+        {/* Animated background gradient on hover */}
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        
+        {/* Pulse animation for significant changes */}
+        {Math.abs(changeValue) > 5 && (
+          <motion.div
+            className={`absolute inset-0 ${isPositive ? 'bg-green-500/10' : 'bg-red-500/10'}`}
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
           />
-        </DialogContent>
-      </Dialog>
-
-      {/* AI Insights Dialog */}
-      <Dialog open={isAIInsightsOpen} onOpenChange={setIsAIInsightsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Brain className="w-5 h-5" />
-              AI Insights for {getFieldValue(sec.name)}
-            </DialogTitle>
-            <DialogDescription>
-              AI-powered analysis and insights for {sec.symbol || sec.uniqueKey}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="text-center py-8">
-              <Brain className="w-12 h-12 mx-auto mb-4 text-purple-500" />
-              <h3 className="text-lg font-semibold mb-2">AI Insights Coming Soon</h3>
-              <p className="text-muted-foreground">
-                Advanced AI-powered analysis, sentiment tracking, and predictive insights 
-                will be available here soon.
-              </p>
+        )}
+        
+        <CardHeader className="pb-3 relative z-10">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              {cryptoProfile && (
+                <motion.div
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <Avatar className="h-10 w-10 ring-2 ring-primary/20 transition-all group-hover:ring-primary/40">
+                    <AvatarImage src={cryptoProfile.cgImage} alt={cryptoProfile.cgSymbol} />
+                    <AvatarFallback>
+                      {sec.symbol?.slice(0, 2) || sec.name.value.slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                </motion.div>
+              )}
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  {getTypeIcon()}
+                  <SimpleInlineEditField
+                    value={getFieldValue(sec.name)}
+                    onSave={handleSaveCustomName}
+                    disabled={isSavingCustomName}
+                  />
+                  <OverrideIndicator 
+                    field={sec.name} 
+                    fieldName="Name" 
+                    onRevert={handleRevertCustomName} 
+                  />
+                </div>
+                {sec.symbol && (
+                  <p className="text-sm text-muted-foreground font-mono">{sec.symbol}</p>
+                )}
+                {cryptoProfile && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span>Rank #{cryptoProfile.cgRank}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge className={`gap-1 ${getTypeColor()}`}>
+                {getTypeIcon()}
+                {sec.type}
+              </Badge>
+              
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 relative z-10">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => updateStatus('active')}
+                    className={(getFieldValue(sec.status) || 'active') === 'active' ? 'bg-accent' : ''}
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2 text-green-600" />
+                    Active
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleShowNews}
+                  >
+                    <Newspaper className="w-4 h-4 mr-2 text-blue-600" />
+                    News
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleShowAIInsights}
+                  >
+                    <Brain className="w-4 h-4 mr-2 text-purple-600" />
+                    AI Insights
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={handleShowChart}
+                  >
+                    <LineChart className="w-4 h-4 mr-2 text-blue-600" />
+                    Chart
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleShowDeleteDialog}
+                    className="text-destructive cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </CardHeader>
 
-      {/* Chart Dialog */}
-      <SecurityChartDialog
-        open={isChartOpen}
-        onOpenChange={setIsChartOpen}
-        symbol={sec.symbol || sec.uniqueKey}
-        name={getFieldValue(sec.name)}
-        type={sec.type}
-      />
+        <CardContent className="space-y-4">
+          {/* Price */}
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-muted-foreground">Price</span>
+            <div className="flex items-center gap-1">
+              <InlineNumberEdit
+                field={snapshot.last}
+                fieldName="Last Price"
+                onUpdate={(newPrice) => updateSnapshotField('last', newPrice)}
+                min={0}
+                step={sec.type === 'CRYPTO' ? 0.0001 : 0.01}
+              >
+                <span className="text-2xl font-semibold">
+                  ${formatPrice(getFieldValue(snapshot.last))}
+                </span>
+              </InlineNumberEdit>
+              <OverrideIndicator field={snapshot.last} fieldName="Last Price" onRevert={() => revertSnapshotField('last')} />
+            </div>
+          </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Security</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete {getFieldValue(sec.name)} ({sec.symbol})?
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => {
-                onDelete(sec.id);
-                setIsDeleteDialogOpen(false);
-              }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+          {/* Change */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Change</span>
+            <div className="flex items-center gap-2">
+              <InlineNumberEdit
+                field={snapshot.changePct}
+                fieldName="Change %"
+                onUpdate={(newPct) => updateSnapshotField('changePct', newPct)}
+                step={0.01}
+              >
+                <div className={`flex items-center gap-1 ${getChangeColor(getFieldValue(snapshot.changePct))}`}>
+                  {getFieldValue(snapshot.changePct) > 0 ? (
+                    <TrendingUp className="w-4 h-4" />
+                  ) : getFieldValue(snapshot.changePct) < 0 ? (
+                    <TrendingDown className="w-4 h-4" />
+                  ) : null}
+                  <span className="font-semibold">
+                    {formatChange(getFieldValue(snapshot.changePct), true)}
+                  </span>
+                </div>
+              </InlineNumberEdit>
+              <OverrideIndicator field={snapshot.changePct} fieldName="Change %" onRevert={() => revertSnapshotField('changePct')} />
+              
+              <InlineNumberEdit
+                field={snapshot.changeAbs}
+                fieldName="Change $"
+                onUpdate={(newAbs) => updateSnapshotField('changeAbs', newAbs)}
+                step={0.01}
+              >
+                <span className={`text-sm ${getChangeColor(getFieldValue(snapshot.changeAbs))}`}>
+                  ({formatChange(getFieldValue(snapshot.changeAbs))})
+                </span>
+              </InlineNumberEdit>
+              <OverrideIndicator field={snapshot.changeAbs} fieldName="Change Abs" onRevert={() => revertSnapshotField('changeAbs')} />
+            </div>
+          </div>
+
+          {/* Performance Metrics */}
+          {(snapshot.change1wPct || snapshot.change1yPct) && (
+            <div className="space-y-2 pt-2 border-t">
+              <h4 className="text-sm font-medium text-muted-foreground">Performance</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {snapshot.change1wPct && (
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground mb-1">1W</span>
+                    <span className={`font-semibold ${getChangeColor(getFieldValue(snapshot.change1wPct))}`}>
+                      {formatChange(getFieldValue(snapshot.change1wPct), true)}
+                    </span>
+                  </div>
+                )}
+                {snapshot.change1yPct && (
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground mb-1">1Y</span>
+                    <span className={`font-semibold ${getChangeColor(getFieldValue(snapshot.change1yPct))}`}>
+                      {formatChange(getFieldValue(snapshot.change1yPct), true)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Analyst Rating (for stocks) */}
+          {analystRating && (
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <Star className="w-4 h-4 text-yellow-500" />
+                <h4 className="text-sm font-medium">Analyst Rating</h4>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Rating</span>
+                  <div className="flex items-center gap-1">
+                    <InlineEditField
+                      field={analystRating.rating}
+                      fieldName="Rating"
+                      onUpdate={(newRating) => updateAnalystField('rating', newRating)}
+                    >
+                      <span className="font-medium">{getFieldValue(analystRating.rating)}</span>
+                    </InlineEditField>
+                    <OverrideIndicator field={analystRating.rating} fieldName="Rating" onRevert={() => revertAnalystField('rating')} />
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Target</span>
+                  <div className="flex items-center gap-1">
+                    <InlineNumberEdit
+                      field={analystRating.targetPrice}
+                      fieldName="Target Price"
+                      onUpdate={(newTarget) => updateAnalystField('targetPrice', newTarget)}
+                      min={0}
+                      step={0.01}
+                    >
+                      <span className="font-medium">
+                        ${getFieldValue(analystRating.targetPrice).toFixed(2)}
+                      </span>
+                    </InlineNumberEdit>
+                    <OverrideIndicator field={analystRating.targetPrice} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 52-Week Range */}
+          {(snapshot.yearHigh || snapshot.yearLow) && (
+            <div className="space-y-2 pt-2 border-t">
+              <h4 className="text-sm font-medium text-muted-foreground">52-Week Range</h4>
+              <div className="grid grid-cols-2 gap-3">
+                {snapshot.yearLow && (
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground mb-1">Low</span>
+                    <span className="font-semibold">
+                      ${formatPrice(getFieldValue(snapshot.yearLow))}
+                    </span>
+                  </div>
+                )}
+                {snapshot.yearHigh && (
+                  <div className="flex flex-col">
+                    <span className="text-xs text-muted-foreground mb-1">High</span>
+                    <span className="font-semibold">
+                      ${formatPrice(getFieldValue(snapshot.yearHigh))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+
+        {/* News Dialog */}
+        <Dialog open={isNewsOpen} onOpenChange={setIsNewsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Newspaper className="w-5 h-5" />
+                News for {getFieldValue(sec.name)}
+              </DialogTitle>
+              <DialogDescription>
+                Latest news and updates for {sec.symbol || sec.uniqueKey}
+              </DialogDescription>
+            </DialogHeader>
+            <SecurityNewsContent 
+              symbol={sec.symbol || sec.uniqueKey} 
+              name={getFieldValue(sec.name)} 
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* AI Insights Dialog */}
+        <Dialog open={isAIInsightsOpen} onOpenChange={setIsAIInsightsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                AI Insights for {getFieldValue(sec.name)}
+              </DialogTitle>
+              <DialogDescription>
+                AI-powered analysis and insights for {sec.symbol || sec.uniqueKey}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="text-center py-8">
+                <Brain className="w-12 h-12 mx-auto mb-4 text-purple-500" />
+                <h3 className="text-lg font-semibold mb-2">AI Insights Coming Soon</h3>
+                <p className="text-muted-foreground">
+                  Advanced AI-powered analysis, sentiment tracking, and predictive insights 
+                  will be available here soon.
+                </p>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Chart Dialog */}
+        <SecurityChartDialog
+          open={isChartOpen}
+          onOpenChange={setIsChartOpen}
+          symbol={sec.symbol || sec.uniqueKey}
+          name={getFieldValue(sec.name)}
+          type={sec.type}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Security</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete {getFieldValue(sec.name)} ({sec.symbol})?
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={() => {
+                  onDelete(sec.id);
+                  setIsDeleteDialogOpen(false);
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Card>
+    </motion.div>
   );
 }

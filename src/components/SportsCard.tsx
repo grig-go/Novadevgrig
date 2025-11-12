@@ -11,6 +11,7 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { SportsNews } from "./SportsNews";
 import { Team, Player, Game, Venue, Tournament, SportsEntityWithOverrides, SportsView, FieldOverride, League } from "../types/sports";
 import { MoreHorizontal, Users, User, Calendar, MapPin, Clock, Trophy, Target, Activity, Newspaper, Brain, Eye, EyeOff, Trash2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 interface SportsCardProps {
   entity: SportsEntityWithOverrides;
@@ -927,7 +928,23 @@ export function SportsCard({ entity, view, leagues, teams = [], onUpdate, onDele
 
   return (
     <>
-      {renderCard()}
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -20, scale: 0.95 }}
+        transition={{
+          type: "spring",
+          stiffness: 260,
+          damping: 20
+        }}
+        whileHover={{ 
+          y: -4,
+          transition: { type: "spring", stiffness: 400, damping: 17 }
+        }}
+        className="h-full"
+      >
+        {renderCard()}
+      </motion.div>
 
       {/* Sports News Component */}
       <SportsNews

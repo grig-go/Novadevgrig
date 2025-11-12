@@ -67,6 +67,7 @@ import {
   STABILITY_MODELS,
   getProvidersWithDynamicModels,
 } from "../types/ai";
+import { motion } from "motion/react";
 
 export function AIConnectionsDashboard() {
   const [providers, setProviders] = useState<AIProviderWithMaskedKey[]>([]);
@@ -915,105 +916,204 @@ export function AIConnectionsDashboard() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={() => fetchProviders()}
-            variant="outline"
-            className="gap-2"
-            disabled={loading}
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          <Button
-            onClick={handleDebugBackendData}
-            variant="outline"
-            className="gap-2"
-          >
-            <Eye className="w-4 h-4" />
-            Debug
-          </Button>
-          <Button onClick={handleAddProvider} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add AI Provider
-          </Button>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={() => fetchProviders()}
+              variant="outline"
+              className="gap-2"
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={handleDebugBackendData}
+              variant="outline"
+              className="gap-2"
+            >
+              <Eye className="w-4 h-4" />
+              Debug
+            </Button>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button onClick={handleAddProvider} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Add AI Provider
+            </Button>
+          </motion.div>
         </div>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
-                <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full overflow-hidden relative group hover:shadow-lg transition-all duration-300">
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              initial={false}
+            />
+            <CardContent className="p-6 relative z-10">
+              <div className="flex items-center gap-4">
+                <motion.div 
+                  className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </motion.div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Providers</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={providers.length}
+                    initial={{ scale: 1.2, color: "#a855f7" }}
+                    animate={{ scale: 1, color: "currentColor" }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {providers.length}
+                  </motion.p>
+                  <p className="text-xs text-muted-foreground">AI Connections</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Providers</p>
-                <p className="text-2xl font-semibold">{providers.length}</p>
-                <p className="text-xs text-muted-foreground">AI Connections</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
-                <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full overflow-hidden relative group hover:shadow-lg transition-all duration-300">
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              initial={false}
+            />
+            <CardContent className="p-6 relative z-10">
+              <div className="flex items-center gap-4">
+                <motion.div 
+                  className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: -5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <CheckCircle2 className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </motion.div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Active</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={providers.filter(p => p.enabled).length}
+                    initial={{ scale: 1.2, color: "#16a34a" }}
+                    animate={{ scale: 1, color: "currentColor" }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {providers.filter(p => p.enabled).length}
+                  </motion.p>
+                  <p className="text-xs text-muted-foreground">Enabled Providers</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-semibold">{providers.filter(p => p.enabled).length}</p>
-                <p className="text-xs text-muted-foreground">Enabled Providers</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full overflow-hidden relative group hover:shadow-lg transition-all duration-300">
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              initial={false}
+            />
+            <CardContent className="p-6 relative z-10">
+              <div className="flex items-center gap-4">
+                <motion.div 
+                  className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: 5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </motion.div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Text Models</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={providers.filter(p => p.type === "text" || p.type === "multimodal").length}
+                    initial={{ scale: 1.2, color: "#3b82f6" }}
+                    animate={{ scale: 1, color: "currentColor" }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {providers.filter(p => p.type === "text" || p.type === "multimodal").length}
+                  </motion.p>
+                  <p className="text-xs text-muted-foreground">Text & Multimodal</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Text Models</p>
-                <p className="text-2xl font-semibold">
-                  {providers.filter(p => p.type === "text" || p.type === "multimodal").length}
-                </p>
-                <p className="text-xs text-muted-foreground">Text & Multimodal</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
-                <ImageIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.4 }}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <Card className="h-full overflow-hidden relative group hover:shadow-lg transition-all duration-300">
+            <motion.div
+              className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              initial={false}
+            />
+            <CardContent className="p-6 relative z-10">
+              <div className="flex items-center gap-4">
+                <motion.div 
+                  className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg"
+                  whileHover={{ scale: 1.1, rotate: -5 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <ImageIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                </motion.div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Image Models</p>
+                  <motion.p 
+                    className="text-2xl font-semibold"
+                    key={providers.filter(p => p.type === "image" || p.type === "multimodal").length}
+                    initial={{ scale: 1.2, color: "#6366f1" }}
+                    animate={{ scale: 1, color: "currentColor" }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    {providers.filter(p => p.type === "image" || p.type === "multimodal").length}
+                  </motion.p>
+                  <p className="text-xs text-muted-foreground">Image & Multimodal</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Image Models</p>
-                <p className="text-2xl font-semibold">
-                  {providers.filter(p => p.type === "image" || p.type === "multimodal").length}
-                </p>
-                <p className="text-xs text-muted-foreground">Image & Multimodal</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
 
       {/* Providers Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Providers</CardTitle>
-          <CardDescription>
-            Configure and manage AI API providers for various use cases
-          </CardDescription>
-        </CardHeader>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.5 }}
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>AI Providers</CardTitle>
+            <CardDescription>
+              Configure and manage AI API providers for various use cases
+            </CardDescription>
+          </CardHeader>
         <CardContent>
           {providers.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -1036,8 +1136,14 @@ export function AIConnectionsDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {providers.map((provider) => (
-                  <TableRow key={provider.id}>
+                {providers.map((provider, index) => (
+                  <motion.tr
+                    key={provider.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3, delay: 0.6 + index * 0.05 }}
+                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getProviderIcon(provider.type)}
@@ -1092,44 +1198,51 @@ export function AIConnectionsDashboard() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleTestConnection(provider)}
-                          disabled={testingConnection === provider.id}
-                          title="Test API connection"
-                        >
-                          {testingConnection === provider.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                          ) : (
-                            <Zap className="w-4 h-4 text-blue-600" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditProvider(provider)}
-                          title="Edit provider"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteProvider(provider.id)}
-                          title="Delete provider"
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleTestConnection(provider)}
+                            disabled={testingConnection === provider.id}
+                            title="Test API connection"
+                          >
+                            {testingConnection === provider.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                            ) : (
+                              <Zap className="w-4 h-4 text-blue-600" />
+                            )}
+                          </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditProvider(provider)}
+                            title="Edit provider"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        </motion.div>
+                        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteProvider(provider.id)}
+                            title="Delete provider"
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        </motion.div>
                       </div>
                     </TableCell>
-                  </TableRow>
+                  </motion.tr>
                 ))}
               </TableBody>
             </Table>
           )}
         </CardContent>
-      </Card>
+        </Card>
+      </motion.div>
 
       {/* Add Provider Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>

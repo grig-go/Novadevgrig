@@ -25,6 +25,7 @@ import { getFilteredElectionData, clearElectionDataCache } from "../data/electio
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { supabase } from '../utils/supabase/client';
 import { currentElectionYear } from '../utils/constants';
+import { motion } from "motion/react";
 
 interface ElectionDashboardProps {
   races: Race[];
@@ -836,18 +837,40 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
 
   const renderSummaryCards = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-      <Card>
-        <CardContent className="p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <motion.div 
+              className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Vote className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Total Races</p>
               {isLoadingFiltered ? (
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
               ) : (
-                <p className="text-2xl font-semibold">{summary.totalRaces}</p>
+                <motion.p 
+                  className="text-2xl font-semibold"
+                  key={summary.totalRaces}
+                  initial={{ scale: 1 }}
+                  animate={{ scale: [1, 1.1, 1] }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {summary.totalRaces}
+                </motion.p>
               )}
               <p className="text-xs text-muted-foreground">
                 {summary.calledRaces} called, {summary.projectedRaces} projected
@@ -856,24 +879,71 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           </div>
         </CardContent>
       </Card>
+      </motion.div>
 
-      <Card className="cursor-pointer" onClick={() => setShowOverridesDialog(false)}>
-        <CardContent className="p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card 
+        className={`h-full relative overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl group ${
+          summary.racesWithOverrides > 0
+            ? 'hover:shadow-amber-500/10 hover:border-amber-600'
+            : 'hover:shadow-gray-500/10'
+        }`}
+        onClick={() => setShowOverridesDialog(false)}
+      >
+        {summary.racesWithOverrides > 0 && (
+          <motion.div
+            className="absolute inset-0 bg-amber-500/10"
+            animate={{
+              opacity: [0.3, 0.6, 0.3],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          />
+        )}
+        <motion.div
+          className={`absolute inset-0 bg-gradient-to-br ${
+            summary.racesWithOverrides > 0
+              ? 'from-amber-500/5'
+              : 'from-gray-500/5'
+          } via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
+          initial={false}
+        />
+        <CardContent className="p-6 relative">
           <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-lg ${
-              summary.racesWithOverrides > 0
-                ? 'bg-amber-100 dark:bg-amber-900/20'
-                : 'bg-gray-100 dark:bg-gray-900/20'
-            }`}>
+            <motion.div 
+              className={`p-3 rounded-lg ${
+                summary.racesWithOverrides > 0
+                  ? 'bg-amber-100 dark:bg-amber-900/20'
+                  : 'bg-gray-100 dark:bg-gray-900/20'
+              }`}
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Database className={`w-6 h-6 ${
                 summary.racesWithOverrides > 0
                   ? 'text-amber-600 dark:text-amber-400'
                   : 'text-gray-600 dark:text-gray-400'
               }`} />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Overrides</p>
-              <p className="text-2xl font-semibold">{summary.totalOverriddenFields}</p>
+              <motion.p 
+                className="text-2xl font-semibold"
+                key={summary.totalOverriddenFields}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 0.3 }}
+              >
+                {summary.totalOverriddenFields}
+              </motion.p>
               <p className="text-xs text-muted-foreground">
                 {summary.racesWithOverrides > 0
                   ? `${summary.racesWithOverrides} race${summary.racesWithOverrides !== 1 ? 's' : ''} modified`
@@ -884,6 +954,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           </div>
         </CardContent>
       </Card>
+      </motion.div>
 
       <ElectionAIInsights
         races={filteredRaces}
@@ -893,17 +964,36 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
         onRaceTypeChange={setSelectedRaceType}
       />
 
-      <Card>
-        <CardContent className="p-6 cursor-pointer hover:bg-muted/50 transition-colors" onClick={onNavigateToFeeds}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.3, type: "spring", stiffness: 100 }}
+        whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      >
+      <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+          initial={false}
+        />
+        <CardContent className="p-6 relative cursor-pointer hover:bg-muted/50 transition-colors" onClick={onNavigateToFeeds}>
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+            <motion.div 
+              className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+              whileHover={{ scale: 1.1, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
               <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-            </div>
+            </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Providers</p>
-              <p className="text-2xl font-semibold">
+              <motion.p 
+                className="text-2xl font-semibold"
+                initial={{ scale: 1 }}
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 0.3 }}
+              >
                 1
-              </p>
+              </motion.p>
               <p className="text-xs text-muted-foreground">
                 1 active feed • AP
               </p>
@@ -911,6 +1001,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           </div>
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   );
 
@@ -947,7 +1038,18 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <Vote className="w-6 h-6 text-blue-600" />
+            <motion.div
+              animate={{ 
+                rotate: [0, -10, 10, -10, 0],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                repeatDelay: 5
+              }}
+            >
+              <Vote className="w-6 h-6 text-blue-600" />
+            </motion.div>
             Elections Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -955,9 +1057,14 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="text-sm text-muted-foreground">
+          <motion.div 
+            className="text-sm text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
             Last updated ({new Date(lastUpdated).toLocaleTimeString()})
-          </div>
+          </motion.div>
         </div>
       </div>
 
@@ -1339,22 +1446,50 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       {/* Tabbed Interface */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all-races" className="flex items-center gap-2">
-            <List className="w-4 h-4" />
-            All Races
-          </TabsTrigger>
-          <TabsTrigger value="summary" className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Summary
-          </TabsTrigger>
-          <TabsTrigger value="candidates" className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Candidates
-          </TabsTrigger>
-          <TabsTrigger value="parties" className="flex items-center gap-2">
-            <Flag className="w-4 h-4" />
-            Parties
-          </TabsTrigger>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+            <TabsTrigger value="all-races" className="flex items-center gap-2 w-full">
+              <motion.div
+                animate={{ rotate: activeTab === 'all-races' ? [0, 5, -5, 0] : 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <List className="w-4 h-4" />
+              </motion.div>
+              All Races
+            </TabsTrigger>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+            <TabsTrigger value="summary" className="flex items-center gap-2 w-full">
+              <motion.div
+                animate={{ rotate: activeTab === 'summary' ? [0, 5, -5, 0] : 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BarChart3 className="w-4 h-4" />
+              </motion.div>
+              Summary
+            </TabsTrigger>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+            <TabsTrigger value="candidates" className="flex items-center gap-2 w-full">
+              <motion.div
+                animate={{ rotate: activeTab === 'candidates' ? [0, 5, -5, 0] : 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Users className="w-4 h-4" />
+              </motion.div>
+              Candidates
+            </TabsTrigger>
+          </motion.div>
+          <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+            <TabsTrigger value="parties" className="flex items-center gap-2 w-full">
+              <motion.div
+                animate={{ rotate: activeTab === 'parties' ? [0, 5, -5, 0] : 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Flag className="w-4 h-4" />
+              </motion.div>
+              Parties
+            </TabsTrigger>
+          </motion.div>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-6">
@@ -1378,13 +1513,24 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                 </Button>
               </div>
             ) : (
-              filteredRaces.map(race => (
-                <RaceCard
+              filteredRaces.map((race, index) => (
+                <motion.div
                   key={race.id}
-                  race={race}
-                  onUpdateRace={handleUpdateRace}
-                  parties={displayParties}
-                />
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ 
+                    duration: 0.3, 
+                    delay: index * 0.05, 
+                    type: "spring", 
+                    stiffness: 100 
+                  }}
+                >
+                  <RaceCard
+                    race={race}
+                    onUpdateRace={handleUpdateRace}
+                    parties={displayParties}
+                  />
+                </motion.div>
               ))
             )}
           </div>
@@ -1430,16 +1576,36 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                       candidate.party.toLowerCase().includes(candidateSearchTerm.toLowerCase()) ||
                       candidate.occupation?.some(occ => occ.toLowerCase().includes(candidateSearchTerm.toLowerCase()))
                     )
-                    .map(candidate => {
+                    .map((candidate, index) => {
                       const partyData = displayParties.find(p => p.code === candidate.party);
                       return (
-                        <TableRow key={candidate.id}>
+                        <motion.tr
+                          key={candidate.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ 
+                            duration: 0.2, 
+                            delay: index * 0.03,
+                            type: "spring",
+                            stiffness: 100
+                          }}
+                          whileHover={{ 
+                            backgroundColor: "rgba(59, 130, 246, 0.05)",
+                            transition: { duration: 0.2 }
+                          }}
+                          className="border-b"
+                        >
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <Avatar className="h-10 w-10">
-                                <AvatarImage src={candidate.headshot} alt={candidate.fullName} />
-                                <AvatarFallback>{candidate.firstName[0]}{candidate.lastName[0]}</AvatarFallback>
-                              </Avatar>
+                              <motion.div
+                                whileHover={{ scale: 1.1 }}
+                                transition={{ type: "spring", stiffness: 400 }}
+                              >
+                                <Avatar className="h-10 w-10">
+                                  <AvatarImage src={candidate.headshot} alt={candidate.fullName} />
+                                  <AvatarFallback>{candidate.firstName[0]}{candidate.lastName[0]}</AvatarFallback>
+                                </Avatar>
+                              </motion.div>
                               <div>
                                 <p className="font-medium">{candidate.fullName}</p>
                                 <p className="text-sm text-muted-foreground">{candidate.occupation?.join(', ')}</p>
@@ -1447,14 +1613,19 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge
-                              style={{
-                                backgroundColor: partyData?.colors.light || '#9333EA',
-                                color: partyData?.colors.dark || '#6B21A8'
-                              }}
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              transition={{ type: "spring", stiffness: 400 }}
                             >
-                              {partyData?.abbreviations[0] || candidate.party}
-                            </Badge>
+                              <Badge
+                                style={{
+                                  backgroundColor: partyData?.colors.light || '#9333EA',
+                                  color: partyData?.colors.dark || '#6B21A8'
+                                }}
+                              >
+                                {partyData?.abbreviations[0] || candidate.party}
+                              </Badge>
+                            </motion.div>
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">
@@ -1471,7 +1642,13 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                           <TableCell>
                             <div className="flex items-center gap-2"> 
                               {candidate.incumbent && (
-                                <Badge variant="outline" className="text-xs">Incumbent</Badge>
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  transition={{ type: "spring", stiffness: 200 }}
+                                >
+                                  <Badge variant="outline" className="text-xs">Incumbent</Badge>
+                                </motion.div>
                               )}
                             </div>
                           </TableCell>
@@ -1481,15 +1658,20 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                             </p>
                           </TableCell>
                           <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingCandidate(candidate)}
+                            <motion.div
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.95 }}
                             >
-                              <Edit className="w-4 h-4" />
-                            </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditingCandidate(candidate)}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </motion.div>
                           </TableCell>
-                        </TableRow>
+                        </motion.tr>
                       );
                     })}
                 </TableBody>
@@ -1525,18 +1707,45 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                 party.fullName.toLowerCase().includes(partySearchTerm.toLowerCase()) ||
                 party.abbreviations.some(a => a.toLowerCase().includes(partySearchTerm.toLowerCase()))
               )
-              .map(party => (
-                <Card key={party.id}>
-                  <CardContent className="p-6">
+              .map((party, index) => (
+                <motion.div
+                  key={party.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{
+                    duration: 0.3,
+                    delay: index * 0.05,
+                    type: "spring",
+                    stiffness: 100
+                  }}
+                  whileHover={{ 
+                    y: -4,
+                    transition: { duration: 0.2 }
+                  }}
+                >
+                <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-lg group">
+                  <motion.div
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${party.colors.primary}10 0%, transparent 100%)`
+                    }}
+                    initial={false}
+                  />
+                  <CardContent className="p-6 relative">
                     <div className="space-y-4">
                       {/* Party Header */}
                       <div className="flex items-start gap-4">
-                        <div 
+                        <motion.div 
                           className="w-16 h-16 rounded-lg flex items-center justify-center text-white text-2xl font-bold"
                           style={{ backgroundColor: party.colors.primary }}
+                          whileHover={{ 
+                            scale: 1.1, 
+                            rotate: 5,
+                            transition: { type: "spring", stiffness: 400 }
+                          }}
                         >
                           {party.code}
-                        </div>
+                        </motion.div>
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg">{party.fullName}</h3>
                           <p className="text-sm text-muted-foreground">{party.name}</p>
@@ -1544,13 +1753,18 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                             <p className="text-xs text-muted-foreground mt-1">Founded: {party.founded}</p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditingParty(party)}
+                        <motion.div
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.95 }}
                         >
-                          <Edit className="w-4 h-4" />
-                        </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditingParty(party)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </motion.div>
                       </div>
 
                       {/* Abbreviations & Aliases */}
@@ -1635,6 +1849,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                     </div>
                   </CardContent>
                 </Card>
+                </motion.div>
               ))}
           </div>
         </TabsContent>

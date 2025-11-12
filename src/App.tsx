@@ -31,7 +31,8 @@ import { WeatherLocationWithOverrides } from "./types/weather";
 import { NewsArticleWithOverrides } from "./types/news";
 import { Feed, FeedCategory } from "./types/feeds";
 import { Agent } from "./types/agents";
-import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2, ImageIcon } from "lucide-react";
+import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2, ImageIcon, School } from "lucide-react";
+import { motion } from "framer-motion";
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
 import { useSportsData } from "./utils/useSportsData";
@@ -39,8 +40,9 @@ import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
 import { projectId, publicAnonKey } from "./utils/supabase/info";
 import { Toaster } from "sonner";
+import SchoolClosingsDashboard from "./components/SchoolClosingsDashboard";
 
-type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels';
+type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels' | 'school-closings';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
@@ -119,6 +121,9 @@ export default function App() {
   // Fetch news data (stored articles from database)
   const [newsStats, setNewsStats] = useState({ articlesCount: 0, providersCount: 0, loading: true, error: null as string | null });
   
+  // Fetch media library stats
+  const [mediaStats, setMediaStats] = useState({ totalAssets: 0, loading: true, error: null as string | null });
+  
   useEffect(() => {
     let mounted = true;
     
@@ -169,7 +174,36 @@ export default function App() {
       }
     };
     
+    const fetchMediaStats = async () => {
+      try {
+        const response = await fetch(
+          `https://${projectId}.supabase.co/rest/v1/media_assets?select=id`,
+          {
+            headers: {
+              'Authorization': `Bearer ${publicAnonKey}`,
+              'apikey': publicAnonKey,
+            }
+          }
+        );
+        
+        if (!mounted) return;
+        
+        if (response.ok) {
+          const data = await response.json();
+          setMediaStats({ totalAssets: data.length, loading: false, error: null });
+        } else {
+          const errorData = await response.json().catch(() => ({ message: response.statusText }));
+          throw new Error(errorData.message || `Failed to fetch media stats: ${response.statusText}`);
+        }
+      } catch (err) {
+        if (!mounted) return;
+        console.error('Error fetching media stats:', err);
+        setMediaStats({ totalAssets: 0, loading: false, error: String(err) });
+      }
+    };
+    
     fetchNewsStats();
+    fetchMediaStats();
     return () => { mounted = false; };
   }, []);
 
@@ -567,6 +601,14 @@ export default function App() {
         <ImageIcon className="w-4 h-4" />
         Media
       </Button>
+      <Button
+        variant={currentView === 'school-closings' ? 'default' : 'outline'}
+        onClick={() => handleNavigate('school-closings')}
+        className="gap-2"
+      >
+        <School className="w-4 h-4" />
+        School Closings
+      </Button>
     </div>
   );
 
@@ -574,19 +616,50 @@ export default function App() {
     <div className="space-y-8">
       <div className="text-center space-y-4">
         <div className="flex items-center justify-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+          <motion.div 
+            className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center"
+            animate={{ 
+              rotate: [0, -5, 5, -5, 0],
+              scale: [1, 1.05, 1.05, 1.05, 1]
+            }}
+            transition={{
+              duration: 0.5,
+              repeat: Infinity,
+              repeatDelay: 3,
+              ease: "easeInOut"
+            }}
+          >
             <span className="text-white font-semibold">N</span>
-          </div>
+          </motion.div>
           <h1 className="text-3xl font-semibold font-bold">Nova Dashboard</h1>
         </div>
-        <p className="text-muted-foreground max-w-2xl mx-auto">
+        <motion.p 
+          className="text-muted-foreground max-w-2xl mx-auto"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+        >
           Comprehensive data management and analysis tools for elections, financial markets, and sports. 
           Features real-time editing, override tracking, and advanced filtering capabilities.
-        </p>
+        </motion.p>
       </div>
       
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('election')}>
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('election')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
@@ -616,8 +689,23 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('finance')}>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.1
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('finance')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
@@ -652,8 +740,23 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('sports')}>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.2
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('sports')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
@@ -682,8 +785,23 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('weather')}>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.3
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('weather')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
@@ -712,8 +830,23 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('news')}>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.4
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('news')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
@@ -773,8 +906,23 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
 
-        <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleNavigate('agents')}>
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.5
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('agents')}>
           <CardContent className="p-6 flex flex-col h-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
@@ -811,6 +959,91 @@ export default function App() {
             </div>
           </CardContent>
         </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.6
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('school-closings')}>
+          <CardContent className="p-6 flex flex-col h-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
+                <School className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <h2 className="text-xl font-semibold">School Closings</h2>
+            </div>
+            <p className="text-muted-foreground mb-4 flex-grow">
+              Monitor school closings, delays, and early dismissals across multiple districts with real-time status updates and location tracking.
+            </p>
+            <div className="flex items-center gap-6 pt-4 border-t">
+              <div className="flex flex-col">
+                <span className="text-2xl font-semibold">6</span>
+                <span className="text-xs text-muted-foreground">closings</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-2xl font-semibold">2</span>
+                <span className="text-xs text-muted-foreground">delays</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Multi-county</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{
+            type: "spring",
+            stiffness: 260,
+            damping: 20,
+            delay: 0.7
+          }}
+          whileHover={{ 
+            y: -4,
+            transition: { type: "spring", stiffness: 400, damping: 17 }
+          }}
+        >
+        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('media')}>
+          <CardContent className="p-6 flex flex-col h-full">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
+                <ImageIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h2 className="text-xl font-semibold">Media Library</h2>
+            </div>
+            <p className="text-muted-foreground mb-4 flex-grow">
+              Manage and organize your media assets including images, videos, and audio files with advanced search and bulk operations.
+            </p>
+            <div className="flex items-center gap-6 pt-4 border-t">
+              <div className="flex flex-col">
+                <span className="text-2xl font-semibold">{mediaStats.totalAssets}</span>
+                <span className="text-xs text-muted-foreground">assets</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-2xl font-semibold">0</span>
+                <span className="text-xs text-muted-foreground">uploads</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm text-muted-foreground">Cloud storage</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        </motion.div>
 
       </div>
     </div>
@@ -914,6 +1147,10 @@ export default function App() {
       case 'channels':
         return (
           <ChannelsPage />
+        );
+      case 'school-closings':
+        return (
+          <SchoolClosingsDashboard />
         );
       default:
         return renderHome();
