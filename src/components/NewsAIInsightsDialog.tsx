@@ -99,7 +99,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       try {
         setLoadingInsights(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-ai-insights`,
+          `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -156,25 +156,23 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       setAiResponse(null);
 
       // Build context from selected articles
-      let context = 'You are a helpful news AI assistant analyzing news articles. Please provide 3-10 insightful bullet points with short sentences containing specific themes, trends, and patterns. Focus on actionable insights with concrete observations.\n\n';
+      let context = 'You are a helpful news AI assistant analyzing news articles. Please provide 3-10 insightful bullet points with short sentences containing specific themes, trends, and patterns. Focus on actionable insights with concrete observations.\\n\\n';
       
       if (selectedArticles.length > 0) {
-        context += `Selected Articles (${selectedArticles.length}):\n`;
+        context += `Selected Articles (${selectedArticles.length}):\\n`;
         selectedArticles.forEach(articleId => {
           const article = articles.find(a => a.id === articleId);
           if (article) {
-            context += `- "${article.title}" (${article.provider.toUpperCase()}, ${article.sourceName || 'Unknown source'})\n`;
+            context += `- "${article.title}" (${article.provider.toUpperCase()}, ${article.sourceName || 'Unknown source'})\\n`;
             if (article.description) {
-              context += `  ${article.description.substring(0, 150)}...\n`;
+              context += `  ${article.description.substring(0, 150)}...\\n`;
             }
           }
         });
-        context += '\n';
+        context += '\\n';
       } else {
-        context += `Analyzing all ${articles.length} articles.\n\n`;
+        context += `Analyzing all ${articles.length} articles.\\n\\n`;
       }
-
-      context += `User Question: ${chatMessage}`;
 
       console.log('Sending news AI request:', {
         providerId: aiProvider.id,
@@ -186,7 +184,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/chat`,
         {
           method: 'POST',
           headers: {
@@ -195,7 +193,8 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
           },
           body: JSON.stringify({
             providerId: aiProvider.id,
-            message: context,
+            message: chatMessage,
+            context: context,
             dashboard: 'news',
           }),
         }
@@ -203,12 +202,35 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get AI response');
+        console.error('❌ News AI error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
+        
+        // Handle quota errors specially
+        if (response.status === 429 || errorData.isQuotaError) {
+          const quotaMessage = errorData.error || errorData.details || 'API quota exceeded';
+          
+          // Show a more prominent error with line breaks
+          toast.error(
+            <div className="space-y-2">
+              <p className="font-medium">API Quota Exceeded</p>
+              <p className="text-sm whitespace-pre-line">{quotaMessage}</p>
+            </div>,
+            { duration: 10000 } // Show for 10 seconds
+          );
+          throw new Error(quotaMessage);
+        }
+        
+        // Extract detailed error message
+        const errorMessage = errorData.detail || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
       console.log('News AI response received:', {
-        providerId: data.providerId,
+        provider: data.provider,
         modelUsed: data.model,
         responseLength: data.response?.length
       });
@@ -217,10 +239,16 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       setCurrentQuestion(chatMessage);
       setCurrentModel(data.model || aiProvider.model || 'Unknown');
       setInsightSaved(false);
-      toast.success('AI insight generated successfully');
+      toast.success(`Response from ${data.provider}`);
+      setChatMessage("");
     } catch (error) {
       console.error('Error getting AI response:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to get AI response');
+      
+      // Only show toast if not already shown for quota error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (!errorMessage.includes('quota') && !errorMessage.includes('429')) {
+        toast.error(`AI Error: ${errorMessage}`);
+      }
     } finally {
       setSendingMessage(false);
     }
@@ -232,7 +260,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
     try {
       setSavingInsight(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
         {
           method: 'POST',
           headers: {
@@ -242,8 +270,9 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
           body: JSON.stringify({
             question: currentQuestion,
             response: aiResponse,
+            selectedArticles: selectedArticles.length > 0 ? selectedArticles : articles.map(a => a.id),
+            aiProvider: aiProvider?.name || 'Unknown',
             model: currentModel,
-            article_ids: selectedArticles.length > 0 ? selectedArticles : articles.map(a => a.id),
           }),
         }
       );
@@ -253,7 +282,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       }
 
       const data = await response.json();
-      setSavedInsights(prev => [data.insight, ...prev]);
+      setSavedInsights(prev => [data.data, ...prev]);
       setInsightSaved(true);
       toast.success('Insight saved successfully');
       
@@ -272,7 +301,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/news/${insightId}`,
         {
           method: 'DELETE',
           headers: {
@@ -330,7 +359,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
         </DialogHeader>
         
         {/* Article selection */}
-        <div className="space-y-2">
+        <div className="space-y-2 relative">
           <div className="flex items-center justify-between">
             <label className="text-sm">Articles ({selectedArticles.length} selected)</label>
             <div className="flex gap-2">
@@ -352,7 +381,7 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
               </Button>
             </div>
           </div>
-          <ScrollArea className="h-[200px] border rounded-md">
+          <ScrollArea className="h-[400px] border rounded-md">
             <div className="p-2 space-y-1">
               {articles.map((article) => (
                 <div
@@ -383,6 +412,87 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
               ))}
             </div>
           </ScrollArea>
+
+          {/* AI Response - OVERLAYS ARTICLE SELECTION */}
+          {aiResponse && (
+            <div className="absolute inset-0 z-10">
+              <div className="relative h-full border-2 border-purple-300 dark:border-purple-700 rounded-xl p-6 bg-gradient-to-br from-purple-50 via-purple-100 to-blue-50 dark:from-purple-950 dark:via-purple-900 dark:to-blue-950 shadow-lg flex flex-col">
+                {/* Close button */}
+                <button
+                  onClick={() => {
+                    setAiResponse(null);
+                    setCurrentQuestion("");
+                    setCurrentModel("");
+                    setInsightSaved(false);
+                  }}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg hover:bg-purple-200/50 dark:hover:bg-purple-900/50 transition-colors z-20"
+                  aria-label="Clear response"
+                >
+                  <X className="w-4 h-4 text-purple-700 dark:text-purple-400" />
+                </button>
+
+                {/* Header with question */}
+                <div className="pr-8 mb-4 flex-shrink-0">
+                  <div className="flex items-start gap-2">
+                    <Brain className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm mb-1">
+                        <strong className="text-purple-900 dark:text-purple-100">Question:</strong> <span className="text-purple-800 dark:text-purple-200">{currentQuestion}</span>
+                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline" className="text-xs bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700">
+                          Model: {currentModel}
+                        </Badge>
+                        <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700">
+                          <Newspaper className="w-3 h-3 mr-1" />
+                          {selectedArticles.length || articles.length} Articles
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Response content with scroll */}
+                <div className="flex-1 min-h-0 mb-4">
+                  <ScrollArea className="h-full">
+                    <div className="bg-white/60 dark:bg-purple-950/40 rounded-lg p-4 border border-purple-200 dark:border-purple-800 mr-4">
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <div className="text-sm leading-relaxed whitespace-pre-wrap text-gray-900 dark:text-gray-100">
+                          {aiResponse}
+                        </div>
+                      </div>
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                {/* Save button */}
+                <div className="flex justify-end flex-shrink-0">
+                  <Button
+                    onClick={handleSaveInsight}
+                    disabled={savingInsight || insightSaved}
+                    className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600"
+                  >
+                    {savingInsight ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Saving...
+                      </>
+                    ) : insightSaved ? (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Saved
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 mr-2" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Chat interface */}
@@ -422,105 +532,6 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
               </Button>
             )}
           </div>
-
-          {/* AI Response */}
-          {aiResponse && (
-            <div className="border rounded-lg p-4 bg-purple-50 dark:bg-purple-950/20 space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm mb-1">
-                    <strong>Question:</strong> {currentQuestion}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Model: {currentModel} • Articles: {selectedArticles.length || articles.length}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={handleSaveInsight}
-                  disabled={savingInsight || insightSaved}
-                >
-                  {savingInsight ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : insightSaved ? (
-                    <>Saved</>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </>
-                  )}
-                </Button>
-              </div>
-              <div className="text-sm whitespace-pre-wrap">{aiResponse}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Saved Insights */}
-        <div className="border-t pt-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm">Saved Insights ({savedInsights.length})</h3>
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search insights..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8 w-[200px]"
-              />
-            </div>
-          </div>
-
-          {loadingInsights ? (
-            <div className="text-center py-4">
-              <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
-            </div>
-          ) : filteredSavedInsights.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              {searchQuery ? 'No matching insights found' : 'No saved insights yet'}
-            </p>
-          ) : (
-            <ScrollArea className="h-[200px]">
-              <div className="space-y-2 pr-4">
-                {filteredSavedInsights.map((insight, index) => (
-                  <Collapsible
-                    key={insight.id || `insight-${index}`}
-                    open={expandedInsights.has(insight.id)}
-                    onOpenChange={() => toggleInsightExpansion(insight.id)}
-                  >
-                    <div className="border rounded-lg p-3 bg-background">
-                      <div className="flex items-start justify-between gap-2">
-                        <CollapsibleTrigger className="flex items-center gap-2 flex-1 text-left">
-                          {expandedInsights.has(insight.id) ? (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                          )}
-                          <div className="flex-1">
-                            <p className="text-sm">{insight.question}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(insight.created_at).toLocaleDateString()} • {insight.model}
-                            </p>
-                          </div>
-                        </CollapsibleTrigger>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteInsight(insight.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <CollapsibleContent className="mt-2 pt-2 border-t">
-                        <div className="text-sm whitespace-pre-wrap">{insight.response}</div>
-                      </CollapsibleContent>
-                    </div>
-                  </Collapsible>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
         </div>
       </DialogContent>
     </Dialog>

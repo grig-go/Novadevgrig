@@ -144,6 +144,8 @@ export function FeedsDashboardWithSupabase({
     endpoint: "",
     region_id: "",
     sample_url: "",
+    selectedRegions: [] as string[],
+    newRegion: "",
   });
 
   // Sports leagues state
@@ -225,6 +227,8 @@ export function FeedsDashboardWithSupabase({
       }
 
       const data = await response.json();
+      console.log("📊 Loaded providers data:", data);
+      console.log("📊 First provider refresh_interval_minutes:", data?.[0]?.refresh_interval_minutes);
       setProviders(data || []);
     } catch (error) {
       console.error("Error loading data providers:", error);
@@ -276,6 +280,10 @@ export function FeedsDashboardWithSupabase({
         
         // Initialize form data
         const config = fullProvider.config || {};
+        const regionIds = config.region_id 
+          ? (Array.isArray(config.region_id) ? config.region_id : config.region_id.split(',').map((r: string) => r.trim()).filter(Boolean))
+          : [];
+        
         setEditFormData({
           is_active: fullProvider.is_active,
           api_key: fullProvider.api_key || "",
@@ -292,6 +300,8 @@ export function FeedsDashboardWithSupabase({
           endpoint: config.endpoint || "",
           region_id: config.region_id || "",
           sample_url: config.sample_url || "",
+          selectedRegions: regionIds,
+          newRegion: "",
         });
         
         // If sports provider, load available leagues
@@ -380,7 +390,7 @@ export function FeedsDashboardWithSupabase({
         configObj.leagues = editFormData.selectedLeagues.map(id => Number(id));
       } else if (editProvider.category === 'school_closings') {
         configObj.endpoint = editFormData.endpoint;
-        configObj.region_id = editFormData.region_id;
+        configObj.region_id = editFormData.selectedRegions.join(',');
         configObj.sample_url = editFormData.sample_url;
       }
 
@@ -1401,15 +1411,86 @@ export function FeedsDashboardWithSupabase({
 
                   <div className="space-y-2">
                     <Label htmlFor="region_id">Region ID</Label>
-                    <Input
-                      id="region_id"
-                      value={editFormData.region_id}
-                      onChange={(e) => setEditFormData({ ...editFormData, region_id: e.target.value })}
-                      placeholder="42"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        id="region_id"
+                        type="number"
+                        value={editFormData.newRegion}
+                        onChange={(e) => setEditFormData({ ...editFormData, newRegion: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && editFormData.newRegion.trim()) {
+                            e.preventDefault();
+                            if (!editFormData.selectedRegions.includes(editFormData.newRegion.trim())) {
+                              setEditFormData({
+                                ...editFormData,
+                                selectedRegions: [...editFormData.selectedRegions, editFormData.newRegion.trim()],
+                                newRegion: "",
+                              });
+                              toast.success(`Added region: ${editFormData.newRegion.trim()}`);
+                            }
+                          }
+                        }}
+                        placeholder="42"
+                      />
+                      <Button
+                        type="button"
+                        size="default"
+                        onClick={() => {
+                          if (editFormData.newRegion.trim()) {
+                            if (!editFormData.selectedRegions.includes(editFormData.newRegion.trim())) {
+                              setEditFormData({
+                                ...editFormData,
+                                selectedRegions: [...editFormData.selectedRegions, editFormData.newRegion.trim()],
+                                newRegion: "",
+                              });
+                              toast.success(`Added region: ${editFormData.newRegion.trim()}`);
+                            } else {
+                              toast.error("Region already added");
+                            }
+                          }
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       The region identifier for school closings data
                     </p>
+
+                    {editFormData.selectedRegions.length > 0 && (
+                      <div className="border rounded-md mt-2">
+                        <ScrollArea className="h-[120px]">
+                          <div className="p-2 space-y-2">
+                            {editFormData.selectedRegions.map((region) => (
+                              <div key={region} className="flex items-center justify-between space-x-2 p-2 hover:bg-muted rounded-md transition-colors">
+                                <span className="text-sm">{region}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditFormData({
+                                      ...editFormData,
+                                      selectedRegions: editFormData.selectedRegions.filter((r) => r !== region),
+                                    });
+                                    toast.success(`Removed region: ${region}`);
+                                  }}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  <XCircle className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </div>
+                    )}
+                    
+                    {editFormData.selectedRegions.length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {editFormData.selectedRegions.length} region{editFormData.selectedRegions.length !== 1 ? 's' : ''} selected
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">

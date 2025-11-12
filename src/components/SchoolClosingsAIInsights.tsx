@@ -5,26 +5,43 @@ import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { ScrollArea } from "./ui/scroll-area";
 import { Input } from "./ui/input";
-import { Article } from "../utils/useNewsFeed";
 import { 
   Brain, Loader2, ChevronDown, ChevronRight, Search, Trash2, 
-  TrendingUp, AlertTriangle, Newspaper, Globe, Target, X
+  TrendingUp, AlertTriangle, School, MapPin, Target, X
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-import { NewsAIInsightsDialog } from "./NewsAIInsightsDialog";
+import { SchoolClosingsAIInsightsDialog } from "./SchoolClosingsAIInsightsDialog";
+
+interface SchoolClosing {
+  id?: number;
+  provider_id: string;
+  region_id: string;
+  state: string | null;
+  city: string | null;
+  county_name: string | null;
+  organization_name: string | null;
+  type: string;
+  status_day: string | null;
+  status_description: string | null;
+  notes: string | null;
+  event_name: string | null;
+  event_date: string | null;
+  delay_duration: number | null;
+  school_openings: boolean | null;
+}
 
 interface SavedInsight {
   id: string;
   question: string;
   response: string;
   model: string;
-  article_ids: string[];
+  closing_ids: number[];
   created_at: string;
 }
 
-interface NewsAIInsightsProps {
-  articles: Article[];
+interface SchoolClosingsAIInsightsProps {
+  closings: SchoolClosing[];
   compact?: boolean;
   listView?: boolean;
   onClick?: () => void;
@@ -32,14 +49,14 @@ interface NewsAIInsightsProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-export function NewsAIInsights({ 
-  articles, 
+export function SchoolClosingsAIInsights({ 
+  closings, 
   compact = false, 
   listView = false,
   onClick,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange
-}: NewsAIInsightsProps) {
+}: SchoolClosingsAIInsightsProps) {
   const [internalDialogOpen, setInternalDialogOpen] = useState(false);
   
   // Use controlled state if provided, otherwise use internal state
@@ -56,7 +73,7 @@ export function NewsAIInsights({
     try {
       setLoadingInsights(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/school-closings`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -70,7 +87,7 @@ export function NewsAIInsights({
 
       const data = await response.json();
       
-      // Transform database format to component format (matching Finance implementation)
+      // Transform database format to component format (matching Finance/News implementation)
       const transformedInsights = (data.insights || []).map((saved: any) => {
         const metadata = saved.metadata ? (typeof saved.metadata === 'string' ? JSON.parse(saved.metadata) : saved.metadata) : {};
         return {
@@ -78,15 +95,15 @@ export function NewsAIInsights({
           question: metadata.question || saved.topic,
           response: metadata.response || saved.insight,
           model: metadata.model || 'Unknown',
-          article_ids: metadata.selectedArticles || [],
+          closing_ids: metadata.selectedClosings || [],
           created_at: saved.created_at
         };
       });
       
       setSavedInsights(transformedInsights);
-      console.log(`[NewsAIInsights] Loaded ${transformedInsights.length} saved news AI insights`);
+      console.log(`[SchoolClosingsAIInsights] Loaded ${transformedInsights.length} saved school closing AI insights`);
     } catch (error) {
-      console.error('[NewsAIInsights] Error loading saved insights:', error);
+      console.error('[SchoolClosingsAIInsights] Error loading saved insights:', error);
       toast.error('Failed to load saved insights');
     } finally {
       setLoadingInsights(false);
@@ -100,7 +117,7 @@ export function NewsAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/school-closings/${insightId}`,
         {
           method: 'DELETE',
           headers: {
@@ -116,7 +133,7 @@ export function NewsAIInsights({
       setSavedInsights(prev => prev.filter(i => i.id !== insightId));
       toast.success('Insight deleted');
     } catch (error) {
-      console.error('[NewsAIInsights] Error deleting insight:', error);
+      console.error('[SchoolClosingsAIInsights] Error deleting insight:', error);
       toast.error('Failed to delete insight');
     }
   };
@@ -182,8 +199,8 @@ export function NewsAIInsights({
         </Card>
 
         {/* Dialog controlled externally */}
-        <NewsAIInsightsDialog
-          articles={articles}
+        <SchoolClosingsAIInsightsDialog
+          closings={closings}
           open={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           onInsightSaved={loadSavedInsights}
@@ -199,7 +216,7 @@ export function NewsAIInsights({
       <div className="space-y-4 border rounded-lg p-6 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/10 dark:to-blue-950/10">
         <div className="flex items-center gap-3">
           <Brain className="w-5 h-5 text-purple-600" />
-          <h3>AI News Insights</h3>
+          <h3>AI School Closing Insights</h3>
           <Badge variant="secondary">
             {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
           </Badge>
@@ -242,7 +259,7 @@ export function NewsAIInsights({
               <>
                 <Brain className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No saved insights yet</p>
-                <p className="text-sm mt-2">Click "Generate New Insight" to get started</p>
+                <p className="text-sm mt-2">Click "Add AI Insights" to get started</p>
               </>
             )}
           </div>
@@ -287,12 +304,12 @@ export function NewsAIInsights({
                         // Extract visual insights from response
                         const response = insight.response || '';
                         const percentages = response.match(/(\d+)%/g) || [];
-                        const numbers = response.match(/(\d+)\s*(articles?|sources?|stories|mentions?)/gi) || [];
+                        const numbers = response.match(/(\d+)\s*(schools?|districts?|closures?|delays?)/gi) || [];
                         
                         // Detect sentiment/urgency keywords
-                        const hasAlert = /breaking|urgent|crisis|alert|critical/i.test(response);
-                        const hasTrending = /trending|surge|spike|increase|growing|rising/i.test(response);
-                        const hasNegative = /decline|drop|fall|decrease|concern|issue|problem/i.test(response);
+                        const hasAlert = /emergency|severe|critical|alert|urgent|warning/i.test(response);
+                        const hasTrending = /increase|rising|surge|growing|trending|spike/i.test(response);
+                        const hasNegative = /decline|decrease|improve|clearing|resolution/i.test(response);
                         
                         // Extract key phrases (first sentence)
                         const firstSentence = response.split(/[.!?]\s/)[0];
@@ -320,7 +337,7 @@ export function NewsAIInsights({
                                       ? 'text-blue-700 dark:text-blue-300' 
                                       : 'text-yellow-700 dark:text-yellow-300'
                                   }`}>
-                                    {hasAlert ? 'Breaking News' : hasTrending ? 'Trending Topic' : 'Key Development'}
+                                    {hasAlert ? 'Critical Alert' : hasTrending ? 'Trending Closures' : 'Status Update'}
                                   </span>
                                 </div>
                               </div>
@@ -337,7 +354,7 @@ export function NewsAIInsights({
                                 ))}
                                 {numbers.slice(0, 2).map((num, idx) => (
                                   <div key={`num-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-br from-blue-100 to-blue-50 dark:from-blue-950/40 dark:to-blue-950/20 border border-blue-200 dark:border-blue-800">
-                                    <Newspaper className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                    <School className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
                                     <span className="text-xs text-blue-700 dark:text-blue-300 truncate">{num}</span>
                                   </div>
                                 ))}
@@ -352,8 +369,8 @@ export function NewsAIInsights({
                             {/* Metadata Footer */}
                             <div className="flex items-center gap-2 pt-1">
                               <div className="flex items-center gap-1 px-2 py-0.5 rounded bg-muted/50">
-                                <Newspaper className="w-3 h-3 text-muted-foreground" />
-                                <span className="text-xs text-muted-foreground">{insight.article_ids?.length || 0}</span>
+                                <School className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">{insight.closing_ids?.length || 0}</span>
                               </div>
                               <span className="text-xs text-muted-foreground ml-auto">
                                 {new Date(insight.created_at).toLocaleDateString()}
@@ -378,11 +395,11 @@ export function NewsAIInsights({
                         {/* Metadata in expanded view */}
                         <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-muted-foreground">
                           <div className="flex items-center gap-2">
-                            <Newspaper className="w-3.5 h-3.5" />
-                            <span>{insight.article_ids?.length || 0} articles analyzed</span>
+                            <School className="w-3.5 h-3.5" />
+                            <span>{insight.closing_ids?.length || 0} closings analyzed</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Globe className="w-3.5 h-3.5" />
+                            <MapPin className="w-3.5 h-3.5" />
                             <span>{insight.model}</span>
                           </div>
                         </div>
@@ -395,8 +412,8 @@ export function NewsAIInsights({
           </div>
         )}
 
-        <NewsAIInsightsDialog
-          articles={articles}
+        <SchoolClosingsAIInsightsDialog
+          closings={closings}
           open={isDialogOpen}
           onOpenChange={setIsDialogOpen}
           onInsightSaved={loadSavedInsights}
@@ -408,8 +425,8 @@ export function NewsAIInsights({
 
   // Default - just the dialog (shouldn't be used, but here for completeness)
   return (
-    <NewsAIInsightsDialog
-      articles={articles}
+    <SchoolClosingsAIInsightsDialog
+      closings={closings}
       open={isDialogOpen}
       onOpenChange={setIsDialogOpen}
     />

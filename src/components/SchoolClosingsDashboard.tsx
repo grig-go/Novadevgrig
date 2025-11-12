@@ -11,6 +11,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { Checkbox } from "./ui/checkbox";
+import { ScrollArea } from "./ui/scroll-area";
 import {
   Table,
   TableBody,
@@ -58,10 +60,12 @@ import {
   Image,
   Video,
   Music,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
 
 // Backend data structure from school_closings table
 interface SchoolClosing {
@@ -81,7 +85,11 @@ interface SchoolClosing {
   raw_data?: any;
 }
 
-export default function SchoolClosingsDashboard() {
+interface SchoolClosingsDashboardProps {
+  onNavigateToProviders?: () => void;
+}
+
+export default function SchoolClosingsDashboard({ onNavigateToProviders }: SchoolClosingsDashboardProps = {}) {
   const [schools, setSchools] = useState<SchoolClosing[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,11 +99,13 @@ export default function SchoolClosingsDashboard() {
   const [stateFilter, setStateFilter] = useState("all");
   const [dayFilter, setDayFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
+  const [regionFilter, setRegionFilter] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [schoolToDelete, setSchoolToDelete] = useState<SchoolClosing | null>(null);
+  const [showAIInsights, setShowAIInsights] = useState(false);
   const [newSchool, setNewSchool] = useState({
     state: "NJ",
     city: "",
@@ -314,6 +324,16 @@ export default function SchoolClosingsDashboard() {
     () => Array.from(new Set(schools.map((s) => s.provider_id))).sort(),
     [schools]
   );
+  const uniqueRegions = useMemo(
+    () => Array.from(new Set(schools.map((s) => s.region_id).filter(Boolean))).sort(),
+    [schools]
+  );
+
+  // Calculate unique regions count
+  const uniqueRegionsCount = useMemo(
+    () => new Set(schools.map((s) => s.region_id).filter(Boolean)).size,
+    [schools]
+  );
 
   // Filter and search logic
   const filteredSchools = useMemo(() => {
@@ -352,16 +372,21 @@ export default function SchoolClosingsDashboard() {
       const matchesProvider =
         providerFilter === "all" || school.provider_id === providerFilter;
 
+      // Region filter (multi-select)
+      const matchesRegion =
+        regionFilter.length === 0 || regionFilter.includes(school.region_id);
+
       return (
         matchesSearch &&
         matchesStatus &&
         matchesCounty &&
         matchesState &&
         matchesDay &&
-        matchesProvider
+        matchesProvider &&
+        matchesRegion
       );
     });
-  }, [schools, statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, searchQuery]);
+  }, [schools, statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, regionFilter, searchQuery]);
 
   // Get status badge styling
   const getStatusBadge = (statusDescription: string) => {
@@ -415,6 +440,7 @@ export default function SchoolClosingsDashboard() {
     setStateFilter("all");
     setDayFilter("all");
     setProviderFilter("all");
+    setRegionFilter([]);
     setSearchQuery("");
     toast.success("Filters cleared");
   };
@@ -425,15 +451,23 @@ export default function SchoolClosingsDashboard() {
     if (countyFilter !== "all") count++;
     if (stateFilter !== "all") count++;
     if (dayFilter !== "all") count++;
+    if (regionFilter.length > 0) count++;
     if (providerFilter !== "all") count++;
     if (searchQuery) count++;
     return count;
-  }, [statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, searchQuery]);
+  }, [statusFilter, countyFilter, stateFilter, dayFilter, providerFilter, regionFilter, searchQuery]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900"></div>
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="p-12">
+            <div className="flex flex-col items-center justify-center text-center space-y-4">
+              <Loader2 className="w-12 h-12 animate-spin text-muted-foreground" />
+              <p className="text-muted-foreground">Loading school closings...</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -452,24 +486,55 @@ export default function SchoolClosingsDashboard() {
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <p className="text-xs text-muted-foreground">
+          <motion.p 
+            className="text-xs text-muted-foreground"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
             Last updated {new Date().toLocaleTimeString()}
-          </p>
+          </motion.p>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="gap-2"
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400 }}
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-              {refreshing ? "Loading..." : "Refresh"}
-            </Button>
-            <Button onClick={() => setAddDialogOpen(true)} size="sm">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Location
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="gap-2"
+              >
+                <motion.div
+                  animate={{ rotate: refreshing ? 360 : 0 }}
+                  transition={{ 
+                    duration: refreshing ? 1 : 0,
+                    repeat: refreshing ? Infinity : 0,
+                    ease: "linear"
+                  }}
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </motion.div>
+                {refreshing ? "Loading..." : "Refresh"}
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400 }}
+            >
+              <Button onClick={() => setAddDialogOpen(true)} size="sm">
+                <motion.div
+                  whileHover={{ rotate: 90 }}
+                  transition={{ type: "spring", stiffness: 300 }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                </motion.div>
+                Add Location
+              </Button>
+            </motion.div>
           </div>
         </div>
       </div>
@@ -532,19 +597,20 @@ export default function SchoolClosingsDashboard() {
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: "spring", stiffness: 400 }}
                 >
-                  <Database className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+                  <MapPin className="w-6 h-6 text-gray-600 dark:text-gray-400" />
                 </motion.div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Data Overrides</p>
+                  <p className="text-sm text-muted-foreground">Regions</p>
                   <motion.p
                     className="text-2xl font-semibold"
+                    key={uniqueRegionsCount}
                     initial={{ scale: 1 }}
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 0.3 }}
                   >
-                    0
+                    {uniqueRegionsCount}
                   </motion.p>
-                  <p className="text-xs text-muted-foreground">No changes made</p>
+                  <p className="text-xs text-muted-foreground">Coverage areas</p>
                 </div>
               </div>
             </CardContent>
@@ -556,38 +622,13 @@ export default function SchoolClosingsDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.2, type: "spring", stiffness: 100 }}
           whileHover={{ y: -4, transition: { duration: 0.2 } }}
+          whileTap={{ scale: 0.98 }}
         >
-          <Card className="h-full relative overflow-hidden cursor-pointer transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group">
-            <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-              initial={false}
-            />
-            <CardContent className="p-6 relative">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <motion.div
-                    className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    transition={{ type: "spring", stiffness: 400 }}
-                  >
-                    <Brain className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-                  </motion.div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">AI Insights</p>
-                    <motion.p
-                      className="text-2xl font-semibold"
-                      initial={{ scale: 1 }}
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      0
-                    </motion.p>
-                    <p className="text-xs text-muted-foreground">No insights yet</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <SchoolClosingsAIInsights
+            closings={filteredSchools}
+            compact={true}
+            onClick={() => setShowAIInsights(!showAIInsights)}
+          />
         </motion.div>
 
         <motion.div
@@ -595,8 +636,12 @@ export default function SchoolClosingsDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, delay: 0.3, type: "spring", stiffness: 100 }}
           whileHover={{ y: -4, transition: { duration: 0.2 } }}
+          whileTap={{ scale: 0.98 }}
         >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group">
+          <Card 
+            className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group cursor-pointer"
+            onClick={() => onNavigateToProviders?.()}
+          >
             <motion.div
               className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
               initial={false}
@@ -628,53 +673,98 @@ export default function SchoolClosingsDashboard() {
         </motion.div>
       </div>
 
+      {/* AI Insights Section - Expanded View */}
+      {showAIInsights && (
+        <SchoolClosingsAIInsights 
+          closings={filteredSchools}
+          listView={true}
+        />
+      )}
+
       {/* Search and Controls */}
       <Card>
         <CardContent className="pt-6">
           <div className="space-y-4">
             {/* Search and View Toggle Row */}
             <div className="flex items-center gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <motion.div 
+                className="flex-1 relative"
+                whileHover={{ scale: 1.01 }}
+                transition={{ type: "spring", stiffness: 400 }}
+              >
+                <motion.div
+                  animate={{ x: [0, 2, 0] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                </motion.div>
                 <Input
                   placeholder="Search by school name, city, county, state, or zip..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className="relative"
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 400 }}
               >
-                <Filter className="w-4 h-4 mr-2" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="relative"
+                >
+                  <motion.div
+                    animate={{ rotate: showFilters ? 180 : 0 }}
+                    transition={{ type: "spring", stiffness: 200 }}
                   >
-                    {activeFilterCount}
-                  </Badge>
-                )}
-              </Button>
+                    <Filter className="w-4 h-4 mr-2" />
+                  </motion.div>
+                  Filters
+                  {activeFilterCount > 0 && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      exit={{ scale: 0 }}
+                      transition={{ type: "spring", stiffness: 500 }}
+                    >
+                      <Badge
+                        variant="destructive"
+                        className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
+                      >
+                        {activeFilterCount}
+                      </Badge>
+                    </motion.div>
+                  )}
+                </Button>
+              </motion.div>
               <div className="flex items-center gap-1 border rounded-lg p-1">
-                <Button
-                  variant={viewMode === "card" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("card")}
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  <Grid3x3 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setViewMode("list")}
+                  <Button
+                    variant={viewMode === "card" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("card")}
+                  >
+                    <Grid3x3 className="w-4 h-4" />
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
-                  <List className="w-4 h-4" />
-                </Button>
+                  <Button
+                    variant={viewMode === "list" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("list")}
+                  >
+                    <List className="w-4 h-4" />
+                  </Button>
+                </motion.div>
               </div>
             </div>
 
@@ -685,10 +775,15 @@ export default function SchoolClosingsDashboard() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
+                  transition={{ duration: 0.3, type: "spring", stiffness: 200 }}
                   className="overflow-hidden"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 pt-4 border-t">
+                  <motion.div 
+                    className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t"
+                    initial={{ y: -20 }}
+                    animate={{ y: 0 }}
+                    transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+                  >
                     <div className="space-y-2">
                       <Label>Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -758,6 +853,49 @@ export default function SchoolClosingsDashboard() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label htmlFor="region_id">Region ID</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Select region identifiers for school closings data
+                      </p>
+                      
+                      <div className="border rounded-md">
+                        <ScrollArea className="h-[140px]">
+                          <div className="p-2 space-y-2">
+                            {uniqueRegions.map((region) => (
+                              <div key={region} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`region-${region}`}
+                                  checked={regionFilter.includes(region)}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      setRegionFilter([...regionFilter, region]);
+                                    } else {
+                                      setRegionFilter(regionFilter.filter((r) => r !== region));
+                                    }
+                                  }}
+                                />
+                                <label
+                                  htmlFor={`region-${region}`}
+                                  className="text-sm cursor-pointer flex-1"
+                                >
+                                  {region}
+                                </label>
+                              </div>
+                            ))}
+                            {uniqueRegions.length === 0 && (
+                              <p className="text-sm text-muted-foreground p-2">No regions available</p>
+                            )}
+                          </div>
+                        </ScrollArea>
+                      </div>
+                      {regionFilter.length > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          {regionFilter.length} region{regionFilter.length !== 1 ? 's' : ''} selected
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
                       <Label>Provider</Label>
                       <Select value={providerFilter} onValueChange={setProviderFilter}>
                         <SelectTrigger>
@@ -773,18 +911,29 @@ export default function SchoolClosingsDashboard() {
                         </SelectContent>
                       </Select>
                     </div>
-                  </div>
+                  </motion.div>
 
                   {activeFilterCount > 0 && (
-                    <div className="mt-4 flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleClearFilters}
+                    <motion.div 
+                      className="mt-4 flex justify-end"
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 400 }}
                       >
-                        Clear All Filters
-                      </Button>
-                    </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleClearFilters}
+                        >
+                          Clear All Filters
+                        </Button>
+                      </motion.div>
+                    </motion.div>
                   )}
                 </motion.div>
               )}
@@ -794,11 +943,28 @@ export default function SchoolClosingsDashboard() {
       </Card>
 
       {/* Results Summary */}
-      <div className="flex items-center justify-between px-1">
+      <motion.div 
+        className="flex items-center justify-between px-1"
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
         <p className="text-sm text-muted-foreground">
-          Showing {filteredSchools.length} of {schools.length} school closings
+          Showing{" "}
+          <motion.span
+            key={filteredSchools.length}
+            initial={{ scale: 1.3, color: "#3b82f6" }}
+            animate={{ scale: 1, color: "inherit" }}
+            transition={{ type: "spring", stiffness: 300 }}
+            className="font-semibold"
+          >
+            {filteredSchools.length}
+          </motion.span>
+          {" "}of{" "}
+          <span className="font-semibold">{schools.length}</span>
+          {" "}school closings
         </p>
-      </div>
+      </motion.div>
 
       {/* Card View */}
       {viewMode === "card" && (
@@ -807,33 +973,72 @@ export default function SchoolClosingsDashboard() {
             {filteredSchools.map((school, index) => (
               <motion.div
                 key={school.id || index}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: -20 }}
                 transition={{
-                  duration: 0.2,
+                  duration: 0.3,
                   delay: index * 0.05,
-                  layout: { duration: 0.2 },
+                  type: "spring",
+                  stiffness: 200,
+                }}
+                whileHover={{ 
+                  y: -8,
+                  transition: { type: "spring", stiffness: 400, damping: 15 }
                 }}
                 layout
               >
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader>
+                <Card className="group relative overflow-hidden cursor-pointer border transition-all duration-300 hover:shadow-xl hover:border-primary/20">
+                  {/* Gradient overlay on hover */}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 pointer-events-none"
+                    initial={false}
+                    transition={{ duration: 0.3 }}
+                  />
+                  
+                  <CardHeader className="relative">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <CardTitle className="text-base truncate">
-                          {school.organization_name}
-                        </CardTitle>
-                        <div className="flex items-center gap-2 mt-2">
-                          {getStatusBadge(school.status_description)}
-                          {getDayBadge(school.status_day)}
-                        </div>
+                        <motion.div
+                          whileHover={{ x: 4 }}
+                          transition={{ type: "spring", stiffness: 300 }}
+                        >
+                          <CardTitle className="text-base truncate">
+                            {school.organization_name}
+                          </CardTitle>
+                        </motion.div>
+                        <motion.div 
+                          className="flex items-center gap-2 mt-2"
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.05 + 0.2 }}
+                        >
+                          <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            transition={{ type: "spring", stiffness: 400 }}
+                          >
+                            {getStatusBadge(school.status_description)}
+                          </motion.div>
+                          <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            transition={{ type: "spring", stiffness: 400 }}
+                          >
+                            {getDayBadge(school.status_day)}
+                          </motion.div>
+                        </motion.div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {school.provider_id === "manual_entry" && (
                           <motion.div
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                            whileHover={{ 
+                              scale: 1.15,
+                              rotate: [0, -10, 10, -10, 0],
+                              transition: { duration: 0.5 }
+                            }}
+                            whileTap={{ scale: 0.9 }}
                           >
                             <Button
                               variant="ghost"
@@ -848,47 +1053,104 @@ export default function SchoolClosingsDashboard() {
                             </Button>
                           </motion.div>
                         )}
-                        <School className="w-5 h-5 text-muted-foreground" />
+                        <motion.div
+                          animate={{ 
+                            rotate: [0, -5, 5, -5, 0],
+                            transition: { duration: 3, repeat: Infinity, ease: "easeInOut" }
+                          }}
+                          whileHover={{ 
+                            scale: 1.2, 
+                            rotate: 360,
+                            transition: { duration: 0.6 }
+                          }}
+                        >
+                          <School className="w-5 h-5 text-muted-foreground" />
+                        </motion.div>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <CardContent className="space-y-3 relative">
+                    <motion.div 
+                      className="flex items-center gap-2 text-sm"
+                      whileHover={{ x: 4 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                    >
+                      <motion.div
+                        animate={{ y: [0, -2, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                      </motion.div>
                       <span className="text-muted-foreground truncate">
                         {school.city}, {school.state} {school.raw_data?.ZIP || school.raw_data?.zip}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
+                    </motion.div>
+                    <motion.div 
+                      className="flex items-center gap-2 text-sm"
+                      whileHover={{ x: 4 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                    >
                       <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                       <span className="text-muted-foreground">
                         {school.county_name} County
                       </span>
-                    </div>
+                    </motion.div>
                     {school.raw_data?.DELAY && school.raw_data?.DELAY > 0 && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <motion.div 
+                        className="flex items-center gap-2 text-sm"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 }}
+                        whileHover={{ x: 4 }}
+                      >
+                        <motion.div
+                          animate={{ rotate: [0, 360] }}
+                          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                        >
+                          <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                        </motion.div>
                         <span className="text-muted-foreground">
                           Delay: {formatDelay(parseInt(school.raw_data?.DELAY))}
                         </span>
-                      </div>
+                      </motion.div>
                     )}
-                    <div className="flex items-center gap-2 text-sm">
+                    <motion.div 
+                      className="flex items-center gap-2 text-sm"
+                      whileHover={{ x: 4 }}
+                      transition={{ type: "spring", stiffness: 300 }}
+                    >
                       <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
                       <span className="text-muted-foreground text-xs">
                         {new Date(school.fetched_at).toLocaleDateString()}
                       </span>
-                    </div>
-                    <div className="pt-2 border-t flex items-center justify-between">
-                      <Badge variant="outline" className="text-xs">
-                        {school.type}
-                      </Badge>
-                      {school.provider_id === "manual_entry" && (
-                        <Badge variant="secondary" className="text-xs">
-                          Manual
+                    </motion.div>
+                    <motion.div 
+                      className="pt-2 border-t flex items-center justify-between"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      <motion.div
+                        whileHover={{ scale: 1.05 }}
+                        transition={{ type: "spring", stiffness: 400 }}
+                      >
+                        <Badge variant="outline" className="text-xs">
+                          {school.type}
                         </Badge>
+                      </motion.div>
+                      {school.provider_id === "manual_entry" && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.4 }}
+                          whileHover={{ scale: 1.05 }}
+                        >
+                          <Badge variant="secondary" className="text-xs">
+                            Manual
+                          </Badge>
+                        </motion.div>
                       )}
-                    </div>
+                    </motion.div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1010,20 +1272,53 @@ export default function SchoolClosingsDashboard() {
       {/* Empty State */}
       {filteredSchools.length === 0 && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ type: "spring", stiffness: 200 }}
         >
           <Card>
             <CardContent className="py-16 text-center">
-              <School className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="mb-2">No school closings found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
+              <motion.div
+                animate={{ 
+                  rotate: [0, -10, 10, -10, 10, 0],
+                  scale: [1, 1.1, 1]
+                }}
+                transition={{ 
+                  duration: 2,
+                  repeat: Infinity,
+                  repeatDelay: 3
+                }}
+              >
+                <School className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              </motion.div>
+              <motion.h3 
+                className="mb-2"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                No school closings found
+              </motion.h3>
+              <motion.p 
+                className="text-sm text-muted-foreground mb-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
                 Try adjusting your search or filters
-              </p>
+              </motion.p>
               {activeFilterCount > 0 && (
-                <Button variant="outline" onClick={handleClearFilters}>
-                  Clear Filters
-                </Button>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4, type: "spring", stiffness: 300 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button variant="outline" onClick={handleClearFilters}>
+                    Clear Filters
+                  </Button>
+                </motion.div>
               )}
             </CardContent>
           </Card>

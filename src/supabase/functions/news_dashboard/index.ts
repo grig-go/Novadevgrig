@@ -1,4 +1,4 @@
-// trigger redeploy 2025-11-08 - using news_articles and news_provider_configs tables
+// trigger redeploy 2025-11-11 - migrated AI insights to ai_insights_news table
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -373,97 +373,133 @@ app.delete("/news_dashboard/news-articles/:id", async (c) => {
 });
 
 // ============================================================================
-// NEWS AI INSIGHTS ROUTES (keeping in KV store for now)
+// NEWS AI INSIGHTS ROUTES (ai_insights_news table)
 // ============================================================================
-const kvClient = () => getSupabaseClient();
 
-const kv = {
-  async set(key: string, value: any) {
-    const supabase = kvClient();
-    const { error } = await supabase.from("kv_store_cbef71cf").upsert({
-      key,
-      value
-    });
-    if (error) throw new Error(error.message);
-  },
-  async get(key: string) {
-    const supabase = kvClient();
-    const { data, error } = await supabase.from("kv_store_cbef71cf").select("value").eq("key", key).maybeSingle();
-    if (error) throw new Error(error.message);
-    return data?.value;
-  },
-  async del(key: string) {
-    const supabase = kvClient();
-    const { error } = await supabase.from("kv_store_cbef71cf").delete().eq("key", key);
-    if (error) throw new Error(error.message);
-  },
-  async getByPrefix(prefix: string) {
-    const supabase = kvClient();
-    const { data, error } = await supabase.from("kv_store_cbef71cf").select("key, value").like("key", prefix + "%");
-    if (error) throw new Error(error.message);
-    return data?.map((d) => d.value) ?? [];
-  }
-};
-
-// Get all AI insights
+// GET all AI insights
 app.get("/news_dashboard/news-ai-insights", async (c) => {
   try {
-    const insights = await kv.getByPrefix("news_ai_insight:");
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("ai_insights_news")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", error.message);
+    }
+
+    console.log(`[NEWS AI INSIGHTS] Returning ${data?.length || 0} insights`);
+
     return c.json({
       ok: true,
-      insights: insights || []
+      insights: data || []
     });
   } catch (error) {
-    return c.json({
-      error: "Failed to fetch AI insights",
-      details: String(error)
-    }, 500);
+    return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", error);
   }
 });
 
-// Save a new AI insight
+// GET single AI insight by ID
+app.get("/news_dashboard/news-ai-insights/:id", async (c) => {
+  try {
+    const id = c.req.param("id");
+    const supabase = getSupabaseClient();
+    
+    const { data, error } = await supabase
+      .from("ai_insights_news")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return jsonErr(c, 404, "INSIGHT_NOT_FOUND", `Insight ${id} not found`);
+      }
+      return jsonErr(c, 500, "INSIGHT_FETCH_FAILED", error.message);
+    }
+
+    return c.json({
+      ok: true,
+      data
+    });
+  } catch (error) {
+    return jsonErr(c, 500, "INSIGHT_FETCH_FAILED", error);
+  }
+});
+
+// POST create a new AI insight
 app.post("/news_dashboard/news-ai-insights", async (c) => {
   try {
     const body = await safeJson(c);
-    const { question, response, selectedArticles, provider, model } = body;
+    const { question, response, selectedArticles, provider, model, category } = body;
     
     if (!question || !response) {
-      return jsonErr(c, 400, 'INVALID_INSIGHT', 'question and response are required');
+      return jsonErr(c, 400, "INVALID_INPUT", "question and response are required");
     }
-    
-    const insightId = `insight_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    const insight = {
-      id: insightId,
-      question,
-      response,
-      selectedArticles: selectedArticles || [],
-      provider: provider || 'Unknown',
-      model: model || '',
-      createdAt: new Date().toISOString()
-    };
-    
-    await kv.set(`news_ai_insight:${insightId}`, insight);
-    
+
+    console.log(`💾 Saving news AI insight: "${question.substring(0, 50)}..."`);
+
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("ai_insights_news")
+      .insert({
+        topic: question,
+        insight: response,
+        category: category || "general",
+        metadata: JSON.stringify({
+          question,
+          response,
+          selectedArticles: selectedArticles || [],
+          aiProvider: provider || "Unknown",
+          model: model || null
+        }),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ Error saving insight:", error);
+      return jsonErr(c, 500, "INSIGHT_CREATE_FAILED", error.message);
+    }
+
+    console.log(`✅ News insight saved with ID: ${data.id}`);
+
     return c.json({
       ok: true,
-      insight
+      insight: data
     });
   } catch (error) {
-    return jsonErr(c, 500, 'NEWS_INSIGHT_SAVE_FAILED', error);
+    console.error("❌ Exception saving insight:", error);
+    return jsonErr(c, 500, "INSIGHT_CREATE_FAILED", error);
   }
 });
 
-// Delete an AI insight
+// DELETE an AI insight
 app.delete("/news_dashboard/news-ai-insights/:id", async (c) => {
   try {
     const id = c.req.param("id");
-    await kv.del(`news_ai_insight:${id}`);
-    
+    const supabase = getSupabaseClient();
+
+    const { error } = await supabase
+      .from("ai_insights_news")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", error.message);
+    }
+
+    console.log(`✅ Deleted news AI insight: ${id}`);
+
     return c.json({
-      ok: true
+      ok: true,
+      message: `Insight ${id} deleted successfully`
     });
   } catch (error) {
-    return jsonErr(c, 500, 'NEWS_INSIGHT_DELETE_FAILED', error);
+    return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", error);
   }
 });
 

@@ -44,6 +44,7 @@ type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [initialFeedCategory, setInitialFeedCategory] = useState<FeedCategory | undefined>(undefined);
+  const [initialProviderCategory, setInitialProviderCategory] = useState<"school_closings" | undefined>(undefined);
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
   const [financeData, setFinanceData] = useState(mockFinanceData);
@@ -493,7 +494,13 @@ export default function App() {
     // Reset the initial feed category when navigating away from feeds
     if (view !== 'feeds') {
       setInitialFeedCategory(undefined);
+      setInitialProviderCategory(undefined);
     }
+  };
+
+  const handleNavigateToProvidersFromSchoolClosings = () => {
+    setInitialProviderCategory("school_closings");
+    setCurrentView('feeds');
   };
 
   const renderNavigation = () => (
@@ -1060,7 +1067,7 @@ export default function App() {
       case 'feeds':
         return (
           <FeedsDashboardWithSupabase
-            initialCategory={initialFeedCategory}
+            initialCategory={initialFeedCategory || initialProviderCategory}
           />
         );
       case 'agents':
@@ -1098,7 +1105,9 @@ export default function App() {
         );
       case 'school-closings':
         return (
-          <SchoolClosingsDashboard />
+          <SchoolClosingsDashboard 
+            onNavigateToProviders={handleNavigateToProvidersFromSchoolClosings}
+          />
         );
       default:
         return renderHome();
