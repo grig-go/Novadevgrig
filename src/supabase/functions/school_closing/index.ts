@@ -131,7 +131,6 @@ app.post("/manual", async (c)=>{
 });
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
 // POST /fetch - Fetch XML and populate table (region_id only, flexible config)
 // ----------------------------------------------------------------------------
 app.post("/fetch", async (c)=>{
@@ -143,49 +142,30 @@ app.post("/fetch", async (c)=>{
     if (providerError) throw providerError;
     if (!provider) throw new Error("Provider not found");
     const config = typeof provider.config === "string" ? JSON.parse(provider.config) : provider.config || {};
-    // 2️⃣ Build list of region IDs (supports string, array, or none)
-    let regionIds = [];
-    if (Array.isArray(config.region_ids)) {
-      regionIds = config.region_ids;
-    } else if (typeof config.region_id === "string" && config.region_id.includes(",")) {
-      regionIds = config.region_id.split(",").map((r)=>r.trim());
-    } else if (config.region_id) {
-      regionIds = [
-        config.region_id
-      ];
-    } else {
-      console.warn("⚠️ No region_id found in config — using null region");
-      regionIds = [
-        null
-      ];
-    }
     const parser = new XMLParser({
       ignoreAttributes: false,
       parseTagValue: true
     });
     let totalInserted = 0;
-    // 3️⃣ Loop through region IDs
-    for (const regionId of regionIds){
-      const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId=";
-      // replace placeholder if regionId exists, otherwise strip param
-      const endpoint = regionId ? endpointTemplate.replace("{region_id}", regionId) : endpointTemplate.replace("sRegionId={region_id}", "");
-      const url = `${provider.base_url}${endpoint}`;
-      console.log(`🌐 Fetching XML for region_id: ${regionId ?? "null"}`);
-      console.log(`🔗 URL: ${url}`);
+    // 2️⃣ If sample_url exists — ignore regions, use it directly
+    if (config.sample_url && config.sample_url.trim() !== "") {
+      const url = config.sample_url;
+      const regionId = "42"; // fixed demo region
+      console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
+      console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
       const res = await fetch(url);
-      if (!res.ok) {
-        console.warn(`⚠️ Region ${regionId ?? "null"} failed: HTTP ${res.status}`);
-        continue;
-      }
+      if (!res.ok) throw new Error(`Failed to fetch sample XML: HTTP ${res.status}`);
       const xmlText = await res.text();
       const parsed = parser.parse(xmlText);
       let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
       if (!Array.isArray(records)) records = [
         records
       ].filter(Boolean);
-      console.log(`📚 Region ${regionId ?? "null"}: ${records.length} records found`);
-      if (records.length === 0) continue;
-      // 4️⃣ Normalize and upsert
+      console.log(`📚 Sample mode: ${records.length} records found`);
+      // 🧹 Clean existing rows for provider (region 42)
+      const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
+      if (deleteError) console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      // 🧩 Upsert new records
       const rows = records.map((item)=>({
           provider_id: "school_provider:news12_closings",
           region_id: regionId,
@@ -196,7 +176,7 @@ app.post("/fetch", async (c)=>{
           type: "School",
           status_day: item.STATUS_DAY || null,
           status_description: item.STATUS_DESCRIPTION || null,
-          notes: `Fetched from News12 XML feed (region ${regionId ?? "none"})`,
+          notes: "Fetched from sample XML feed",
           source_format: "xml",
           fetched_at: new Date().toISOString(),
           raw_data: item
@@ -205,17 +185,81 @@ app.post("/fetch", async (c)=>{
         onConflict: "provider_id,organization_name,status_day",
         ignoreDuplicates: false
       });
-      if (upsertError) {
-        console.error(`❌ Upsert error for region ${regionId ?? "null"}:`, upsertError);
-        continue;
+      if (upsertError) throw upsertError;
+      console.log(`✅ Sample mode: ${rows.length} records upserted`);
+      totalInserted = rows.length;
+    } else {
+      // 3️⃣ Live mode: use base_url + endpoint
+      let regionIds = [];
+      if (Array.isArray(config.region_ids)) {
+        regionIds = config.region_ids;
+      } else if (typeof config.region_id === "string" && config.region_id.includes(",")) {
+        regionIds = config.region_id.split(",").map((r)=>r.trim());
+      } else if (config.region_id) {
+        regionIds = [
+          config.region_id
+        ];
+      } else {
+        console.warn("⚠️ No region_id found in config — using null region");
+        regionIds = [
+          null
+        ];
       }
-      console.log(`✅ Region ${regionId ?? "null"}: ${rows.length} records upserted`);
-      totalInserted += rows.length;
+      for (const regionId of regionIds){
+        const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId=";
+        const endpoint = regionId ? endpointTemplate.replace("{region_id}", regionId) : endpointTemplate.replace("sRegionId={region_id}", "");
+        const baseUrl = provider.base_url && provider.base_url.trim() !== "" ? provider.base_url : null;
+        if (!baseUrl) {
+          console.warn("⚠️ No base_url found — skipping region", regionId);
+          continue;
+        }
+        const url = `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
+        console.log(`🌐 Fetching XML for region_id: ${regionId}`);
+        console.log(`🔗 URL: ${url}`);
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.warn(`⚠️ Region ${regionId} failed: HTTP ${res.status}`);
+          continue;
+        }
+        const xmlText = await res.text();
+        const parsed = parser.parse(xmlText);
+        let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
+        if (!Array.isArray(records)) records = [
+          records
+        ].filter(Boolean);
+        console.log(`📚 Region ${regionId}: ${records.length} records found`);
+        if (records.length === 0) continue;
+        // 🧹 Clean existing rows
+        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
+        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${regionId}:`, deleteError);
+        const rows = records.map((item)=>({
+            provider_id: "school_provider:news12_closings",
+            region_id: regionId,
+            state: item.STATE || null,
+            city: item.CITY || null,
+            county_name: item.COUNTY_NAME || null,
+            organization_name: item.ORG_NAME || null,
+            type: "School",
+            status_day: item.STATUS_DAY || null,
+            status_description: item.STATUS_DESCRIPTION || null,
+            notes: `Fetched from News12 XML feed (region ${regionId})`,
+            source_format: "xml",
+            fetched_at: new Date().toISOString(),
+            raw_data: item
+          }));
+        const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+          onConflict: "provider_id,organization_name,status_day",
+          ignoreDuplicates: false
+        });
+        if (upsertError) throw upsertError;
+        console.log(`✅ Region ${regionId}: ${rows.length} records upserted`);
+        totalInserted += rows.length;
+      }
     }
     console.log(`🎉 Done. Total upserted: ${totalInserted}`);
     return c.json({
       ok: true,
-      message: `✅ Upserted ${totalInserted} records from ${regionIds.length} region(s)`,
+      message: `✅ Upserted ${totalInserted} record(s)`,
       count: totalInserted
     });
   } catch (err) {

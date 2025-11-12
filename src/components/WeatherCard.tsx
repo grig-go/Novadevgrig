@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -414,6 +414,49 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const humidityValue = getFieldValue(location.data?.current?.humidity);
   const uvIndexValue = getFieldValue(location.data?.current?.uvIndex);
 
+  // Fetch channel name if location has a channel assigned
+  const [channelName, setChannelName] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchChannelName = async () => {
+      if (!location.location.channel_id) {
+        setChannelName(null);
+        return;
+      }
+
+      // Check if we already have the channel name from the channels state
+      const existingChannel = channels.find(c => c.id === location.location.channel_id);
+      if (existingChannel) {
+        setChannelName(existingChannel.name);
+        return;
+      }
+
+      // Otherwise fetch it
+      try {
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const channel = data.channels?.find((ch: { id: string; name: string }) => ch.id === location.location.channel_id);
+          if (channel) {
+            setChannelName(channel.name);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching channel name:', error);
+      }
+    };
+
+    fetchChannelName();
+  }, [location.location.channel_id, channels]);
+
   // Common dropdown menu component
   const renderDropdownMenu = () => (
     <DropdownMenu>
@@ -549,7 +592,12 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                   >
                     <h3 className="font-semibold">{locationNameValue}</h3>
                   </InlineTextEdit>
-
+                  {channelName && (
+                    <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300">
+                      <Tv className="h-3 w-3 mr-1" />
+                      {channelName}
+                    </Badge>
+                  )}
                 </div>
                 <div className="text-sm text-muted-foreground">
                   {admin1Value}, {countryValue}
