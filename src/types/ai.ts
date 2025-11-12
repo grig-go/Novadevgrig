@@ -20,10 +20,10 @@ export type AIProviderName =
   | 'pika'
   | 'custom';
 
-export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar' | 'fusion' | 'feeds' | 'ai-connections' | 'media-library';
+export type DashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'nova' | 'pulsar' | 'fusion' | 'feeds' | 'ai-connections' | 'media-library' | 'school-closings';
 
 // Dashboards that support AI provider assignments
-export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar' | 'fusion' | 'media-library';
+export type AssignableDashboardType = 'elections' | 'finance' | 'sports' | 'weather' | 'news' | 'agents' | 'pulsar' | 'fusion' | 'media-library' | 'school-closings';
 
 export interface DashboardAssignment {
   dashboard: AssignableDashboardType;
@@ -213,6 +213,7 @@ export const DASHBOARD_LABELS: Record<DashboardType, string> = {
   feeds: 'Data Feeds',
   'ai-connections': 'AI Connections',
   'media-library': 'Media Library',
+  'school-closings': 'School Closings',
 };
 
 // Labels for dashboards that support AI assignments
@@ -226,6 +227,7 @@ export const ASSIGNABLE_DASHBOARD_LABELS: Record<AssignableDashboardType, string
   pulsar: 'Pulsar',
   fusion: 'Fusion',
   'media-library': 'Media Library',
+  'school-closings': 'School Closings',
 };
 
 // Hardcoded model lists for image providers without API endpoints

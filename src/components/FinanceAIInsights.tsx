@@ -145,7 +145,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       try {
         setLoadingInsights(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights`,
+          `https://${projectId}.supabase.co/functions/v1/ai_insights/finance`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -237,7 +237,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       console.log('Sending AI request with context:', context);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/chat`,
         {
           method: 'POST',
           headers: {
@@ -302,7 +302,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/finance`,
         {
           method: 'POST',
           headers: {
@@ -346,7 +346,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/finance/${insightId}`,
         {
           method: 'DELETE',
           headers: {
