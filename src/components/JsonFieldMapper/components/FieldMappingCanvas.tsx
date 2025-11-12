@@ -926,8 +926,8 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         backgroundColor: 'white',
         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
       }}>
-        <CardHeader style={{ paddingBottom: '0.75rem' }}>
-          <CardTitle style={{ fontSize: '0.875rem', lineHeight: '1.25rem' }}>Mapping Progress</CardTitle>
+        <CardHeader style={{ paddingBottom: '0rem' }}>
+          <CardTitle style={{ fontSize: '0.875rem', lineHeight: '1rem' }}>Mapping Progress</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
