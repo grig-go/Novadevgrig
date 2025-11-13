@@ -12,6 +12,8 @@ import { Copy, Play, Loader2, CheckCircle, XCircle, AlertCircle, Plus, Trash2 } 
 import { supabase } from '../utils/supabase/client';
 import { useToast } from './ui/use-toast';
 import type { Agent } from '../types/agents';
+import { JSONTree } from 'react-json-tree';
+import { XMLParser } from 'fast-xml-parser';
 
 interface TestStepProps {
   formData: Partial<Agent>;
@@ -480,11 +482,68 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
 
                 <TabsContent value="response" className="mt-4">
                   <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
-                    <pre className="text-sm whitespace-pre-wrap break-words">
-                      {typeof testResult.data === 'string' && testResult.data.trim().startsWith('<?xml')
-                        ? testResult.data
-                        : JSON.stringify(testResult.data, null, 2)}
-                    </pre>
+                    {(() => {
+                      // Try to parse and display as collapsible tree
+                      let dataToDisplay = testResult.data;
+
+                      // If it's a string, try to parse it as XML
+                      if (typeof testResult.data === 'string') {
+                        const trimmedData = testResult.data.trim();
+                        if (trimmedData.startsWith('<?xml') || trimmedData.startsWith('<')) {
+                          try {
+                            const parser = new XMLParser({
+                              ignoreAttributes: false,
+                              attributeNamePrefix: '@_',
+                              textNodeName: '#text'
+                            });
+                            dataToDisplay = parser.parse(testResult.data);
+                          } catch (e) {
+                            // If parsing fails, show as plain text
+                            return (
+                              <pre className="text-sm whitespace-pre-wrap break-words">
+                                {testResult.data}
+                              </pre>
+                            );
+                          }
+                        } else {
+                          // Plain text response
+                          return (
+                            <pre className="text-sm whitespace-pre-wrap break-words">
+                              {testResult.data}
+                            </pre>
+                          );
+                        }
+                      }
+
+                      // Show collapsible tree view for objects (JSON or parsed XML)
+                      return (
+                        <JSONTree
+                          data={dataToDisplay}
+                          theme={{
+                            scheme: 'bright',
+                            base00: '#000000',
+                            base01: '#2a2a2a',
+                            base02: '#3a3a3a',
+                            base03: '#5a5a5a',
+                            base04: '#898989',
+                            base05: '#d0d0d0',
+                            base06: '#e0e0e0',
+                            base07: '#ffffff',
+                            base08: '#fb0120',
+                            base09: '#fc6d24',
+                            base0A: '#fda331',
+                            base0B: '#a1c659',
+                            base0C: '#76c7b7',
+                            base0D: '#6fb3d2',
+                            base0E: '#d381c3',
+                            base0F: '#be643c'
+                          }}
+                          invertTheme={false}
+                          hideRoot={true}
+                          shouldExpandNodeInitially={(keyPath, data, level) => level < 2}
+                        />
+                      );
+                    })()}
                   </div>
                 </TabsContent>
 
