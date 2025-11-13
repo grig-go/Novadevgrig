@@ -46,8 +46,8 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 }, ref) => {
   const { toast } = useToast();
   const [authEnabled, setAuthEnabled] = useState(formData.requiresAuth || false);
-  const [authType, setAuthType] = useState<'api_key' | 'bearer' | 'basic' | 'oauth2' | 'custom'>(
-    (formData.auth as any) || 'api_key'
+  const [authType, setAuthType] = useState<'api-key' | 'bearer' | 'basic' | 'oauth2' | 'custom'>(
+    (formData.auth as any) || 'api-key'
   );
 
   // API Key state
@@ -105,7 +105,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
   // Initialize authentication data from formData (only on mount or when editing)
   useEffect(() => {
     if (formData.authConfig && !isInitializedRef.current) {
-      if (authType === 'api_key' && formData.authConfig.keys) {
+      if (authType === 'api-key' && formData.authConfig.keys) {
         setApiKeys(formData.authConfig.keys); // Use 'keys' to match nova-old structure
       }
       if (authType === 'bearer' && formData.authConfig.allowed_tokens) {
@@ -128,7 +128,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
     const authConfig = authEnabled ? (() => {
       switch (authType) {
-        case 'api_key':
+        case 'api-key':
           return {
             header_name: apiKeyHeaderName,
             keys: apiKeys
@@ -154,8 +154,9 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
     }));
   }, [authEnabled, authType, apiKeys, bearerTokens, basicAuthUsers, apiKeyHeaderName]);
 
-  // Auto-save draft for testing
+  // Auto-save draft for testing (DISABLED - causes duplicate issues)
   useEffect(() => {
+    return; // Disabled to prevent draft conflicts with save
     if (!authEnabled) return;
 
     const saveDraft = async () => {
@@ -265,7 +266,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
   const getAuthConfig = () => {
     switch (authType) {
-      case 'api_key':
+      case 'api-key':
         return {
           header_name: apiKeyHeaderName,
           keys: apiKeys // Use 'keys' to match nova-old structure
@@ -290,7 +291,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
       const authSettings = authSettingsRef.current;
       const authConfig = authSettings.authEnabled ? (() => {
         switch (authSettings.authType) {
-          case 'api_key':
+          case 'api-key':
             return {
               header_name: authSettings.apiKeyHeaderName,
               keys: authSettings.apiKeys
@@ -421,7 +422,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
       let isValid = false;
 
       switch (authType) {
-        case 'api_key':
+        case 'api-key':
           isValid = apiKeys.some(k => k.key === testToken && k.active);
           break;
         case 'bearer':
@@ -509,8 +510,8 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
             <RadioGroup value={authType} onValueChange={(value: any) => setAuthType(value)}>
               <div className="space-y-3">
                 <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="api_key" id="api_key" className="border-2 border-gray-700" />
-                  <Label htmlFor="api_key" className="cursor-pointer font-normal">
+                  <RadioGroupItem value="api-key" id="api-key" className="border-2 border-gray-700" />
+                  <Label htmlFor="api-key" className="cursor-pointer font-normal">
                     API Key - Simple key-based authentication
                   </Label>
                 </div>
@@ -543,7 +544,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
           </div>
 
           {/* API Key Configuration */}
-          {authType === 'api_key' && (
+          {authType === 'api-key' && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">API Key Configuration</CardTitle>
@@ -778,7 +779,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="test-token">
-                    {authType === 'api_key' && 'API Key'}
+                    {authType === 'api-key' && 'API Key'}
                     {authType === 'bearer' && 'Bearer Token'}
                     {authType === 'basic' && 'Username:Password'}
                   </Label>
@@ -788,7 +789,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
                     value={testToken}
                     onChange={(e) => setTestToken(e.target.value)}
                     placeholder={
-                      authType === 'api_key' ? 'Enter API key to test' :
+                      authType === 'api-key' ? 'Enter API key to test' :
                       authType === 'bearer' ? 'Enter bearer token to test' :
                       'Enter username:password'
                     }

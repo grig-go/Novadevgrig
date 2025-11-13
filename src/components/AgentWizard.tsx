@@ -464,9 +464,6 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleSave = async (closeDialog: boolean = true) => {
-    // Cleanup any draft created for testing in SecurityStep
-    await securityStepRef.current?.cleanupDraft();
-
     // Sync auth settings from SecurityStep before saving
     securityStepRef.current?.syncAuthToFormData();
 

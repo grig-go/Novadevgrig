@@ -32,7 +32,7 @@ export const CurlCommandGenerator: React.FC<CurlCommandGeneratorProps> = ({
     let command = `curl`;
 
     switch (auth.type) {
-      case 'api_key':
+      case 'api-key':
         const headerName = auth.config?.header_name || 'X-API-Key';
         command += ` -H "${headerName}: YOUR_API_KEY"`;
         break;
@@ -63,7 +63,7 @@ export const CurlCommandGenerator: React.FC<CurlCommandGeneratorProps> = ({
 
     if (auth?.required) {
       switch (auth.type) {
-        case 'api_key':
+        case 'api-key':
           const headerName = auth.config?.header_name || 'X-API-Key';
           headers = `    '${headerName}': 'YOUR_API_KEY'`;
           break;
@@ -97,7 +97,7 @@ ${headers}
 
     if (auth?.required) {
       switch (auth.type) {
-        case 'api_key':
+        case 'api-key':
           const headerName = auth.config?.header_name || 'X-API-Key';
           headers = `headers = {'${headerName}': 'YOUR_API_KEY'}\n`;
           break;
@@ -150,7 +150,7 @@ print(response.json())`;
     const auth = endpoint.authentication;
     if (auth?.required) {
       switch (auth.type) {
-        case 'api_key':
+        case 'api-key':
           collection.item[0].request.header.push({
             key: auth.config?.header_name || 'X-API-Key',
             value: 'YOUR_API_KEY',
@@ -221,7 +221,7 @@ print(response.json())`;
 
   const getAuthInstructions = (auth: any): string => {
     switch (auth.type) {
-      case 'api_key':
+      case 'api-key':
         const headerName = auth.config?.header_name || 'X-API-Key';
         return `Include your API key in the '${headerName}' header. Replace 'YOUR_API_KEY' with an actual key from the configuration above.`;
 
