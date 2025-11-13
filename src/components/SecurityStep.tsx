@@ -6,12 +6,13 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Switch } from './ui/switch';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Alert, AlertDescription } from './ui/alert';
 import { Eye, EyeOff, Plus, Trash2, Key, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '../utils/supabase/client';
 import { useToast } from './ui/use-toast';
 import { CurlCommandGenerator } from './CurlCommandGenerator';
-import type { Agent } from '../types/agent';
+import type { Agent, AgentCacheType } from '../types/agents';
 import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants';
 
 interface SecurityStepProps {
@@ -851,6 +852,26 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
           )}
         </>
       )}
+
+      {/* Cache Duration */}
+      <div>
+        <Label htmlFor="cache">Cache Duration</Label>
+        <Select
+          value={formData.cache || '15M'}
+          onValueChange={(value: AgentCacheType) => setFormData({ ...formData, cache: value })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="OFF">Off</SelectItem>
+            <SelectItem value="5M">5 minutes</SelectItem>
+            <SelectItem value="15M">15 minutes</SelectItem>
+            <SelectItem value="30M">30 minutes</SelectItem>
+            <SelectItem value="1H">1 hour</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Security Note */}
       <Alert className="bg-blue-50 border-blue-200">
