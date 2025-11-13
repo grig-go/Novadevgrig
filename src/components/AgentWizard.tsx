@@ -23,6 +23,7 @@ import { supabase } from "../utils/supabase/client";
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
+import TestStep from "./TestStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
 import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants';
 
@@ -34,7 +35,7 @@ interface AgentWizardProps {
   availableFeeds?: Array<{ id: string; name: string; category: string }>;
 }
 
-type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'review';
+type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
 const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News'];
 
@@ -514,6 +515,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     'outputFormat',
     'transformations',
     'security',
+    'test',
     'review'
   ];
   const currentStepIndex = steps.indexOf(currentStep);
@@ -2500,6 +2502,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return 'Transformations';
       case 'security':
         return 'Security';
+      case 'test':
+        return 'Test';
       case 'review':
         return 'Review & Create';
       default:
@@ -2525,6 +2529,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return 'Add optional data transformations';
       case 'security':
         return 'Configure authentication and caching';
+      case 'test':
+        return 'Test your API endpoint before deploying';
       case 'review':
         return 'Review your configuration before creating';
       default:
@@ -2580,6 +2586,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               setFormData={setFormData}
               agentId={editAgent?.id}
             />
+          )}
+          {currentStep === 'test' && (
+            <TestStep formData={formData} />
           )}
           {currentStep === 'review' && renderReview()}
         </div>

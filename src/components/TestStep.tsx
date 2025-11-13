@@ -1,0 +1,484 @@
+import React, { useState } from 'react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Alert, AlertDescription } from './ui/alert';
+import { Badge } from './ui/badge';
+import { Copy, Play, Loader2, CheckCircle, XCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { supabase } from '../utils/supabase/client';
+import { useToast } from './ui/use-toast';
+import type { Agent } from '../types/agents';
+
+interface TestStepProps {
+  formData: Partial<Agent>;
+}
+
+interface TestResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  responseTime?: number;
+  statusCode?: number;
+  headers?: Record<string, string>;
+  size?: number;
+}
+
+export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
+  const { toast } = useToast();
+  const [testMethod, setTestMethod] = useState<string>('GET');
+  const [queryParams, setQueryParams] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }]);
+  const [testBody, setTestBody] = useState<string>('');
+  const [testHeaders, setTestHeaders] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [selectedTab, setSelectedTab] = useState<string>('response');
+
+  const getEndpointUrl = () => {
+    const baseUrl = window.location.origin;
+    const slug = formData.slug || 'endpoint';
+    return `${baseUrl}/api/${slug}`;
+  };
+
+  const addQueryParam = () => {
+    setQueryParams([...queryParams, { key: '', value: '' }]);
+  };
+
+  const updateQueryParam = (index: number, field: 'key' | 'value', value: string) => {
+    const updated = [...queryParams];
+    updated[index][field] = value;
+    setQueryParams(updated);
+  };
+
+  const removeQueryParam = (index: number) => {
+    setQueryParams(queryParams.filter((_, i) => i !== index));
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const getStatusIntent = (statusCode: number): 'default' | 'secondary' | 'destructive' => {
+    if (statusCode >= 200 && statusCode < 300) return 'default';
+    if (statusCode >= 400) return 'destructive';
+    return 'secondary';
+  };
+
+  const generateCurlCommand = (): string => {
+    let url = getEndpointUrl();
+
+    // Add query parameters
+    const params = queryParams.filter(p => p.key && p.value);
+    if (params.length > 0) {
+      const queryString = params.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&');
+      url += `?${queryString}`;
+    }
+
+    let cmd = `curl -X ${testMethod} "${url}"`;
+
+    // Add headers
+    if (testHeaders.trim()) {
+      try {
+        const headers = JSON.parse(testHeaders);
+        Object.entries(headers).forEach(([key, value]) => {
+          cmd += ` \\\n  -H "${key}: ${value}"`;
+        });
+      } catch (e) {
+        // Invalid JSON, skip headers
+      }
+    }
+
+    // Add body for non-GET/DELETE methods
+    if (testMethod !== 'GET' && testMethod !== 'DELETE' && testBody.trim()) {
+      cmd += ` \\\n  -d '${testBody}'`;
+    }
+
+    return cmd;
+  };
+
+  const runTest = async () => {
+    setIsLoading(true);
+    setTestResult(null);
+
+    try {
+      // Validate JSON inputs
+      let parsedBody = null;
+      if (testBody.trim() && testMethod !== 'GET' && testMethod !== 'DELETE') {
+        try {
+          parsedBody = JSON.parse(testBody);
+        } catch (e) {
+          toast({
+            title: 'Invalid JSON',
+            description: 'The request body is not valid JSON',
+            variant: 'destructive'
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      let parsedHeaders: Record<string, string> = {};
+      if (testHeaders.trim()) {
+        try {
+          parsedHeaders = JSON.parse(testHeaders);
+        } catch (e) {
+          toast({
+            title: 'Invalid JSON',
+            description: 'The headers are not valid JSON',
+            variant: 'destructive'
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Build query params
+      const testParams: Record<string, any> = {};
+      queryParams.filter(p => p.key && p.value).forEach(p => {
+        testParams[p.key] = p.value;
+      });
+
+      // Prepare config for testing
+      const testConfig = {
+        ...formData,
+        testParameters: testParams
+      };
+
+      const startTime = Date.now();
+
+      // Call the test-api-endpoint Supabase function
+      const { data, error } = await supabase.functions.invoke('test-api-endpoint', {
+        body: {
+          config: testConfig,
+          params: testParams,
+          headers: parsedHeaders,
+          method: testMethod,
+          body: parsedBody
+        }
+      });
+
+      const responseTime = Date.now() - startTime;
+
+      if (error) {
+        setTestResult({
+          success: false,
+          error: error.message,
+          responseTime,
+          statusCode: 500
+        });
+        toast({
+          title: 'Test Failed',
+          description: error.message,
+          variant: 'destructive'
+        });
+      } else {
+        const responseSize = JSON.stringify(data).length;
+        setTestResult({
+          success: true,
+          data: data,
+          responseTime,
+          statusCode: 200,
+          headers: data?.headers || {},
+          size: responseSize
+        });
+        toast({
+          title: 'Test Successful',
+          description: `API endpoint responded in ${responseTime}ms`
+        });
+      }
+    } catch (error: any) {
+      console.error('Test error:', error);
+      setTestResult({
+        success: false,
+        error: error.message || 'Unknown error occurred',
+        responseTime: 0,
+        statusCode: 500
+      });
+      toast({
+        title: 'Test Error',
+        description: error.message || 'An error occurred while testing',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: 'Copied!',
+      description: 'Copied to clipboard'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Test Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Test Configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Endpoint URL */}
+          <div>
+            <Label>Endpoint URL</Label>
+            <div className="flex gap-2">
+              <Input
+                value={getEndpointUrl()}
+                readOnly
+                className="flex-1 font-mono text-sm"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => copyToClipboard(getEndpointUrl())}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* HTTP Method */}
+          <div>
+            <Label>HTTP Method</Label>
+            <Select value={testMethod} onValueChange={setTestMethod}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="GET">GET</SelectItem>
+                <SelectItem value="POST">POST</SelectItem>
+                <SelectItem value="PUT">PUT</SelectItem>
+                <SelectItem value="PATCH">PATCH</SelectItem>
+                <SelectItem value="DELETE">DELETE</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Query Parameters */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label>Query Parameters</Label>
+              <Button size="sm" variant="outline" onClick={addQueryParam}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Parameter
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {queryParams.map((param, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input
+                    placeholder="Key"
+                    value={param.key}
+                    onChange={(e) => updateQueryParam(index, 'key', e.target.value)}
+                    className="flex-1"
+                  />
+                  <Input
+                    placeholder="Value"
+                    value={param.value}
+                    onChange={(e) => updateQueryParam(index, 'value', e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeQueryParam(index)}
+                    disabled={queryParams.length === 1}
+                  >
+                    <Trash2 className="h-4 w-4 text-red-500" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Request Body (only for non-GET/DELETE) */}
+          {testMethod !== 'GET' && testMethod !== 'DELETE' && (
+            <div>
+              <Label>Request Body (JSON)</Label>
+              <Textarea
+                value={testBody}
+                onChange={(e) => setTestBody(e.target.value)}
+                placeholder='{"key": "value"}'
+                rows={6}
+                className="font-mono text-sm"
+              />
+            </div>
+          )}
+
+          {/* Headers */}
+          <div>
+            <Label>Headers (JSON, optional)</Label>
+            <Textarea
+              value={testHeaders}
+              onChange={(e) => setTestHeaders(e.target.value)}
+              placeholder='{"Content-Type": "application/json"}'
+              rows={4}
+              className="font-mono text-sm"
+            />
+          </div>
+
+          {/* Run Test Button */}
+          <Button onClick={runTest} disabled={isLoading} className="w-full">
+            {isLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-2" />
+                Run Test
+              </>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Test Results */}
+      {testResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              Test Results
+              {testResult.success ? (
+                <Badge variant="default" className="ml-2">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Success
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="ml-2">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Failed
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Metrics */}
+            <div className="flex gap-4 text-sm">
+              {testResult.statusCode && (
+                <div>
+                  <span className="text-muted-foreground">Status: </span>
+                  <Badge variant={getStatusIntent(testResult.statusCode)}>
+                    {testResult.statusCode}
+                  </Badge>
+                </div>
+              )}
+              {testResult.responseTime !== undefined && (
+                <div>
+                  <span className="text-muted-foreground">Response Time: </span>
+                  <span className="font-medium">{testResult.responseTime}ms</span>
+                </div>
+              )}
+              {testResult.size !== undefined && (
+                <div>
+                  <span className="text-muted-foreground">Size: </span>
+                  <span className="font-medium">{formatBytes(testResult.size)}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Error Message */}
+            {!testResult.success && testResult.error && (
+              <Alert variant="destructive">
+                <div className="flex gap-3">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <AlertDescription>{testResult.error}</AlertDescription>
+                </div>
+              </Alert>
+            )}
+
+            {/* Results Tabs */}
+            {testResult.success && testResult.data && (
+              <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="response">Response</TabsTrigger>
+                  <TabsTrigger value="raw">Raw</TabsTrigger>
+                  <TabsTrigger value="headers">Headers</TabsTrigger>
+                  <TabsTrigger value="curl">cURL</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="response" className="mt-4">
+                  <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
+                    <pre className="text-sm">
+                      {JSON.stringify(testResult.data, null, 2)}
+                    </pre>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="raw" className="mt-4">
+                  <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
+                    <pre className="text-sm">
+                      {JSON.stringify(testResult.data, null, 2)}
+                    </pre>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="headers" className="mt-4">
+                  <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
+                    {testResult.headers && Object.keys(testResult.headers).length > 0 ? (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left p-2">Header</th>
+                            <th className="text-left p-2">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(testResult.headers).map(([key, value]) => (
+                            <tr key={key} className="border-b">
+                              <td className="p-2 font-medium">{key}</td>
+                              <td className="p-2 font-mono">{value}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-muted-foreground">No headers available</p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="curl" className="mt-4">
+                  <div className="bg-muted p-4 rounded-md overflow-auto">
+                    <div className="flex items-start justify-between gap-2">
+                      <pre className="text-sm flex-1">{generateCurlCommand()}</pre>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyToClipboard(generateCurlCommand())}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Info Alert */}
+      <Alert>
+        <div className="flex gap-3">
+          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <AlertDescription>
+            Test your API endpoint before deploying. This will execute the endpoint with your configured data sources and transformations.
+          </AlertDescription>
+        </div>
+      </Alert>
+    </div>
+  );
+};
+
+export default TestStep;
