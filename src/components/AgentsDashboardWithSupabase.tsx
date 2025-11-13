@@ -622,15 +622,22 @@ export function AgentsDashboardWithSupabase({
 
   const toggleAgentStatus = async (agent: Agent) => {
     try {
+      const newStatus = agent.status !== 'ACTIVE';
       const { error } = await supabase
         .from('api_endpoints')
-        .update({ active: agent.status !== 'ACTIVE' })
+        .update({ active: newStatus } as any)
         .eq('id', agent.id);
 
       if (error) throw error;
 
-      // Reload agents list
-      await loadAgents();
+      // Update the agent in the local state without reloading the entire list
+      setAgents(prevAgents =>
+        prevAgents.map(a =>
+          a.id === agent.id
+            ? { ...a, status: (newStatus ? 'ACTIVE' : 'PAUSED') as Agent['status'] }
+            : a
+        )
+      );
 
       toast({
         title: "Success",
