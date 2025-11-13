@@ -22,7 +22,7 @@ interface SecurityStepProps {
 }
 
 export interface SecurityStepRef {
-  syncAuthToFormData: () => void;
+  syncAuthToFormData: () => { requiresAuth: boolean; auth: string; authConfig: any };
   cleanupDraft: () => Promise<void>;
 }
 
@@ -290,6 +290,28 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
     syncAuthToFormData: () => {
       // Use the ref to get the latest auth settings
       const authSettings = authSettingsRef.current;
+
+      // For Basic Auth, auto-add pending username/password if they exist
+      let finalBasicAuthUsers = authSettings.basicAuthUsers;
+      if (authSettings.authType === 'basic' && newUsername && newPassword) {
+        const newUser: BasicAuthUser = {
+          id: `user-${Date.now()}`,
+          username: newUsername,
+          password: newPassword
+        };
+        finalBasicAuthUsers = [...authSettings.basicAuthUsers, newUser];
+
+        // Update the state so it shows in the UI (async)
+        setBasicAuthUsers(finalBasicAuthUsers);
+
+        // Update the ref immediately (sync) so the save uses the correct data
+        authSettingsRef.current.basicAuthUsers = finalBasicAuthUsers;
+
+        // Clear the input fields
+        setNewUsername('');
+        setNewPassword('');
+      }
+
       const authConfig = authSettings.authEnabled ? (() => {
         switch (authSettings.authType) {
           case 'api-key':
@@ -303,19 +325,27 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
             };
           case 'basic':
             return {
-              users: authSettings.basicAuthUsers
+              users: finalBasicAuthUsers
             };
           default:
             return {};
         }
       })() : undefined;
 
+      // Still update formData for backward compatibility
       setFormData(prev => ({
         ...prev,  // IMPORTANT: Preserve all existing formData fields
         requiresAuth: authSettings.authEnabled,
         auth: authSettings.authEnabled ? authSettings.authType : 'none',
         authConfig
       }));
+
+      // Return the auth data synchronously so handleSave can use it immediately
+      return {
+        requiresAuth: authSettings.authEnabled,
+        auth: authSettings.authEnabled ? authSettings.authType : 'none',
+        authConfig
+      };
     },
     cleanupDraft: async () => {
       // Delete the draft from database before saving the real agent

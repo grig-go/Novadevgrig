@@ -624,6 +624,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       }
     }
 
+    // Check if we're leaving the "security" step - sync auth data including any pending credentials
+    if (currentStep === 'security') {
+      securityStepRef.current?.syncAuthToFormData();
+    }
+
     const nextIndex = currentStepIndex + 1;
     if (nextIndex < steps.length) {
       const nextStep = steps[nextIndex];
@@ -640,8 +645,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleSave = async (closeDialog: boolean = true) => {
-    // Sync auth settings from SecurityStep before saving
-    securityStepRef.current?.syncAuthToFormData();
+    // Sync auth settings from SecurityStep before saving and get the auth data synchronously
+    const authData = securityStepRef.current?.syncAuthToFormData();
 
     // First, save new data sources to the database (only those not yet saved)
     const savedDataSourceIds: string[] = [];
@@ -723,10 +728,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       fieldMappings: formData.fieldMappings || [],
       fixedFields: formData.fixedFields || {},
       transforms: formData.transforms || [],
-      auth: formData.auth || 'none',
+      auth: authData?.auth || formData.auth || 'none',
       apiKey: formData.apiKey,
-      requiresAuth: formData.requiresAuth,
-      authConfig: formData.authConfig, // Include auth credentials
+      requiresAuth: authData?.requiresAuth ?? formData.requiresAuth,
+      authConfig: authData?.authConfig || formData.authConfig, // Use synchronously returned auth data
       status: formData.status || 'ACTIVE',
       cache: formData.cache || '15M',
       url: `${window.location.origin}/api/${formData.slug || formData.name?.toLowerCase().replace(/\s+/g, '-')}`,
