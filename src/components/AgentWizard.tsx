@@ -24,6 +24,7 @@ import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
+import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants';
 
 interface AgentWizardProps {
   open: boolean;
@@ -97,6 +98,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // State for new data sources to be created
   const [newDataSources, setNewDataSources] = useState<any[]>([]);
+  const [isSavingDataSources, setIsSavingDataSources] = useState(false);
 
   // State for test connection results
   const [testResults, setTestResults] = useState<Record<number, any>>({});
@@ -393,6 +395,29 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [open, formData.dataType]);
 
+  // Combine existing selected sources and newly saved sources
+  const allDataSources = React.useMemo(() => {
+    const selectedExisting = (formData.dataSources || []).filter((ds: AgentDataSource) =>
+      !newDataSources.some((newDs: any) => newDs.id === ds.id)
+    );
+    const validNew = newDataSources.filter((ds: any) => ds.id && ds.name && ds.type).map((ds: any) => ({
+      id: ds.id,
+      name: ds.name,
+      type: ds.type,
+      category: ds.category,
+      feedId: ds.id  // Use database UUID as feedId for junction table
+    }));
+
+    return [...selectedExisting, ...validNew];
+  }, [formData.dataSources, newDataSources]);
+
+  // Update formData.dataSources whenever allDataSources changes
+  useEffect(() => {
+    if (allDataSources.length > 0 && JSON.stringify(formData.dataSources) !== JSON.stringify(allDataSources)) {
+      setFormData((prev: Partial<Agent>) => ({ ...prev, dataSources: allDataSources }));
+    }
+  }, [allDataSources]);
+
   // Update formData when editAgent changes
   useEffect(() => {
     if (editAgent && open) {
@@ -447,7 +472,112 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   ];
   const currentStepIndex = steps.indexOf(currentStep);
 
-  const handleNext = () => {
+  const saveAllNewDataSources = async (): Promise<boolean> => {
+    const unsavedDataSources = newDataSources.filter((ds: any) => !ds.id && ds.name && ds.type);
+
+    if (unsavedDataSources.length === 0) {
+      return true; // Nothing to save
+    }
+
+    setIsSavingDataSources(true);
+
+    try {
+      // Get user ID with dev mode support
+      let userId = DEV_USER_ID;
+
+      if (!isDevelopment || !SKIP_AUTH_IN_DEV) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          throw new Error('User not authenticated');
+        }
+        userId = user.id;
+      }
+
+      // Save all unsaved data sources
+      for (let i = 0; i < newDataSources.length; i++) {
+        const source = newDataSources[i];
+
+        // Skip if already saved or incomplete
+        if (source.id || !source.name || !source.type) {
+          continue;
+        }
+
+        // Validate based on type
+        if (source.type === 'api' && !source.api_config?.url) {
+          alert(`Data source "${source.name}" is missing required API URL`);
+          setIsSavingDataSources(false);
+          return false;
+        }
+
+        if (source.type === 'rss' && !source.rss_config?.url) {
+          alert(`Data source "${source.name}" is missing required RSS feed URL`);
+          setIsSavingDataSources(false);
+          return false;
+        }
+
+        if (source.type === 'file' && !source.file_config?.url) {
+          alert(`Data source "${source.name}" is missing required file URL`);
+          setIsSavingDataSources(false);
+          return false;
+        }
+
+        const dataSourceData: any = {
+          name: source.name,
+          type: source.type,
+          category: source.category,
+          active: true,
+          api_config: source.type === 'api' ? source.api_config : null,
+          database_config: source.type === 'database' ? source.database_config : null,
+          file_config: source.type === 'file' ? source.file_config : null,
+          rss_config: source.type === 'rss' ? source.rss_config : null,
+          user_id: userId
+        };
+
+        const { data, error } = await supabase
+          .from('data_sources')
+          .insert(dataSourceData)
+          .select()
+          .single();
+
+        if (error) {
+          throw new Error(`Failed to save ${source.name}: ${error.message}`);
+        }
+
+        // Update the data source with the saved ID
+        setNewDataSources((prev: any) => prev.map((ds: any, idx: number) =>
+          idx === i ? { ...ds, id: data.id, isNew: false } : ds
+        ));
+      }
+
+      console.log(`Successfully saved ${unsavedDataSources.length} data source(s)`);
+      setIsSavingDataSources(false);
+      return true;
+
+    } catch (error: any) {
+      console.error('Error saving data sources:', error);
+      alert(`Failed to save data sources: ${error.message}`);
+      setIsSavingDataSources(false);
+      return false;
+    }
+  };
+
+  const handleNext = async () => {
+    // Check if we're leaving the "configureNewSources" step
+    if (currentStep === 'configureNewSources') {
+      // Check if there are unsaved data sources
+      const hasUnsavedDataSources = newDataSources.some((ds: any) => !ds.id && ds.name && ds.type);
+
+      if (hasUnsavedDataSources) {
+        // Save all data sources before proceeding
+        const saveSuccess = await saveAllNewDataSources();
+
+        if (!saveSuccess) {
+          // Stay on current step if save failed
+          return;
+        }
+      }
+    }
+
     const nextIndex = currentStepIndex + 1;
     if (nextIndex < steps.length) {
       const nextStep = steps[nextIndex];
@@ -467,14 +597,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     // Sync auth settings from SecurityStep before saving
     securityStepRef.current?.syncAuthToFormData();
 
-    // First, save new data sources to the database
+    // First, save new data sources to the database (only those not yet saved)
     const savedDataSourceIds: string[] = [];
     const newlySavedSources: AgentDataSource[] = [];
 
-    if (newDataSources.filter(ds => ds.name && ds.type).length > 0) {
+    // Only save data sources that don't have an ID yet (haven't been saved)
+    const unsavedSources = newDataSources.filter(ds => !ds.id && ds.name && ds.type);
+    if (unsavedSources.length > 0) {
       console.log('Saving new data sources to database...');
 
-      for (const newSource of newDataSources.filter(ds => ds.name && ds.type)) {
+      for (const newSource of unsavedSources) {
         try {
           const { data, error } = await supabase
             .from('data_sources')
@@ -943,7 +1075,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               variant="outline"
               size="sm"
               onClick={() => {
+                const newIndex = newDataSources.length;
                 setNewDataSources([...newDataSources, { name: '', type: '', category: selectedCategories[0] || '' }]);
+                // Clear test results for the new source index
+                setTestResults(prev => {
+                  const updated = { ...prev };
+                  delete updated[newIndex];
+                  return updated;
+                });
+                setTestLoading(prev => {
+                  const updated = { ...prev };
+                  delete updated[newIndex];
+                  return updated;
+                });
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -1837,11 +1981,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
       // First, fetch the full data source from the database if we only have a reference
       let fullSource = source;
-      if (source.feedId && !source.config && !source.api_config) {
+      const sourceDbId = source.feedId || source.id;
+      if (sourceDbId && !source.config && !source.api_config && !source.rss_config) {
         const { data: dbSource, error } = await supabase
           .from('data_sources')
           .select('*')
-          .eq('id', source.feedId)
+          .eq('id', sourceDbId)
           .single();
 
         if (error) {
@@ -2375,8 +2520,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               Cancel
             </Button>
             {currentStepIndex < steps.length - 1 ? (
-              <Button onClick={handleNext} disabled={!isStepValid()}>
-                Next
+              <Button onClick={handleNext} disabled={!isStepValid() || isSavingDataSources}>
+                {isSavingDataSources ? 'Saving...' : 'Next'}
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             ) : (

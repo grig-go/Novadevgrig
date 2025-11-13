@@ -433,19 +433,23 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                 </Button>
               )}
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="border-2"
                 onClick={() => {
                   const allIds = new Set(dataSources.map(ds => ds.id));
                   setSelectedSources(allIds);
+                  // Expand all sources when selecting all
+                  setExpandedSources(allIds);
                   allIds.forEach(id => autoDetectPath(id));
                 }}
               >
                 Select All
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
+                className="border-2"
                 onClick={() => {
                   setSelectedSources(new Set());
                   setSourcePaths({});
