@@ -15,6 +15,7 @@ import type { Agent } from '../types/agents';
 
 interface TestStepProps {
   formData: Partial<Agent>;
+  onSaveTest?: (testAgentData: Partial<Agent>) => Promise<{ success: boolean; agentId?: string; error?: string }>; // Function to save a temporary test agent
 }
 
 interface TestResult {
@@ -27,7 +28,7 @@ interface TestResult {
   size?: number;
 }
 
-export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
+export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
   const { toast } = useToast();
   const [testMethod, setTestMethod] = useState<string>('GET');
   const [queryParams, setQueryParams] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }]);
@@ -104,8 +105,20 @@ export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
   };
 
   const runTest = async () => {
+    if (!onSaveTest) {
+      toast({
+        title: 'Test Not Available',
+        description: 'Test functionality is not available',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setIsLoading(true);
     setTestResult(null);
+
+    let tempAgentId: string | undefined;
+    let tempSlug: string | undefined;
 
     try {
       // Validate JSON inputs
@@ -139,58 +152,102 @@ export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
         }
       }
 
-      // Build query params
-      const testParams: Record<string, any> = {};
-      queryParams.filter(p => p.key && p.value).forEach(p => {
-        testParams[p.key] = p.value;
-      });
+      // Create a temporary slug for testing
+      tempSlug = `${formData.slug || 'test'}-test-${Date.now()}`;
 
-      // Prepare config for testing
-      const testConfig = {
+      // Create test agent data with temporary slug
+      const testAgentData = {
         ...formData,
-        testParameters: testParams
+        slug: tempSlug,
+        name: `[TEST] ${formData.name || 'Test Agent'}`,
+        status: 'ACTIVE' as const // Must be active for edge function to find it
       };
+
+      // Save the temporary test agent
+      const saveResult = await onSaveTest(testAgentData);
+
+      if (!saveResult.success) {
+        throw new Error(saveResult.error || 'Failed to create test endpoint');
+      }
+
+      tempAgentId = saveResult.agentId;
+
+      // Wait a moment for database consistency
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Build the test endpoint URL
+      const baseUrl = window.location.origin;
+      let testUrl = `${baseUrl}/api/${tempSlug}`;
+
+      // Add query parameters
+      const params = queryParams.filter(p => p.key && p.value);
+      if (params.length > 0) {
+        const queryString = params.map(p => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join('&');
+        testUrl += `?${queryString}`;
+      }
 
       const startTime = Date.now();
 
-      // Call the test-api-endpoint Supabase function
-      const { data, error } = await supabase.functions.invoke('test-api-endpoint', {
-        body: {
-          config: testConfig,
-          params: testParams,
-          headers: parsedHeaders,
-          method: testMethod,
-          body: parsedBody
+      // Make request to the actual endpoint
+      const requestOptions: RequestInit = {
+        method: testMethod,
+        headers: {
+          'Content-Type': 'application/json',
+          ...parsedHeaders
         }
-      });
+      };
 
+      // Add body for non-GET/DELETE methods
+      if (parsedBody && testMethod !== 'GET' && testMethod !== 'DELETE') {
+        requestOptions.body = JSON.stringify(parsedBody);
+      }
+
+      const response = await fetch(testUrl, requestOptions);
       const responseTime = Date.now() - startTime;
 
-      if (error) {
-        setTestResult({
-          success: false,
-          error: error.message,
-          responseTime,
-          statusCode: 500
-        });
-        toast({
-          title: 'Test Failed',
-          description: error.message,
-          variant: 'destructive'
-        });
+      // Get response data
+      const contentType = response.headers.get('content-type');
+      let responseData;
+
+      if (contentType?.includes('application/json')) {
+        responseData = await response.json();
       } else {
-        const responseSize = JSON.stringify(data).length;
+        responseData = await response.text();
+      }
+
+      const responseSize = JSON.stringify(responseData).length;
+
+      // Extract headers
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+
+      if (response.ok) {
         setTestResult({
           success: true,
-          data: data,
+          data: responseData,
           responseTime,
-          statusCode: 200,
-          headers: data?.headers || {},
+          statusCode: response.status,
+          headers: responseHeaders,
           size: responseSize
         });
         toast({
           title: 'Test Successful',
           description: `API endpoint responded in ${responseTime}ms`
+        });
+      } else {
+        setTestResult({
+          success: false,
+          error: typeof responseData === 'string' ? responseData : JSON.stringify(responseData),
+          responseTime,
+          statusCode: response.status,
+          headers: responseHeaders
+        });
+        toast({
+          title: 'Test Failed',
+          description: `Endpoint returned status ${response.status}`,
+          variant: 'destructive'
         });
       }
     } catch (error: any) {
@@ -207,6 +264,20 @@ export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
         variant: 'destructive'
       });
     } finally {
+      // Clean up: Delete the temporary test endpoint
+      if (tempAgentId) {
+        try {
+          await supabase
+            .from('api_endpoints')
+            .delete()
+            .eq('id', tempAgentId);
+          console.log('Cleaned up temporary test endpoint:', tempSlug);
+        } catch (cleanupError) {
+          console.error('Failed to clean up test endpoint:', cleanupError);
+          // Don't show error to user, just log it
+        }
+      }
+
       setIsLoading(false);
     }
   };
@@ -409,16 +480,20 @@ export const TestStep: React.FC<TestStepProps> = ({ formData }) => {
 
                 <TabsContent value="response" className="mt-4">
                   <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
-                    <pre className="text-sm">
-                      {JSON.stringify(testResult.data, null, 2)}
+                    <pre className="text-sm whitespace-pre-wrap break-words">
+                      {typeof testResult.data === 'string' && testResult.data.trim().startsWith('<?xml')
+                        ? testResult.data
+                        : JSON.stringify(testResult.data, null, 2)}
                     </pre>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="raw" className="mt-4">
                   <div className="bg-muted p-4 rounded-md overflow-auto max-h-96">
-                    <pre className="text-sm">
-                      {JSON.stringify(testResult.data, null, 2)}
+                    <pre className="text-sm whitespace-pre-wrap break-words font-mono">
+                      {typeof testResult.data === 'string'
+                        ? testResult.data
+                        : JSON.stringify(testResult.data, null, 2)}
                     </pre>
                   </div>
                 </TabsContent>

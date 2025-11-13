@@ -646,6 +646,135 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
+  const parseCacheDuration = (cache: string): number => {
+    switch (cache) {
+      case '5M': return 300;
+      case '15M': return 900;
+      case '30M': return 1800;
+      case '1H': return 3600;
+      default: return 0;
+    }
+  };
+
+  const handleSaveTest = async (testAgentData: Partial<Agent>): Promise<{ success: boolean; agentId?: string; error?: string }> => {
+    // This function saves a temporary test agent and returns its ID
+    try {
+      // Sync auth settings before saving
+      const authData = securityStepRef.current?.syncAuthToFormData();
+
+      // Save new data sources first if needed
+      const savedDataSourceIds: string[] = [];
+      const unsavedSources = newDataSources.filter(ds => !ds.id && ds.name && ds.type);
+
+      if (unsavedSources.length > 0) {
+        for (const newSource of unsavedSources) {
+          const { data, error } = await supabase
+            .from('data_sources')
+            .insert({
+              name: newSource.name,
+              type: newSource.type,
+              category: newSource.category || null,
+              api_config: newSource.api_config || null,
+              rss_config: newSource.rss_config || null,
+              file_config: newSource.file_config || null,
+              database_config: newSource.database_config || null
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          if (data) savedDataSourceIds.push((data as any).id);
+        }
+      }
+
+      // Get user ID
+      const userId = isDevelopment && SKIP_AUTH_IN_DEV ? DEV_USER_ID : (await supabase.auth.getUser()).data.user?.id;
+
+      // Prepare data source IDs (existing + newly saved)
+      const allDataSourceIds = [
+        ...(testAgentData.dataSources?.map(ds => ds.id || ds.feedId) || []),
+        ...savedDataSourceIds
+      ].filter(Boolean);
+
+      // Insert the test agent into api_endpoints
+      // Structure schema_config to match expected format for RSS
+      const formatOptions = testAgentData.formatOptions || {};
+      const schema_config = {
+        environment: testAgentData.environment || 'production',
+        autoStart: testAgentData.autoStart !== undefined ? testAgentData.autoStart : true,
+        generateDocs: testAgentData.generateDocs !== undefined ? testAgentData.generateDocs : true,
+        schema: {
+          metadata: formatOptions
+        },
+        mapping: []
+      };
+
+      const { data: endpoint, error: endpointError } = await supabase
+        .from('api_endpoints')
+        .insert({
+          name: testAgentData.name,
+          slug: testAgentData.slug,
+          description: testAgentData.description || null,
+          output_format: testAgentData.format?.toLowerCase() as any,
+          schema_config,
+          transform_config: {
+            transformations: testAgentData.transforms || [],
+            pipeline: []
+          },
+          relationship_config: { relationships: testAgentData.relationships || [] },
+          cache_config: {
+            enabled: testAgentData.cache !== 'OFF',
+            ttl: parseCacheDuration(testAgentData.cache || '15M')
+          },
+          auth_config: {
+            required: authData?.requiresAuth ?? testAgentData.requiresAuth ?? false,
+            type: authData?.auth || testAgentData.auth || 'none',
+            config: authData?.authConfig || testAgentData.authConfig || {}
+          },
+          rate_limit_config: {
+            enabled: false,
+            requests_per_minute: 60
+          },
+          active: testAgentData.status === 'ACTIVE',
+          user_id: userId
+        })
+        .select()
+        .single();
+
+      if (endpointError) throw endpointError;
+      if (!endpoint) throw new Error('Failed to create test endpoint');
+
+      // Link data sources to the endpoint
+      if (allDataSourceIds.length > 0) {
+        const junctionRecords = allDataSourceIds.map((sourceId, index) => ({
+          endpoint_id: (endpoint as any).id,
+          data_source_id: sourceId,
+          is_primary: index === 0,
+          join_config: {},
+          filter_config: {},
+          sort_order: index
+        }));
+
+        const { error: junctionError } = await supabase
+          .from('api_endpoint_sources')
+          .insert(junctionRecords);
+
+        if (junctionError) throw junctionError;
+      }
+
+      return {
+        success: true,
+        agentId: (endpoint as any).id
+      };
+    } catch (error: any) {
+      console.error('Failed to save test agent:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to create test endpoint'
+      };
+    }
+  };
+
   const handleSave = async (closeDialog: boolean = true) => {
     // Sync auth settings from SecurityStep before saving and get the auth data synchronously
     const authData = securityStepRef.current?.syncAuthToFormData();
@@ -684,12 +813,18 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             console.log('Saved data source:', data);
             savedDataSourceIds.push((data as any).id);
 
-            // Track newly saved source
+            // Track newly saved source with full configuration for testing
             const newAgentSource: AgentDataSource = {
               id: (data as any).id, // Use database UUID directly, no temporary ID
               name: (data as any).name,
               feedId: (data as any).id,
-              category: (data as any).category as AgentDataType
+              category: (data as any).category as AgentDataType,
+              // Include configuration fields so test function can access them
+              type: (data as any).type,
+              api_config: (data as any).api_config,
+              rss_config: (data as any).rss_config,
+              database_config: (data as any).database_config,
+              file_config: (data as any).file_config
             };
 
             newlySavedSources.push(newAgentSource);
@@ -2588,7 +2723,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             />
           )}
           {currentStep === 'test' && (
-            <TestStep formData={formData} />
+            <TestStep formData={formData} onSaveTest={handleSaveTest} />
           )}
           {currentStep === 'review' && renderReview()}
         </div>

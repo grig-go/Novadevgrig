@@ -45,6 +45,12 @@ export interface AgentDataSource {
   name: string;
   feedId?: string; // Reference to an existing feed
   category: AgentDataType;
+  // Configuration fields (needed for testing)
+  type?: string;
+  api_config?: any;
+  rss_config?: any;
+  database_config?: any;
+  file_config?: any;
 }
 
 export interface AgentDataRelationship {

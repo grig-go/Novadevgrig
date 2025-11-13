@@ -57,7 +57,12 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     name: eps.data_source?.name || 'Unknown Source',
     feedId: eps.data_source_id,
     category: eps.data_source?.category,
-    type: eps.data_source?.type
+    type: eps.data_source?.type,
+    // Include configuration fields so test function can access them
+    api_config: eps.data_source?.api_config,
+    rss_config: eps.data_source?.rss_config,
+    database_config: eps.data_source?.database_config,
+    file_config: eps.data_source?.file_config
   })) || [];
 
   // Extract all unique categories from the data sources
