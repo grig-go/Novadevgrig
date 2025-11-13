@@ -29,7 +29,7 @@ import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants
 interface AgentWizardProps {
   open: boolean;
   onClose: () => void;
-  onSave: (agent: Agent, closeDialog?: boolean) => void;
+  onSave: (agent: Agent, closeDialog?: boolean) => Promise<void>;
   editAgent?: Agent;
   availableFeeds?: Array<{ id: string; name: string; category: string }>;
 }
@@ -100,6 +100,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [newDataSources, setNewDataSources] = useState<any[]>([]);
   const [isSavingDataSources, setIsSavingDataSources] = useState(false);
 
+  // State for slug validation
+  const [slugExists, setSlugExists] = useState(false);
+  const [checkingSlug, setCheckingSlug] = useState(false);
+
   // State for test connection results
   const [testResults, setTestResults] = useState<Record<number, any>>({});
   const [testLoading, setTestLoading] = useState<Record<number, boolean>>({});
@@ -107,6 +111,48 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // State for sample data from data sources
   const [sampleData, setSampleData] = useState<Record<string, any>>({});
+
+  // Check if slug already exists
+  const checkSlugExists = async (slug: string) => {
+    if (!slug || slug.trim() === '') {
+      setSlugExists(false);
+      return;
+    }
+
+    // Skip check if editing and slug hasn't changed
+    if (editAgent && editAgent.slug === slug) {
+      setSlugExists(false);
+      return;
+    }
+
+    setCheckingSlug(true);
+    try {
+      const { data, error } = await supabase
+        .from('api_endpoints')
+        .select('id')
+        .eq('slug', slug)
+        .limit(1);
+
+      if (error) throw error;
+      setSlugExists(data && data.length > 0);
+    } catch (error) {
+      console.error('Error checking slug:', error);
+      setSlugExists(false);
+    } finally {
+      setCheckingSlug(false);
+    }
+  };
+
+  // Debounced slug check
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (formData.slug) {
+        checkSlugExists(formData.slug);
+      }
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.slug, editAgent]);
 
   // Helper function to extract JSON fields
   const extractJsonFields = (data: any, prefix: string = ''): string[] => {
@@ -689,12 +735,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       runCount: editAgent?.runCount || 0
     };
 
-    // Pass closeDialog parameter to parent
-    onSave(newAgent, closeDialog);
+    try {
+      // Pass closeDialog parameter to parent and await the result
+      await onSave(newAgent, closeDialog);
 
-    // Only close dialog locally if requested
-    if (closeDialog) {
-      handleClose();
+      // Only close dialog locally if requested AND save succeeded
+      if (closeDialog) {
+        handleClose();
+      }
+    } catch (error) {
+      // Don't close dialog on error - user can see the error toast and fix it
+      console.error('Save failed, keeping dialog open:', error);
     }
   };
 
@@ -729,7 +780,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     switch (currentStep) {
       case 'basic':
         return formData.name && formData.name.trim().length > 0 &&
-               formData.slug && formData.slug.trim().length > 0;
+               formData.slug && formData.slug.trim().length > 0 &&
+               !slugExists && !checkingSlug;
       case 'dataType':
         return Array.isArray(formData.dataType) ? formData.dataType.length > 0 : formData.dataType !== undefined;
       case 'dataSources':
@@ -856,8 +908,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             value={formData.slug || ''}
             onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
             placeholder="my-api-endpoint"
+            className={slugExists ? 'border-red-500' : ''}
           />
-          {formData.slug && (
+          {checkingSlug && (
+            <div className="text-sm text-muted-foreground">
+              Checking availability...
+            </div>
+          )}
+          {slugExists && !checkingSlug && (
+            <div className="text-sm text-red-500">
+              This slug is already in use. Please choose a different one.
+            </div>
+          )}
+          {formData.slug && !slugExists && !checkingSlug && (
             <div className="bg-muted p-2 rounded text-sm">
               <span className="text-muted-foreground">Your API will be available at:</span>{' '}
               <code className="text-foreground">/api/{formData.slug}</code>
@@ -2220,8 +2283,19 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 value={formData.slug || ''}
                 onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                 placeholder="my-api-endpoint"
+                className={slugExists ? 'border-red-500' : ''}
               />
-              {formData.slug && (
+              {checkingSlug && (
+                <div className="text-sm text-muted-foreground">
+                  Checking availability...
+                </div>
+              )}
+              {slugExists && !checkingSlug && (
+                <div className="text-sm text-red-500">
+                  This slug is already in use. Please choose a different one.
+                </div>
+              )}
+              {formData.slug && !slugExists && !checkingSlug && (
                 <div className="bg-muted p-2 rounded text-sm">
                   <span className="text-muted-foreground">Your API will be available at:</span>{' '}
                   <code className="text-foreground">/api/{formData.slug}</code>

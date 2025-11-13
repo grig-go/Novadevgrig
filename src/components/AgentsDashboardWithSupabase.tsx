@@ -574,6 +574,8 @@ export function AgentsDashboardWithSupabase({
         description: editingAgent ? "Failed to update agent" : "Failed to create agent",
         variant: "destructive"
       });
+      // Re-throw the error so the wizard knows the save failed and keeps the dialog open
+      throw error;
     }
   };
 
