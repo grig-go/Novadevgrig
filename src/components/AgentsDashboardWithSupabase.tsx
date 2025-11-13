@@ -422,6 +422,34 @@ export function AgentsDashboardWithSupabase({
 
         if (error) throw error;
 
+        // Update api_endpoint_sources relationships
+        // First, delete all existing relationships
+        await supabase
+          .from('api_endpoint_sources')
+          .delete()
+          .eq('endpoint_id', agent.id);
+
+        // Then insert the new relationships
+        if (agent.dataSources && agent.dataSources.length > 0) {
+          const sourceRelations = agent.dataSources.map((source: any, index: number) => ({
+            endpoint_id: agent.id,
+            data_source_id: source.feedId,
+            is_primary: index === 0, // First source is primary
+            join_config: {},
+            filter_config: {},
+            sort_order: index
+          }));
+
+          const { error: relationsError } = await supabase
+            .from('api_endpoint_sources')
+            .insert(sourceRelations);
+
+          if (relationsError) {
+            console.error('Failed to update source relations:', relationsError);
+            throw relationsError;
+          }
+        }
+
         // Always show success toast
         toast({
           title: "Success",
@@ -429,11 +457,34 @@ export function AgentsDashboardWithSupabase({
         });
       } else {
         // Create new agent
-        const { error } = await supabase
+        const { data: newEndpoint, error } = await supabase
           .from('api_endpoints')
-          .insert(endpointData);
+          .insert(endpointData)
+          .select()
+          .single();
 
         if (error) throw error;
+
+        // Insert api_endpoint_sources relationships
+        if (newEndpoint && agent.dataSources && agent.dataSources.length > 0) {
+          const sourceRelations = agent.dataSources.map((source: any, index: number) => ({
+            endpoint_id: newEndpoint.id,
+            data_source_id: source.feedId,
+            is_primary: index === 0, // First source is primary
+            join_config: {},
+            filter_config: {},
+            sort_order: index
+          }));
+
+          const { error: relationsError } = await supabase
+            .from('api_endpoint_sources')
+            .insert(sourceRelations);
+
+          if (relationsError) {
+            console.error('Failed to create source relations:', relationsError);
+            throw relationsError;
+          }
+        }
 
         // Always show success toast
         toast({
