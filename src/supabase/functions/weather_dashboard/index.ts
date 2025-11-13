@@ -95,6 +95,25 @@ app.get("/locations", async (c)=>{
     return jsonErr(c, 500, "LOCATIONS_FETCH_FAILED", err);
   }
 });
+// GET a single location by ID
+app.get("/locations/:id", async (c)=>{
+  try {
+    const id = c.req.param("id");
+    const { data, error } = await supabase.from("weather_locations").select("*").eq("id", id).single();
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return jsonErr(c, 404, "LOCATION_NOT_FOUND", `Location with id ${id} not found`);
+      }
+      return jsonErr(c, 500, "LOCATION_FETCH_FAILED", error.message);
+    }
+    return c.json({
+      ok: true,
+      location: data
+    });
+  } catch (err) {
+    return jsonErr(c, 500, "LOCATION_FETCH_FAILED", err);
+  }
+});
 // POST add a new location
 app.post("/locations", async (c)=>{
   try {
@@ -178,24 +197,21 @@ app.put("/locations/:id", async (c)=>{
     const id = c.req.param("id");
     const body = await safeJson(c);
     const { custom_name, channel_id } = body;
-    
-    console.log(`✏️ Updating location ${id}`, { custom_name, channel_id });
-    
+    console.log(`✏️ Updating location ${id}`, {
+      custom_name,
+      channel_id
+    });
     const updateData = {
       updated_at: new Date().toISOString()
     };
-    
     if (custom_name !== undefined) {
       updateData.custom_name = custom_name || null;
     }
-    
     if (channel_id !== undefined) {
       updateData.channel_id = channel_id || null;
       console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} channel for location ${id}`);
     }
-    
     const { data, error } = await supabase.from("weather_locations").update(updateData).eq("id", id).select().single();
-    
     if (error) {
       console.error("Failed to update location:", error);
       return jsonErr(c, 500, "LOCATION_UPDATE_FAILED", error.message);
@@ -1051,16 +1067,12 @@ app.put("/providers", async (c)=>{
 app.get("/channels", async (c)=>{
   try {
     console.log("📺 Fetching channels list for weather location assignment");
-    
     const { data, error } = await supabase.from("channels").select("id, name").eq("status", "active").order("name");
-    
     if (error) {
       console.error("Failed to fetch channels:", error);
       return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", error.message);
     }
-    
     console.log(`✅ Found ${data?.length || 0} active channels`);
-    
     return c.json({
       ok: true,
       channels: data || []
@@ -1174,79 +1186,13 @@ app.post("/test-provider", async (c)=>{
   }
 });
 // ============================================================================
-// AI INSIGHTS
+// AI INSIGHTS - MIGRATED TO ai_insights EDGE FUNCTION
 // ============================================================================
-app.get("/ai-insights", async (c)=>{
-  try {
-    const { data, error } = await supabase.from("ai_insights_weather").select("*").order("created_at", {
-      ascending: false
-    });
-    if (error) return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", error.message);
-    return c.json({
-      ok: true,
-      insights: data || []
-    });
-  } catch (err) {
-    return jsonErr(c, 500, "INSIGHTS_FETCH_FAILED", err);
-  }
-});
-app.post("/ai-insights", async (c)=>{
-  try {
-    const body = await safeJson(c);
-    const { question, response, selectedLocations, insightType, provider, model } = body;
-    if (!question || !response) {
-      return jsonErr(c, 400, "INVALID_INSIGHT", "Question and response required");
-    }
-    console.log(`💾 Saving AI insight: "${question.substring(0, 50)}..."`);
-    console.log(`📊 Insight data:`, {
-      question,
-      insightType,
-      provider,
-      model,
-      selectedLocations
-    });
-    const { data, error } = await supabase.from("ai_insights_weather").insert({
-      topic: question,
-      insight: response,
-      category: insightType || "all",
-      metadata: JSON.stringify({
-        question,
-        insightType,
-        provider,
-        model,
-        selectedLocations
-      }),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }).select().single();
-    if (error) {
-      console.error("❌ Error saving insight to database:", error);
-      console.error("❌ Error details:", JSON.stringify(error, null, 2));
-      return jsonErr(c, 500, "INSIGHT_SAVE_FAILED", error.message);
-    }
-    console.log(`✅ Insight saved with ID: ${data.id}`);
-    return c.json({
-      ok: true,
-      insight: data
-    });
-  } catch (err) {
-    console.error("❌ Exception saving insight:", err);
-    return jsonErr(c, 500, "INSIGHT_SAVE_FAILED", err);
-  }
-});
-app.delete("/ai-insights/:id", async (c)=>{
-  try {
-    const id = c.req.param("id");
-    const { error } = await supabase.from("ai_insights_weather").delete().eq("id", id);
-    if (error) return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", error.message);
-    return c.json({
-      ok: true,
-      success: true
-    });
-  } catch (err) {
-    return jsonErr(c, 500, "INSIGHT_DELETE_FAILED", err);
-  }
-});
+// All weather AI insights routes have been migrated to the ai_insights edge function.
+// Use the following endpoints instead:
+//   GET    /functions/v1/ai_insights/weather
+//   POST   /functions/v1/ai_insights/weather
+//   DELETE /functions/v1/ai_insights/weather/:id
 // ============================================================================
 // ============================================================================
 // WEATHER CSV INGEST (News12 format — with timestamp + dedupe fix)
@@ -1265,8 +1211,22 @@ app.get("/weather-data-csv", async (c)=>{
     const csvText = await res.text();
     const delimiter = csvText.includes("\t") ? "\t" : ",";
     let lines = csvText.trim().split(/\r?\n/);
-    // 🧹 Skip "Generated:" header
-    if (lines[0].startsWith("Generated:")) lines = lines.slice(1);
+    // 🕓 Extract "Generated:" timestamp BEFORE removing it
+    let generatedBaseDate = new Date();
+    if (lines[0].startsWith("Generated:")) {
+      const match = lines[0].match(/^Generated:\s*(.+)$/);
+      if (match) {
+        generatedBaseDate = new Date(match[1].trim());
+        console.log(`🕓 Using Generated base date: ${generatedBaseDate.toISOString()}`);
+      } else {
+        console.warn("⚠️ Could not parse Generated timestamp, using current date instead");
+      }
+      // Always log the final base date for verification
+      console.log(`[weather-data-csv] ✅ Parsed Generated base date: ${generatedBaseDate.toISOString()}`);
+      // Remove the header line so parsing continues correctly
+      lines = lines.slice(1);
+    }
+    // Continue parsing CSV
     const headers = lines[0].split(delimiter).map((h)=>h.trim());
     const rows = lines.slice(1).map((l)=>{
       const vals = l.split(delimiter);
@@ -1353,14 +1313,32 @@ app.get("/weather-data-csv", async (c)=>{
           created_at: new Date().toISOString()
         });
       } else {
-        // Compute forecast date based on ForecastName (e.g., Today, Tomorrow, Day 3)
+        // Compute forecast date based on CSV "Generated:" timestamp
+        // Extract once from file header if available
+        if (!globalThis.generatedBaseDate) {
+          const match = csvText.match(/^Generated:\s*([^\n\r]+)/m);
+          if (match) {
+            globalThis.generatedBaseDate = new Date(match[1].trim());
+            console.log(`🕓 Using Generated timestamp as base date: ${globalThis.generatedBaseDate.toISOString()}`);
+          } else {
+            globalThis.generatedBaseDate = new Date(); // fallback
+            console.warn("⚠️ No Generated timestamp found in CSV; using current date as base");
+          }
+        }
+        // Helper to compute forecast date relative to Generated base date
         function computeForecastDate(forecastName) {
-          const now = new Date();
+          const base = new Date(generatedBaseDate);
           const lower = forecastName.toLowerCase();
-          if (lower.includes("tomorrow")) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-          if (lower.includes("day 3") || lower.includes("day3")) return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
-          if (lower.includes("today")) return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          return now; // fallback
+          let offset = 0;
+          if (lower.includes("tomorrow") || lower.includes("day 2")) offset = 1;
+          else if (lower.includes("day 3")) offset = 2;
+          else if (lower.includes("day 4")) offset = 3;
+          else if (lower.includes("day 5")) offset = 4;
+          else if (lower.includes("day 6")) offset = 5;
+          else if (lower.includes("day 7")) offset = 6;
+          const result = new Date(base);
+          result.setDate(base.getDate() + offset);
+          return result;
         }
         const fcDate = computeForecastDate(forecastName);
         forecastRows.push({
@@ -1394,11 +1372,28 @@ app.get("/weather-data-csv", async (c)=>{
       });
       if (currErr) throw new Error("weather_current upsert failed: " + currErr.message);
     }
+    // 🧹 Clean up old forecasts before inserting new ones
+    const uniqueForecastLocations = [
+      ...new Set(dedupedForecast.map((f)=>f.location_id))
+    ];
+    for (const locId of uniqueForecastLocations){
+      const { error: delErr } = await supabase.from("weather_daily_forecast").delete().eq("location_id", locId);
+      if (delErr) {
+        console.warn(`⚠️ Failed to delete old forecasts for ${locId}:`, delErr.message);
+      } else {
+        console.log(`🧹 Cleared old forecasts for ${locId}`);
+      }
+    }
+    // 💾 Now insert the new forecast rows
     if (dedupedForecast.length > 0) {
       const { error: foreErr } = await supabase.from("weather_daily_forecast").upsert(dedupedForecast, {
         onConflict: "location_id,forecast_date,provider_id"
       });
-      if (foreErr) throw new Error("weather_daily_forecast upsert failed: " + foreErr.message);
+      if (foreErr) {
+        throw new Error("weather_daily_forecast upsert failed: " + foreErr.message);
+      } else {
+        console.log(`✅ Upserted ${dedupedForecast.length} new forecast rows`);
+      }
     }
     await supabase.from("data_providers").update({
       last_run: new Date().toISOString()

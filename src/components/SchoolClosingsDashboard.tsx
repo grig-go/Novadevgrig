@@ -14,6 +14,11 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { ScrollArea } from "./ui/scroll-area";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "./ui/popover";
+import {
   Table,
   TableBody,
   TableCell,
@@ -57,10 +62,14 @@ import {
   Wind,
   Brain,
   Trash2,
+  Edit,
   Image,
   Video,
   Music,
   Loader2,
+  ChevronDown,
+  Check,
+  Rss,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "motion/react";
@@ -103,8 +112,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [schoolToDelete, setSchoolToDelete] = useState<SchoolClosing | null>(null);
+  const [schoolToEdit, setSchoolToEdit] = useState<SchoolClosing | null>(null);
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [newSchool, setNewSchool] = useState({
     state: "NJ",
@@ -117,6 +128,7 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     notes: "",
     delay_minutes: "",
     dismissal_time: "",
+    zip: "",
   });
 
   // Fetch all closings from backend
@@ -307,6 +319,148 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     }
   };
 
+  // Edit manual entry
+  const handleEditSchool = (school: SchoolClosing) => {
+    if (!school.id) {
+      toast.error("Cannot edit: No ID found");
+      return;
+    }
+
+    console.log("🔍 [SchoolClosings] Editing school:", school);
+    console.log("🔍 [SchoolClosings] Raw data:", school.raw_data);
+    console.log("🔍 [SchoolClosings] Status description:", school.status_description);
+
+    // Parse status from backend format
+    // Backend can have: "Delayed 90 Minutes", "Closed", "Early Dismissal 12:00 PM", etc.
+    let baseStatus = "Closed";
+    let delayMinutes = "";
+    let dismissalTime = "";
+    
+    const statusDesc = school.status_description || "";
+    
+    if (statusDesc.includes("Delayed") || statusDesc.toUpperCase().includes("DELAYED")) {
+      baseStatus = "Delayed";
+      // Extract delay minutes from status like "Delayed 90 Minutes"
+      const delayMatch = statusDesc.match(/(\d+)\s*Minutes?/i);
+      if (delayMatch) {
+        delayMinutes = delayMatch[1];
+      }
+      // Also check raw_data
+      if (!delayMinutes && school.raw_data?.DELAY) {
+        delayMinutes = school.raw_data.DELAY.toString();
+      }
+    } else if (statusDesc.includes("Early Dismissal") || statusDesc.toUpperCase().includes("EARLY DISMISSAL")) {
+      baseStatus = "Early Dismissal";
+      // Extract dismissal time from status like "Early Dismissal 12:00 PM"
+      const timeMatch = statusDesc.match(/Early Dismissal\s+(.+)/i);
+      if (timeMatch) {
+        dismissalTime = timeMatch[1].trim();
+      }
+      // Also check raw_data
+      if (!dismissalTime && school.raw_data?.DISMISSAL) {
+        dismissalTime = school.raw_data.DISMISSAL;
+      }
+    } else {
+      baseStatus = "Closed";
+    }
+
+    console.log("📝 [SchoolClosings] Parsed status:", baseStatus);
+    console.log("📝 [SchoolClosings] Delay minutes:", delayMinutes);
+    console.log("📝 [SchoolClosings] Dismissal time:", dismissalTime);
+
+    // Populate edit form with school data
+    setSchoolToEdit(school);
+    setNewSchool({
+      state: school.state || "NJ",
+      city: school.city || "",
+      county_name: school.county_name || "",
+      organization_name: school.organization_name || "",
+      type: school.type || "School",
+      status_day: school.status_day || "Today",
+      status_description: baseStatus,
+      notes: school.raw_data?.NOTES || "",
+      delay_minutes: delayMinutes,
+      dismissal_time: dismissalTime,
+      zip: school.raw_data?.ZIP || school.raw_data?.zip || "",
+    });
+    setEditDialogOpen(true);
+  };
+
+  // Confirm and execute edit
+  const confirmEditSchool = async () => {
+    if (!schoolToEdit || !schoolToEdit.id) return;
+
+    // Validate required fields
+    if (!newSchool.organization_name || !newSchool.status_description) {
+      toast.error("Please fill in required fields");
+      return;
+    }
+
+    // Format status_description based on type (same as Add function)
+    let formattedStatus = newSchool.status_description;
+    
+    if (newSchool.status_description === "Delayed" && newSchool.delay_minutes) {
+      formattedStatus = `Delayed ${newSchool.delay_minutes} Minutes`;
+    } else if (newSchool.status_description === "Early Dismissal" && newSchool.dismissal_time) {
+      formattedStatus = `Early Dismissal ${newSchool.dismissal_time}`;
+    }
+
+    const dataToSend = {
+      ...newSchool,
+      status_description: formattedStatus,
+    };
+
+    console.log("📤 [SchoolClosings] Updating manual entry:", dataToSend);
+
+    try {
+      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual/${schoolToEdit.id}`;
+      console.log("📡 [SchoolClosings] PUT to:", url);
+      
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(dataToSend),
+      });
+
+      console.log("📥 [SchoolClosings] Response status:", response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ [SchoolClosings] Error response:", errorText);
+        throw new Error(`Failed to update: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log("✅ [SchoolClosings] Update result:", result);
+      toast.success("School closing updated successfully");
+      
+      // Reload the data
+      await fetchSchoolClosings();
+      
+      // Reset form and close dialog
+      setNewSchool({
+        state: "NJ",
+        city: "",
+        county_name: "",
+        organization_name: "",
+        type: "School",
+        status_day: "Today",
+        status_description: "Closed",
+        notes: "",
+        delay_minutes: "",
+        dismissal_time: "",
+      });
+      setEditDialogOpen(false);
+      setSchoolToEdit(null);
+    } catch (error) {
+      console.error("❌ [SchoolClosings] Error updating school:", error);
+      toast.error(`Failed to update school closing: ${error.message}`);
+    }
+  };
+
   // Get unique values for filters
   const uniqueCounties = useMemo(
     () => Array.from(new Set(schools.map((s) => s.county_name))).sort(),
@@ -374,7 +528,9 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
 
       // Region filter (multi-select)
       const matchesRegion =
-        regionFilter.length === 0 || regionFilter.includes(school.region_id);
+        regionFilter.length === 0 || 
+        regionFilter.includes(school.region_id) ||
+        school.region_id === "manual"; // Always show manual entries
 
       return (
         matchesSearch &&
@@ -547,19 +703,19 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
           transition={{ duration: 0.3, delay: 0, type: "spring", stiffness: 100 }}
           whileHover={{ y: -4, transition: { duration: 0.2 } }}
         >
-          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+          <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-red-500/10 group">
             <motion.div
-              className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              className="absolute inset-0 bg-gradient-to-br from-red-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
               initial={false}
             />
             <CardContent className="p-6 relative">
               <div className="flex items-center gap-4">
                 <motion.div
-                  className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                  className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg"
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: "spring", stiffness: 400 }}
                 >
-                  <School className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                  <School className="w-6 h-6 text-red-600 dark:text-red-400" />
                 </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Locations</p>
@@ -653,7 +809,7 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                   whileHover={{ scale: 1.1, rotate: 5 }}
                   transition={{ type: "spring", stiffness: 400 }}
                 >
-                  <Wind className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                  <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                 </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">Data Providers</p>
@@ -687,103 +843,54 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
           <div className="space-y-4">
             {/* Search and View Toggle Row */}
             <div className="flex items-center gap-4">
-              <motion.div 
-                className="flex-1 relative"
-                whileHover={{ scale: 1.01 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
-                <motion.div
-                  animate={{ x: [0, 2, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                </motion.div>
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search by school name, city, county, state, or zip..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
                 />
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400 }}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="relative"
               >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowFilters(!showFilters)}
-                  className="relative"
-                >
-                  <motion.div
-                    animate={{ rotate: showFilters ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 200 }}
+                <Filter className="w-4 h-4 mr-2" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
                   >
-                    <Filter className="w-4 h-4 mr-2" />
-                  </motion.div>
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      exit={{ scale: 0 }}
-                      transition={{ type: "spring", stiffness: 500 }}
-                    >
-                      <Badge
-                        variant="destructive"
-                        className="ml-2 px-1.5 py-0 min-w-[20px] h-5"
-                      >
-                        {activeFilterCount}
-                      </Badge>
-                    </motion.div>
-                  )}
-                </Button>
-              </motion.div>
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
               <div className="flex items-center gap-1 border rounded-lg p-1">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                <Button
+                  variant={viewMode === "card" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("card")}
                 >
-                  <Button
-                    variant={viewMode === "card" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("card")}
-                  >
-                    <Grid3x3 className="w-4 h-4" />
-                  </Button>
-                </motion.div>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  <Grid3x3 className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant={viewMode === "list" ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setViewMode("list")}
                 >
-                  <Button
-                    variant={viewMode === "list" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("list")}
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </motion.div>
+                  <List className="w-4 h-4" />
+                </Button>
               </div>
             </div>
 
             {/* Filters Section */}
-            <AnimatePresence>
-              {showFilters && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3, type: "spring", stiffness: 200 }}
-                  className="overflow-hidden"
-                >
-                  <motion.div 
-                    className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t"
-                    initial={{ y: -20 }}
-                    animate={{ y: 0 }}
-                    transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
-                  >
+            {showFilters && (
+              <div className="overflow-hidden">
+                <div className="grid grid-cols-1 md:grid-cols-6 gap-4 pt-4 border-t">
                     <div className="space-y-2">
                       <Label>Status</Label>
                       <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -853,46 +960,62 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="region_id">Region ID</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Select region identifiers for school closings data
-                      </p>
-                      
-                      <div className="border rounded-md">
-                        <ScrollArea className="h-[140px]">
-                          <div className="p-2 space-y-2">
-                            {uniqueRegions.map((region) => (
-                              <div key={region} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`region-${region}`}
-                                  checked={regionFilter.includes(region)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setRegionFilter([...regionFilter, region]);
-                                    } else {
+                      <Label>Region ID</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                          >
+                            <span className="truncate">
+                              {regionFilter.length === 0
+                                ? "Select region identifiers for school closings data"
+                                : `${regionFilter.length} region${regionFilter.length !== 1 ? 's' : ''} selected`}
+                            </span>
+                            <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[200px] p-0" align="start">
+                          <ScrollArea className="h-[200px]">
+                            <div className="p-2 space-y-1">
+                              {uniqueRegions.map((region) => (
+                                <div
+                                  key={region}
+                                  className="flex items-center space-x-2 px-2 py-1.5 hover:bg-accent rounded-sm cursor-pointer"
+                                  onClick={() => {
+                                    if (regionFilter.includes(region)) {
                                       setRegionFilter(regionFilter.filter((r) => r !== region));
+                                    } else {
+                                      setRegionFilter([...regionFilter, region]);
                                     }
                                   }}
-                                />
-                                <label
-                                  htmlFor={`region-${region}`}
-                                  className="text-sm cursor-pointer flex-1"
                                 >
-                                  {region}
-                                </label>
-                              </div>
-                            ))}
-                            {uniqueRegions.length === 0 && (
-                              <p className="text-sm text-muted-foreground p-2">No regions available</p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      </div>
-                      {regionFilter.length > 0 && (
-                        <p className="text-xs text-muted-foreground">
-                          {regionFilter.length} region{regionFilter.length !== 1 ? 's' : ''} selected
-                        </p>
-                      )}
+                                  <Checkbox
+                                    id={`region-${region}`}
+                                    checked={regionFilter.includes(region)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setRegionFilter([...regionFilter, region]);
+                                      } else {
+                                        setRegionFilter(regionFilter.filter((r) => r !== region));
+                                      }
+                                    }}
+                                  />
+                                  <label
+                                    htmlFor={`region-${region}`}
+                                    className="text-sm cursor-pointer flex-1"
+                                  >
+                                    {region}
+                                  </label>
+                                </div>
+                              ))}
+                              {uniqueRegions.length === 0 && (
+                                <p className="text-sm text-muted-foreground p-2">No regions available</p>
+                              )}
+                            </div>
+                          </ScrollArea>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
                     <div className="space-y-2">
@@ -911,33 +1034,21 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         </SelectContent>
                       </Select>
                     </div>
-                  </motion.div>
+                </div>
 
-                  {activeFilterCount > 0 && (
-                    <motion.div 
-                      className="mt-4 flex justify-end"
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 }}
+                {activeFilterCount > 0 && (
+                  <div className="mt-4 flex justify-end">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearFilters}
                     >
-                      <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 400 }}
-                      >
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleClearFilters}
-                        >
-                          Clear All Filters
-                        </Button>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                      Clear All Filters
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1029,29 +1140,53 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {school.provider_id === "manual_entry" && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
-                            whileHover={{ 
-                              scale: 1.15,
-                              rotate: [0, -10, 10, -10, 0],
-                              transition: { duration: 0.5 }
-                            }}
-                            whileTap={{ scale: 0.9 }}
-                          >
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteSchool(school);
+                          <>
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ type: "spring", stiffness: 300, delay: 0.15 }}
+                              whileHover={{ 
+                                scale: 1.15,
+                                transition: { duration: 0.3 }
                               }}
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              whileTap={{ scale: 0.9 }}
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </motion.div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditSchool(school);
+                                }}
+                                className="h-8 w-8 p-0 text-primary hover:text-primary hover:bg-primary/10"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                            </motion.div>
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                              whileHover={{ 
+                                scale: 1.15,
+                                rotate: [0, -10, 10, -10, 0],
+                                transition: { duration: 0.5 }
+                              }}
+                              whileTap={{ scale: 0.9 }}
+                            >
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSchool(school);
+                                }}
+                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </motion.div>
+                          </>
                         )}
                         <motion.div
                           animate={{ 
@@ -1384,12 +1519,9 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                 <Label>ZIP Code</Label>
                 <Input
                   placeholder="ZIP"
-                  value={newSchool.raw_data?.zip}
+                  value={newSchool.zip}
                   onChange={(e) =>
-                    setNewSchool({
-                      ...newSchool,
-                      raw_data: { ...newSchool.raw_data, zip: e.target.value },
-                    })
+                    setNewSchool({ ...newSchool, zip: e.target.value })
                   }
                 />
               </div>
@@ -1485,6 +1617,171 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Closing
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit School Closing Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5" />
+              Edit School Closing
+            </DialogTitle>
+            <DialogDescription>
+              Update the school closing or delay announcement
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>School Name *</Label>
+              <Input
+                placeholder="Enter school or district name"
+                value={newSchool.organization_name}
+                onChange={(e) =>
+                  setNewSchool({ ...newSchool, organization_name: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>City *</Label>
+                <Input
+                  placeholder="City"
+                  value={newSchool.city}
+                  onChange={(e) => setNewSchool({ ...newSchool, city: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>State *</Label>
+                <Input
+                  placeholder="State"
+                  value={newSchool.state}
+                  onChange={(e) => setNewSchool({ ...newSchool, state: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>County *</Label>
+                <Input
+                  placeholder="County name"
+                  value={newSchool.county_name}
+                  onChange={(e) =>
+                    setNewSchool({ ...newSchool, county_name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>ZIP Code</Label>
+                <Input
+                  placeholder="ZIP"
+                  value={newSchool.zip}
+                  onChange={(e) =>
+                    setNewSchool({ ...newSchool, zip: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Status *</Label>
+                <Select
+                  value={newSchool.status_description}
+                  onValueChange={(value) =>
+                    setNewSchool({ ...newSchool, status_description: value, delay_minutes: "", dismissal_time: "" })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Closed">Closed</SelectItem>
+                    <SelectItem value="Delayed">Delayed</SelectItem>
+                    <SelectItem value="Early Dismissal">Early Dismissal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {newSchool.status_description === "Delayed" && (
+                <div className="space-y-2">
+                  <Label>Delay Minutes *</Label>
+                  <Input
+                    type="number"
+                    placeholder="90"
+                    value={newSchool.delay_minutes}
+                    onChange={(e) =>
+                      setNewSchool({
+                        ...newSchool,
+                        delay_minutes: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+              
+              {newSchool.status_description === "Early Dismissal" && (
+                <div className="space-y-2">
+                  <Label>Dismissal Time *</Label>
+                  <Input
+                    type="text"
+                    placeholder="12:00 PM"
+                    value={newSchool.dismissal_time}
+                    onChange={(e) =>
+                      setNewSchool({
+                        ...newSchool,
+                        dismissal_time: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              )}
+              
+              {newSchool.status_description === "Closed" && (
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">No additional info needed</Label>
+                  <div className="h-10 flex items-center text-sm text-muted-foreground">
+                    School is fully closed
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Day *</Label>
+              <Select
+                value={newSchool.status_day}
+                onValueChange={(value) => setNewSchool({ ...newSchool, status_day: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Today">Today</SelectItem>
+                  <SelectItem value="Tomorrow">Tomorrow</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setEditDialogOpen(false);
+              setSchoolToEdit(null);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmEditSchool}
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Update Closing
             </Button>
           </DialogFooter>
         </DialogContent>

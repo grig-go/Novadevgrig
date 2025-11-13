@@ -27,6 +27,8 @@ import {
   CloudRain,
   Gauge,
   MoreHorizontal,
+  Check,
+  Target,
 } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 
@@ -48,6 +50,8 @@ interface WeatherFiltersProps {
   onPageChange: (page: number) => void;
   sortOrder: "asc" | "desc";
   onSortChange: (order: "asc" | "desc") => void;
+  itemsPerPage: number;
+  onItemsPerPageChange: (value: number) => void;
 }
 
 export function WeatherFilters({
@@ -61,12 +65,15 @@ export function WeatherFilters({
   onPageChange,
   sortOrder,
   onSortChange,
+  itemsPerPage,
+  onItemsPerPageChange,
 }: WeatherFiltersProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProvider, setSelectedProvider] = useState<string>("all");
   const [selectedCountry, setSelectedCountry] = useState<string>("all");
   const [selectedState, setSelectedState] = useState<string>("all");
   const [selectedTempRange, setSelectedTempRange] = useState<string>("all");
+  const [selectedChannel, setSelectedChannel] = useState<string>("all");
   const [providers, setProviders] = useState<Provider[]>([]);
 
   // Load providers when component mounts
@@ -142,13 +149,28 @@ export function WeatherFilters({
       );
     }
 
+    // Channel filter
+    if (selectedChannel !== "all") {
+      if (selectedChannel === "assigned") {
+        // Show all locations that have ANY channel assigned
+        filtered = filtered.filter(
+          (loc) => loc.location.channel_id != null && loc.location.channel_id !== ""
+        );
+      } else {
+        // Show locations with specific channel
+        filtered = filtered.filter(
+          (loc) => loc.location.channel_id === selectedChannel
+        );
+      }
+    }
+
     // View-specific filters
     if (currentView === "alerts") {
       filtered = filtered.filter((loc) => (loc.data.alerts?.length || 0) > 0);
     }
 
     onFilterChange(filtered);
-  }, [searchTerm, selectedProvider, selectedCountry, selectedState, selectedTempRange, currentView, locations, onFilterChange]);
+  }, [searchTerm, selectedProvider, selectedCountry, selectedState, selectedTempRange, selectedChannel, currentView, locations, onFilterChange]);
 
   // Get unique countries from locations
   const countries = Array.from(
@@ -159,6 +181,62 @@ export function WeatherFilters({
   const states = Array.from(
     new Set(locations.map((loc) => loc.location.admin1).filter(Boolean))
   ).sort();
+
+  // Get channels from locations that have channel assignments
+  // We need to fetch full channel data to get channel names
+  const [channelMap, setChannelMap] = useState<Map<string, string>>(new Map());
+  
+  useEffect(() => {
+    const fetchChannelNames = async () => {
+      // Get unique channel IDs from locations
+      const channelIds = Array.from(
+        new Set(
+          locations
+            .map((loc) => loc.location.channel_id)
+            .filter(Boolean)
+        )
+      );
+
+      if (channelIds.length === 0) {
+        setChannelMap(new Map());
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const allChannels = data.channels || [];
+          
+          // Filter to only channels that have locations assigned
+          const assignedChannels = allChannels.filter((ch: { id: string; name: string }) =>
+            channelIds.includes(ch.id)
+          );
+          
+          // Create a map of channel_id -> channel_name
+          const map = new Map(assignedChannels.map((ch: { id: string; name: string }) => [ch.id, ch.name]));
+          setChannelMap(map);
+        }
+      } catch (error) {
+        console.error('Error loading channel names:', error);
+      }
+    };
+
+    fetchChannelNames();
+  }, [locations]);
+
+  // Get channels that have locations assigned (sorted by name)
+  const channels = Array.from(channelMap.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const viewOptions: { value: WeatherView; label: string; icon: any }[] = [
     { value: "current", label: "Current", icon: CloudDrizzle },
@@ -191,7 +269,7 @@ export function WeatherFilters({
           </div>
 
           {/* Row 2: Search and Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3">
             {/* Search - spans 2 columns on large screens */}
             <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -266,12 +344,49 @@ export function WeatherFilters({
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Channel Filter */}
+            <Select value={selectedChannel} onValueChange={setSelectedChannel}>
+              <SelectTrigger>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4" />
+                  <SelectValue placeholder="All Channels" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Data Channels</SelectItem>
+                <SelectItem value="assigned">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-4 h-4 text-green-500" />
+                    Assigned Channels
+                  </div>
+                </SelectItem>
+                {channels.map((channel) => (
+                  <SelectItem key={channel.id} value={channel.id}>
+                    {channel.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Pagination - Media Library Style */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center gap-4">
+              <Select value={itemsPerPage.toString()} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Items per page" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="6">6 per page</SelectItem>
+                  <SelectItem value="9">9 per page</SelectItem>
+                  <SelectItem value="12">12 per page</SelectItem>
+                  <SelectItem value="15">15 per page</SelectItem>
+                  <SelectItem value="24">24 per page</SelectItem>
+                  <SelectItem value="50">50 per page</SelectItem>
+                </SelectContent>
+              </Select>
+              {totalPages > 1 && (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
@@ -319,12 +434,12 @@ export function WeatherFilters({
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Showing {totalResults} location{totalResults !== 1 ? "s" : ""}
-                </div>
+              )}
+              <div className="text-sm text-muted-foreground">
+                Showing {totalResults} location{totalResults !== 1 ? "s" : ""}
               </div>
             </div>
-          )}
+          </div>
         </div>
       </CardContent>
     </Card>

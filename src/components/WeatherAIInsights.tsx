@@ -79,7 +79,7 @@ export function WeatherAIInsights({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -130,7 +130,7 @@ export function WeatherAIInsights({
         setLoadingInsights(true);
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights`,
+          `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -236,7 +236,7 @@ export function WeatherAIInsights({
       context += `User Question: ${chatMessage}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
         {
           method: 'POST',
           headers: {
@@ -304,7 +304,7 @@ export function WeatherAIInsights({
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
         {
           method: 'POST',
           headers: {
@@ -346,7 +346,7 @@ export function WeatherAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather/${insightId}`,
         {
           method: 'DELETE',
           headers: {
@@ -560,7 +560,7 @@ export function WeatherAIInsights({
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-[400px] p-0" align="start">
-                        <ScrollArea className="max-h-[300px]">
+                        <ScrollArea className="h-[300px]">
                           <div className="p-2">
                             {locations.map((location) => (
                               <div
@@ -697,7 +697,7 @@ export function WeatherAIInsights({
                         )}
                       </Button>
                     </div>
-                    <ScrollArea className="max-h-[300px] p-4 bg-muted rounded-lg">
+                    <ScrollArea className="h-[300px] p-4 bg-muted rounded-lg">
                       <div className="prose prose-sm max-w-none dark:prose-invert">
                         <p className="whitespace-pre-wrap">{aiResponse}</p>
                       </div>
@@ -942,7 +942,7 @@ export function WeatherAIInsights({
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[400px] p-0" align="start">
-                <ScrollArea className="max-h-[300px]">
+                <ScrollArea className="h-[300px]">
                   <div className="p-2">
                     {locations.map((location) => (
                       <div

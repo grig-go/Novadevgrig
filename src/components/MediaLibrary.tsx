@@ -136,6 +136,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(20);
 
+  // Filters visibility state
+  const [showFilters, setShowFilters] = useState(false);
+
   // Derive unique AI models and creators from assets
   const uniqueAIModels = useMemo(() => {
     const models = assets
@@ -198,7 +201,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       try {
         setLoadingAIProviders(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -626,7 +629,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       console.log(`   • Provider ID: ${selectedAIProvider}`);
       
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
         {
           method: 'POST',
           headers: {
@@ -766,7 +769,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       // Step 1: Get raw API key
       console.log('🔑 Step 1: Fetching API key from backend...');
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/${selectedAIProvider}/reveal`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
         {
           method: 'POST',
           headers: {
@@ -1497,8 +1500,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 repeatDelay: 3,
                 ease: "easeInOut"
               }}
+              className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
             >
-              <HardDrive className="w-6 h-6" />
+              <ImageIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </motion.div>
             Media Library
           </h1>
@@ -1573,33 +1577,17 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="w-4 h-4" />
               Filters
               {activeFilterCount > 0 && (
                 <Badge variant="secondary" className="ml-1">{activeFilterCount}</Badge>
               )}
             </Button>
-            <Select 
-              value={itemsPerPage.toString()} 
-              onValueChange={(value) => {
-                setItemsPerPage(parseInt(value));
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10 per page</SelectItem>
-                <SelectItem value="20">20 per page</SelectItem>
-                <SelectItem value="50">50 per page</SelectItem>
-                <SelectItem value="100">100 per page</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {showFilters && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <Select value={selectedType} onValueChange={(value) => setSelectedType(value as MediaType | 'all')}>
               <SelectTrigger>
                 <SelectValue placeholder="Type" />
@@ -1689,6 +1677,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
               </SelectContent>
             </Select>
           </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1696,6 +1685,25 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       {assets.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
+            {/* Per Page Selector */}
+            <Select 
+              value={itemsPerPage.toString()} 
+              onValueChange={(value) => {
+                setItemsPerPage(parseInt(value));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 per page</SelectItem>
+                <SelectItem value="20">20 per page</SelectItem>
+                <SelectItem value="50">50 per page</SelectItem>
+                <SelectItem value="100">100 per page</SelectItem>
+              </SelectContent>
+            </Select>
+            
             {/* Pagination Controls */}
             {filteredAssets.length > 0 && totalPages > 1 && (
               <div className="flex items-center gap-2">

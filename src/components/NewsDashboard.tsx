@@ -12,32 +12,24 @@ import { toast } from "sonner@2.0.3";
 import { NewsDebugPanel } from "./NewsDebugPanel";
 import { NewsAIInsights } from "./NewsAIInsights";
 import { 
-  Newspaper, Database, Clock, RefreshCw, Loader2, ExternalLink, Archive, Rss
+  Newspaper, Clock, RefreshCw, Loader2, ExternalLink, Rss, Database
 } from "lucide-react";
-import { Switch } from "./ui/switch";
-import { motion } from "motion/react";
 
 interface NewsDashboardProps {
   onNavigateToFeeds?: () => void;
 }
 
+type TimeFilter = 'today' | 'yesterday' | 'week' | 'month' | 'all';
+
 export function NewsDashboard({ 
   onNavigateToFeeds
 }: NewsDashboardProps) {
-  // Filter states for API
+  // Filter states
   const [q, setQ] = useState<string>('');
-  const [country, setCountry] = useState<string>('us');
-  const [language, setLanguage] = useState<string>('en');
-  const [perProviderLimit, setPerProviderLimit] = useState<number>(10);
-  const [totalLimit, setTotalLimit] = useState<number>(100);
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
-  const [useStoredArticles, setUseStoredArticles] = useState<boolean>(true);
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
 
-  // Prepare API params (convert "all" to undefined for API)
-  const apiCountry = country === 'all' ? undefined : country;
-  const apiLanguage = language === 'all' ? undefined : language;
-
-  // Manual fetch state
+  // Articles state
   const [articles, setArticles] = useState<Article[]>([]);
   const [loadingArticles, setLoadingArticles] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,8 +73,107 @@ export function NewsDashboard({
     fetchProviders();
   }, []);
 
-  // Manual fetch function using RPC (same pattern as Finance Dashboard)
-  const handleFetchArticles = async () => {
+  // Fetch all articles on mount and when filters change
+  useEffect(() => {
+    fetchAllArticles();
+  }, [selectedProvider, timeFilter]);
+
+  // Fetch all articles from database
+  const fetchAllArticles = async () => {
+    console.log('🔄 [NEWS] Fetching all articles from database...');
+    setLoadingArticles(true);
+    setError(null);
+
+    try {
+      const url = new URL(`https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored`);
+      
+      // Add filters as query parameters
+      if (selectedProvider !== 'all') {
+        url.searchParams.set('provider', selectedProvider);
+      }
+      
+      // Add time filter
+      const dateFilter = getDateFilter(timeFilter);
+      if (dateFilter) {
+        url.searchParams.set('from_date', dateFilter);
+      }
+      
+      url.searchParams.set('limit', '1000');
+
+      console.log('📡 [NEWS] Fetching from:', url.toString());
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ [NEWS] Fetch failed:', errorText);
+        throw new Error(`Failed to fetch articles (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ [NEWS] Articles fetched:', data.articles?.length || 0);
+      
+      // Map API response to Article type
+      const mappedArticles: Article[] = (data.articles ?? []).map((article: any) => ({
+        id: article.id,
+        title: article.title,
+        description: article.description,
+        content: article.content,
+        url: article.url,
+        imageUrl: article.image_url,
+        publishedAt: article.published_at,
+        source: article.source,
+        author: article.author,
+        provider: article.provider,
+        country: article.country,
+        language: article.language,
+        createdAt: article.created_at,
+      }));
+
+      setArticles(mappedArticles);
+      
+      if (mappedArticles.length === 0) {
+        toast.info('No articles found. Click "Refresh Live" to fetch from news APIs.');
+      }
+    } catch (err) {
+      console.error('❌ [NEWS] Error:', err);
+      setError(String(err));
+      toast.error(err instanceof Error ? err.message : 'Failed to fetch articles');
+    } finally {
+      setLoadingArticles(false);
+    }
+  };
+
+  // Get date filter based on time selection
+  const getDateFilter = (filter: TimeFilter): string | null => {
+    const now = new Date();
+    let date: Date;
+
+    switch (filter) {
+      case 'today':
+        date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return date.toISOString();
+      case 'yesterday':
+        date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        return date.toISOString();
+      case 'week':
+        date = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return date.toISOString();
+      case 'month':
+        date = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        return date.toISOString();
+      case 'all':
+      default:
+        return null;
+    }
+  };
+
+  // Fetch new articles from live APIs
+  const handleRefreshLive = async () => {
     console.log('🔄 [NEWS] Starting fetch articles...');
     setLoadingArticles(true);
     setError(null);
@@ -155,12 +246,22 @@ export function NewsDashboard({
         return;
       }
 
-      // Step 3: Fetch articles from backend endpoint with provider credentials
+      // Step 3: Format providers for edge function (map snake_case to camelCase)
+      const formattedProviders = providerDetails.map((p: any) => ({
+        name: p.name,
+        type: p.type,
+        apiKey: p.api_key || p.config?.api_key,
+        country: p.config?.country,
+        language: p.config?.language
+      }));
+
+      console.log('📡 [NEWS] Formatted providers:', formattedProviders.map(p => ({ name: p.name, type: p.type, hasKey: !!p.apiKey })));
+
+      // Step 4: Fetch articles from backend endpoint
       const url = `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles`;
 
       console.log('📡 [NEWS] Fetching articles from:', url);
-      console.log('📡 [NEWS] Sending providers:', providerDetails.map(p => ({ name: p.name, type: p.type })));
-      console.log('📡 [NEWS] Params:', { perProviderLimit, totalLimit, q, country: apiCountry, language: apiLanguage });
+      console.log('📡 [NEWS] Params:', { q, country: formattedProviders[0]?.country, language: formattedProviders[0]?.language });
 
       const articlesResponse = await fetch(url, {
         method: 'POST',
@@ -170,12 +271,12 @@ export function NewsDashboard({
           'Cache-Control': 'no-cache'
         },
         body: JSON.stringify({
-          providers: providerDetails,
+          providers: formattedProviders,
           q,
-          country: apiCountry,
-          language: apiLanguage,
-          perProviderLimit,
-          totalLimit
+          country: formattedProviders[0]?.country,
+          language: formattedProviders[0]?.language,
+          perProviderLimit: 10,
+          totalLimit: 100
         })
       });
 
@@ -205,7 +306,10 @@ export function NewsDashboard({
       }));
       
       setArticles(mappedArticles);
-      toast.success(`Fetched ${mappedArticles.length} articles from ${activeProviders.length} provider(s)`);
+      toast.success(`Fetched ${mappedArticles.length} new articles from ${activeProviders.length} provider(s)`);
+      
+      // Reload all articles from database to include the new ones
+      await fetchAllArticles();
       
     } catch (err) {
       console.error('❌ [NEWS] Error fetching news:', err);
@@ -216,74 +320,6 @@ export function NewsDashboard({
       console.log('🏁 [NEWS] Fetch complete');
     }
   };
-
-  // Fetch stored articles from database
-  const handleFetchStoredArticles = async () => {
-    console.log('🔄 [NEWS] Fetching stored articles from database...');
-    setLoadingArticles(true);
-    setError(null);
-
-    try {
-      const url = new URL(`https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored`);
-      
-      // Add filters as query parameters
-      if (selectedProvider !== 'all') {
-        url.searchParams.set('provider', selectedProvider);
-      }
-      if (apiLanguage) {
-        url.searchParams.set('language', apiLanguage);
-      }
-      if (apiCountry) {
-        url.searchParams.set('country', apiCountry);
-      }
-      url.searchParams.set('limit', String(totalLimit));
-
-      const response = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'apikey': publicAnonKey,
-        }
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ [NEWS] Response error:', errorText);
-        throw new Error(`Failed to fetch stored articles: ${response.status}. ${errorText}`);
-      }
-
-      const data = await response.json();
-      console.log('✅ [NEWS] Fetched stored articles:', data.articles?.length || 0);
-      
-      // Map API response (snake_case) to Article type (camelCase)
-      const mappedArticles: Article[] = (data.articles ?? []).map((article: any) => ({
-        id: article.id,
-        provider: article.provider,
-        title: article.title,
-        description: article.description,
-        url: article.url,
-        imageUrl: article.image_url,
-        sourceName: article.source,
-        publishedAt: article.published_at
-      }));
-      
-      setArticles(mappedArticles);
-      toast.success(`Loaded ${mappedArticles.length} stored articles from database`);
-
-    } catch (err) {
-      console.error('❌ [NEWS] Error fetching stored articles:', err);
-      setError(String(err));
-      toast.error(err instanceof Error ? err.message : 'Failed to fetch stored articles');
-    } finally {
-      setLoadingArticles(false);
-    }
-  };
-
-  // Auto-fetch articles when switching between live/stored
-  useEffect(() => {
-    if (useStoredArticles) {
-      handleFetchStoredArticles();
-    }
-  }, [useStoredArticles]);
 
   // Counts by provider for "Data Providers" widget
   const providerCounts = useMemo(() => {
@@ -308,20 +344,7 @@ export function NewsDashboard({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <motion.div
-              animate={{ 
-                rotate: [0, -10, 10, -10, 0],
-                scale: [1, 1.1, 1.1, 1.1, 1]
-              }}
-              transition={{
-                duration: 0.6,
-                repeat: Infinity,
-                repeatDelay: 3,
-                ease: "easeInOut"
-              }}
-            >
-              <Newspaper className="w-6 h-6 text-blue-600" />
-            </motion.div>
+            <Newspaper className="w-6 h-6 text-orange-600" />
             News Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -329,85 +352,43 @@ export function NewsDashboard({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-background">
-            <Database className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm">Live</span>
-            <Switch
-              checked={useStoredArticles}
-              onCheckedChange={setUseStoredArticles}
-            />
-            <Archive className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm">Stored</span>
-          </div>
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefreshLive}
+            disabled={loadingArticles}
+            className="gap-2"
           >
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={useStoredArticles ? handleFetchStoredArticles : handleFetchArticles}
-              disabled={loadingArticles}
-              className="gap-2"
-            >
-              {loadingArticles ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Fetching...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  {useStoredArticles ? 'Refresh Stored' : 'Fetch Live'}
-                </>
-              )}
-            </Button>
-          </motion.div>
+            {loadingArticles ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Fetching...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Refresh Live
+              </>
+            )}
+          </Button>
           <NewsDebugPanel />
         </div>
       </div>
 
       {/* Summary Statistics (KPIs) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ 
-            duration: 0.5,
-            type: "spring",
-            stiffness: 100,
-            damping: 15
-          }}
-        >
-        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-            initial={false}
-          />
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/10 group">
           <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <motion.div 
-                className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              >
-                <Newspaper className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </motion.div>
+              <div className="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                <Newspaper className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+              </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Articles</p>
                 {loadingArticles ? (
                   <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                 ) : (
-                  <motion.p 
-                    className="text-2xl font-semibold"
-                    key={articles.length}
-                    initial={{ scale: 1.2, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                  >
-                    {articles.length}
-                  </motion.p>
+                  <p className="text-2xl font-semibold">{articles.length}</p>
                 )}
                 <p className="text-xs text-muted-foreground">
                   {loadingArticles ? 'Loading...' : 'From all sources'}
@@ -416,7 +397,25 @@ export function NewsDashboard({
             </div>
           </CardContent>
         </Card>
-        </motion.div>
+
+        <Card 
+          className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-amber-500/10 group cursor-pointer hover:bg-muted/50"
+        >
+          <CardContent className="p-6 relative">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gray-100 dark:bg-gray-900/20 rounded-lg">
+                <Database className="w-6 h-6 text-gray-600 dark:text-gray-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Data Overrides</p>
+                <p className="text-2xl font-semibold">0</p>
+                <p className="text-xs text-muted-foreground">
+                  No changes made
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <NewsAIInsights
           articles={filteredArticles}
@@ -424,89 +423,20 @@ export function NewsDashboard({
           onClick={() => setShowAIInsights(!showAIInsights)}
         />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ 
-            duration: 0.5,
-            delay: 0.2,
-            type: "spring",
-            stiffness: 100,
-            damping: 15
-          }}
-        >
-        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-green-500/10 group">
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-            initial={false}
-          />
-          <CardContent className="p-6 relative">
-            <div className="flex items-center gap-4">
-              <motion.div 
-                className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              >
-                <Database className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </motion.div>
-              <div>
-                <p className="text-sm text-muted-foreground">Data Mode</p>
-                <motion.p 
-                  className="text-2xl font-semibold"
-                  key={useStoredArticles ? 'stored' : 'live'}
-                  initial={{ scale: 1.2, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                >
-                  {useStoredArticles ? 'Stored' : 'Live'}
-                </motion.p>
-                <p className="text-xs text-muted-foreground">
-                  {useStoredArticles ? 'From database' : 'Real-time fetch'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ 
-            duration: 0.5,
-            delay: 0.3,
-            type: "spring",
-            stiffness: 100,
-            damping: 15
-          }}
-        >
         <Card 
           className={`h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 group ${onNavigateToFeeds ? "cursor-pointer hover:bg-muted/50" : ""}`}
           onClick={onNavigateToFeeds}
         >
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-            initial={false}
-          />
           <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <motion.div 
-                className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              >
+              <div className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg">
                 <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </motion.div>
+              </div>
               <div>
                 <p className="text-sm text-muted-foreground">Data Providers</p>
-                <motion.p 
-                  className="text-2xl font-semibold"
-                  initial={{ scale: 1 }}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                >
+                <p className="text-2xl font-semibold">
                   {availableProviders.filter(p => p.is_active).length}/{availableProviders.length}
-                </motion.p>
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {availableProviders.filter(p => p.is_active).length} active
                 </p>
@@ -514,7 +444,6 @@ export function NewsDashboard({
             </div>
           </CardContent>
         </Card>
-        </motion.div>
       </div>
 
       {/* AI Insights Section - Expanded View */}
@@ -560,59 +489,19 @@ export function NewsDashboard({
             </div>
 
             <div>
-              <Label htmlFor="country">Country</Label>
-              <Select value={country} onValueChange={setCountry}>
-                <SelectTrigger id="country">
+              <Label htmlFor="timeFilter">Time Filter</Label>
+              <Select value={timeFilter} onValueChange={setTimeFilter}>
+                <SelectTrigger id="timeFilter">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Countries</SelectItem>
-                  <SelectItem value="us">United States</SelectItem>
-                  <SelectItem value="gb">United Kingdom</SelectItem>
-                  <SelectItem value="ca">Canada</SelectItem>
-                  <SelectItem value="au">Australia</SelectItem>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="week">Last Week</SelectItem>
+                  <SelectItem value="month">Last Month</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="language">Language</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger id="language">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Languages</SelectItem>
-                  <SelectItem value="en">English</SelectItem>
-                  <SelectItem value="es">Spanish</SelectItem>
-                  <SelectItem value="fr">French</SelectItem>
-                  <SelectItem value="de">German</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="perProvider">Per Provider</Label>
-              <Input
-                id="perProvider"
-                type="number"
-                min={1}
-                max={100}
-                value={perProviderLimit}
-                onChange={(e) => setPerProviderLimit(Number(e.target.value))}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="totalLimit">Total Limit</Label>
-              <Input
-                id="totalLimit"
-                type="number"
-                min={1}
-                max={500}
-                value={totalLimit}
-                onChange={(e) => setTotalLimit(Number(e.target.value))}
-              />
             </div>
           </div>
         </CardContent>
@@ -649,40 +538,20 @@ export function NewsDashboard({
             </div>
           ) : (
             <div className="grid gap-4">
-              {filteredArticles.map((article, index) => (
-                <motion.a
+              {filteredArticles.map((article) => (
+                <a
                   key={article.id}
                   href={article.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="grid grid-cols-[160px_1fr] gap-4 p-4 border rounded-lg transition-all no-underline text-foreground relative overflow-hidden group"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.3,
-                    delay: index * 0.05,
-                    type: "spring",
-                    stiffness: 100,
-                    damping: 15
-                  }}
-                  whileHover={{ 
-                    scale: 1.02,
-                    transition: { type: "spring", stiffness: 400, damping: 17 }
-                  }}
+                  className="grid grid-cols-[160px_1fr] gap-4 p-4 border rounded-lg hover:border-primary/50 hover:bg-muted/30 transition-all no-underline text-foreground relative overflow-hidden group"
                 >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    initial={false}
-                  />
                   <div className="w-[160px] h-[100px] bg-muted rounded overflow-hidden relative">
                     {article.imageUrl ? (
-                      <motion.img
+                      <img
                         src={article.imageUrl}
                         alt=""
-                        className="w-full h-full object-cover"
-                        initial={{ scale: 1 }}
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ duration: 0.3 }}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
                         }}
@@ -696,22 +565,12 @@ export function NewsDashboard({
                   <div className="relative">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="flex-1">{article.title}</h3>
-                      <motion.div
-                        whileHover={{ x: 3, y: -3 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                      >
-                        <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      </motion.div>
+                      <ExternalLink className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-                      <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                      >
-                        <Badge variant="outline" className="text-xs">
-                          {article.provider.toUpperCase()}
-                        </Badge>
-                      </motion.div>
+                      <Badge variant="outline" className="text-xs">
+                        {article.provider.toUpperCase()}
+                      </Badge>
                       {article.sourceName && (
                         <span>{article.sourceName}</span>
                       )}
@@ -725,7 +584,7 @@ export function NewsDashboard({
                       </p>
                     )}
                   </div>
-                </motion.a>
+                </a>
               ))}
             </div>
           )}

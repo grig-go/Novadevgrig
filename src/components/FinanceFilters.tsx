@@ -4,7 +4,7 @@ import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
-import { Search, Filter, X, BarChart3, Coins, Building2, TrendingUp, Briefcase, ArrowUpAZ, ArrowDownAZ } from "lucide-react";
+import { Search, Filter, X, BarChart3, Coins, Building2, TrendingUp, TrendingDown, Briefcase, ArrowUpAZ, ArrowDownAZ } from "lucide-react";
 
 interface FinanceFiltersProps {
   searchTerm: string;
@@ -14,6 +14,8 @@ interface FinanceFiltersProps {
   securities: FinanceSecurityWithSnapshot[];
   sortOrder: "asc" | "desc";
   onSortChange: (order: "asc" | "desc") => void;
+  changeFilter: "all" | "up" | "down";
+  onChangeFilterChange: (filter: "all" | "up" | "down") => void;
 }
 
 const SECURITY_TYPES: { value: SecurityType | 'STOCKS_INDICES'; label: string; icon: React.ReactNode; color: string; types?: SecurityType[] }[] = [
@@ -29,7 +31,9 @@ export function FinanceFilters({
   onTypesChange,
   securities,
   sortOrder,
-  onSortChange
+  onSortChange,
+  changeFilter,
+  onChangeFilterChange
 }: FinanceFiltersProps) {
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
 
@@ -54,9 +58,10 @@ export function FinanceFilters({
   const clearAllFilters = () => {
     onSearchChange("");
     onTypesChange([]);
+    onChangeFilterChange("all");
   };
 
-  const hasActiveFilters = searchTerm !== "" || selectedTypes.length > 0;
+  const hasActiveFilters = searchTerm !== "" || selectedTypes.length > 0 || changeFilter !== "all";
 
   // Get counts for each type (with safety checks for malformed data)
   const typeCounts = SECURITY_TYPES.map(type => ({
@@ -98,6 +103,24 @@ export function FinanceFilters({
                   Z-A
                 </>
               )}
+            </Button>
+            <Button
+              variant={changeFilter === "up" ? "default" : "outline"}
+              size="sm"
+              onClick={() => onChangeFilterChange(changeFilter === "up" ? "all" : "up")}
+              className="gap-2"
+            >
+              <TrendingUp className="w-4 h-4" />
+              Up
+            </Button>
+            <Button
+              variant={changeFilter === "down" ? "default" : "outline"}
+              size="sm"
+              onClick={() => onChangeFilterChange(changeFilter === "down" ? "all" : "down")}
+              className="gap-2"
+            >
+              <TrendingDown className="w-4 h-4" />
+              Down
             </Button>
             <Button
               variant={isFilterExpanded ? "default" : "outline"}
@@ -155,6 +178,38 @@ export function FinanceFilters({
                   })}
                 </div>
               </div>
+              <div>
+                <h4 className="text-sm font-medium mb-3">Change Filter</h4>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant={changeFilter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onChangeFilterChange("all")}
+                    className="gap-2"
+                  >
+                    <BarChart3 className="w-4 h-4" />
+                    All
+                  </Button>
+                  <Button
+                    variant={changeFilter === "up" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onChangeFilterChange("up")}
+                    className="gap-2"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    Up
+                  </Button>
+                  <Button
+                    variant={changeFilter === "down" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onChangeFilterChange("down")}
+                    className="gap-2"
+                  >
+                    <TrendingDown className="w-4 h-4" />
+                    Down
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -201,6 +256,23 @@ export function FinanceFilters({
                   </Badge>
                 ) : null;
               })}
+              {/* Show change filter */}
+              {changeFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1">
+                  {changeFilter === "up" ? (
+                    <TrendingUp className="w-4 h-4" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4" />
+                  )}
+                  {changeFilter === "up" ? "Up" : "Down"}
+                  <button
+                    onClick={() => onChangeFilterChange("all")}
+                    className="ml-1 hover:bg-muted-foreground/20 rounded-full p-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Badge>
+              )}
             </div>
           )}
         </div>

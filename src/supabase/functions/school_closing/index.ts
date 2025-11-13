@@ -68,7 +68,7 @@ app.post("/manual", async (c)=>{
   try {
     const body = await c.req.json();
     console.log("➡️ Manual entry payload:", body);
-    const { state, city, county_name, organization_name, type, status_day, status_description, notes } = body;
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
     // Validate required fields
     if (!organization_name || !status_description) {
       console.error("❌ Missing required fields");
@@ -95,6 +95,14 @@ app.post("/manual", async (c)=>{
         console.log("✅ Manual provider created");
       }
     }
+    
+    // Build raw_data object
+    const raw_data: any = {};
+    if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
+    if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
+    if (notes) raw_data.NOTES = notes;
+    if (zip) raw_data.ZIP = zip;
+    
     const { data, error } = await supabase.from("school_closings").insert([
       {
         provider_id: "manual_entry",
@@ -108,7 +116,8 @@ app.post("/manual", async (c)=>{
         status_description,
         notes: notes ? notes + " (manual)" : "Manual entry",
         source_format: "manual",
-        fetched_at: new Date().toISOString()
+        fetched_at: new Date().toISOString(),
+        raw_data: Object.keys(raw_data).length > 0 ? raw_data : null
       }
     ]).select();
     if (error) {
@@ -131,69 +140,245 @@ app.post("/manual", async (c)=>{
 });
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
-// POST /fetch - Fetch XML and populate table (with conflict-safe upsert)
+// ----------------------------------------------------------------------------
+// POST /fetch - Fetch XML and populate table (region_id + zone_id support)
 // ----------------------------------------------------------------------------
 app.post("/fetch", async (c)=>{
-  console.log("🚀 Fetch route triggered");
+  console.log("⏰ [school_closing] /fetch triggered at", new Date().toISOString());
+  console.log("📡 Request method:", c.req.method);
   try {
-    const sampleUrl = "https://bgkjcngrslxyqjitksim.supabase.co/storage/v1/object/sign/weather/new12_school_closing.xml?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iNDBiMDBkMC1mNWI1LTRiMmYtYjYxZC05MjZkMmU5ODlkYTQiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ3ZWF0aGVyL25ldzEyX3NjaG9vbF9jbG9zaW5nLnhtbCIsImlhdCI6MTc2Mjg4Mjk3OSwiZXhwIjoxNzY1NDc0OTc5fQ.220g1loL4jda8ON5JE4hacwH9noeOOm1vIsoTMJgels";
-    console.log("🌐 Fetching XML from:", sampleUrl);
-    const res = await fetch(sampleUrl);
-    console.log("🔎 Response status:", res.status);
-    if (!res.ok) throw new Error(`Failed to fetch XML: HTTP ${res.status}`);
-    const xmlText = await res.text();
-    console.log("📄 XML length:", xmlText.length);
+    // 1️⃣ Load provider config
+    const { data: provider, error: providerError } = await supabase.from("data_providers").select("config, base_url").eq("id", "school_provider:news12_closings").single();
+    if (providerError) throw providerError;
+    if (!provider) throw new Error("Provider not found");
+    const config = typeof provider.config === "string" ? JSON.parse(provider.config) : provider.config || {};
     const parser = new XMLParser({
       ignoreAttributes: false,
-      parseTagValue: true,
-      parseAttributeValue: false
+      parseTagValue: true
     });
-    const parsed = parser.parse(xmlText);
-    console.log("🧩 Parsed root keys:", Object.keys(parsed || {}));
-    // ✅ Correct path for your News12 XML
-    let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || parsed?.DataSet?.diffgr?.NewDataSet?.closings || [];
-    if (!Array.isArray(records)) records = [
-      records
-    ].filter(Boolean);
-    console.log(`📚 Extracted ${records.length} closings records`);
-    if (records.length === 0) {
-      console.warn("⚠️ No valid records found in XML");
-      return c.json({
-        message: "⚠️ No records found in XML"
-      }, 200);
-    }
-    console.log("🧩 First record preview:", JSON.stringify(records[0], null, 2).substring(0, 400));
-    // ✅ Normalize data for upsert
-    const rows = records.map((item)=>({
-        provider_id: "school_provider:news12_closings",
-        region_id: "42",
-        state: item.STATE || null,
-        city: item.CITY || null,
-        county_name: item.COUNTY_NAME || null,
-        organization_name: item.ORG_NAME || null,
-        type: "School",
-        status_day: item.STATUS_DAY || null,
-        status_description: item.STATUS_DESCRIPTION || null,
-        notes: "Fetched from News12 XML feed",
-        source_format: "xml",
-        fetched_at: new Date().toISOString(),
-        raw_data: item
-      }));
-    console.log(`🧾 Prepared ${rows.length} row objects for upsert`);
-    // ✅ Use upsert with conflict resolution to prevent duplicates
-    const { data, error } = await supabase.from("school_closings").upsert(rows, {
-      onConflict: "provider_id,organization_name,status_day",
-      ignoreDuplicates: false
-    }).select();
-    if (error) throw error;
-    console.log(`✅ Upsert complete: ${data?.length || rows.length} rows inserted/updated`);
+    let totalInserted = 0;
+    // ----------------------------------------------------------------------------
+    // 2️⃣ If sample_url exists — ignore regions and use directly
+    // ----------------------------------------------------------------------------
+    if (config.sample_url && config.sample_url.trim() !== "") {
+      const url = config.sample_url;
+      const regionId = "42"; // fixed demo region
+      const zoneId = ""; // not used for sample mode
+      console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
+      console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Failed to fetch sample XML: HTTP ${res.status}`);
+      const xmlText = await res.text();
+      const parsed = parser.parse(xmlText);
+      let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
+      if (!Array.isArray(records)) records = [
+        records
+      ].filter(Boolean);
+      console.log(`📚 Sample mode: ${records.length} records found`);
+      // 🧹 Clean existing rows for provider (region 42)
+      const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
+      if (deleteError) console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      // 🧩 Upsert new records
+      const rows = records.map((item)=>({
+          provider_id: "school_provider:news12_closings",
+          region_id: regionId,
+          zone_id: zoneId,
+          state: item.STATE || null,
+          city: item.CITY || null,
+          county_name: item.COUNTY_NAME || null,
+          organization_name: item.ORG_NAME || null,
+          type: "School",
+          status_day: item.STATUS_DAY || null,
+          status_description: item.STATUS_DESCRIPTION || null,
+          notes: "Fetched from sample XML feed",
+          source_format: "xml",
+          fetched_at: new Date().toISOString(),
+          raw_data: item
+        }));
+      const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+        onConflict: "provider_id,organization_name,status_day",
+        ignoreDuplicates: false
+      });
+      if (upsertError) throw upsertError;
+      console.log(`✅ Sample mode: ${rows.length} records upserted`);
+      totalInserted = rows.length;
+    } else {
+      // ----------------------------------------------------------------------------
+      // 3️⃣ Live mode: use base_url + endpoint
+      // ----------------------------------------------------------------------------
+      let regionZonePairs = [];
+      // ✅ New structured regions array
+      if (Array.isArray(config.regions)) {
+        regionZonePairs = config.regions.map((r)=>({
+            region_id: r.region_id,
+            zone_id: r.zone_id || ""
+          }));
+        console.log("✅ Using structured regions array:", regionZonePairs);
+      } else {
+        // ⚙️ Legacy fallback (region_id/zone_id strings)
+        const regionIds = (config.region_id || "").split(",").map((r)=>r.trim()).filter(Boolean);
+        const zoneIds = (config.zone_id || "").split(",").map((z)=>z.trim());
+        regionZonePairs = regionIds.map((region_id, i)=>({
+            region_id,
+            zone_id: zoneIds[i] || ""
+          }));
+        if (regionZonePairs.length === 0) regionZonePairs = [
+          {
+            region_id: "42",
+            zone_id: ""
+          }
+        ];
+        console.log("⚠️ Using legacy region/zone config:", regionZonePairs);
+      }
+      // ----------------------------------------------------------------------------
+      // Fetch each region/zone pair
+      // ----------------------------------------------------------------------------
+      for (const pair of regionZonePairs){
+        const { region_id, zone_id } = pair;
+        const baseUrl = provider.base_url && provider.base_url.trim() !== "" ? provider.base_url : null;
+        if (!baseUrl) {
+          console.warn("⚠️ No base_url found — skipping region", region_id);
+          continue;
+        }
+        const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId={zone_id}";
+        // Replace placeholders
+        let endpoint = endpointTemplate.replace("{region_id}", region_id || "").replace("{zone_id}", zone_id || "");
+        if (!endpoint.startsWith("/")) endpoint = `/${endpoint}`;
+        const url = `${baseUrl}${endpoint}`;
+        console.log(`🌐 Fetching XML for region_id=${region_id}, zone_id=${zone_id}`);
+        console.log(`🔗 URL: ${url}`);
+        const res = await fetch(url);
+        if (!res.ok) {
+          console.warn(`⚠️ Region ${region_id} failed: HTTP ${res.status}`);
+          continue;
+        }
+        const xmlText = await res.text();
+        const parsed = parser.parse(xmlText);
+        let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
+        if (!Array.isArray(records)) records = [
+          records
+        ].filter(Boolean);
+        console.log(`📚 Region ${region_id}: ${records.length} records found`);
+        if (records.length === 0) continue;
+        // 🧹 Clean existing rows for same provider + region + zone
+        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id);
+        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        // 🧩 Prepare and upsert new records
+        const rows = records.map((item)=>({
+            provider_id: "school_provider:news12_closings",
+            region_id,
+            zone_id,
+            state: item.STATE || null,
+            city: item.CITY || null,
+            county_name: item.COUNTY_NAME || null,
+            organization_name: item.ORG_NAME || null,
+            type: "School",
+            status_day: item.STATUS_DAY || null,
+            status_description: item.STATUS_DESCRIPTION || null,
+            notes: `Fetched from News12 XML feed (region ${region_id}, zone ${zone_id})`,
+            source_format: "xml",
+            fetched_at: new Date().toISOString(),
+            raw_data: item
+          }));
+        const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+          onConflict: "provider_id,organization_name,status_day",
+          ignoreDuplicates: false
+        });
+        if (upsertError) {
+          console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
+          continue;
+        }
+        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${rows.length} records upserted`);
+        totalInserted += rows.length;
+      }
+    } // 👈 closes live mode else block
+    // ----------------------------------------------------------------------------
+    // Final summary and response
+    // ----------------------------------------------------------------------------
+    console.log(`🎉 Done. Total upserted: ${totalInserted}`);
     return c.json({
       ok: true,
-      message: `✅ Upserted ${data?.length || rows.length} records`,
-      count: data?.length || rows.length
+      message: `✅ Upserted ${totalInserted} record(s)`,
+      count: totalInserted
     });
   } catch (err) {
     console.error("❌ Fetch error:", err);
+    return c.json({
+      ok: false,
+      error: err.message
+    }, 500);
+  }
+});
+// ----------------------------------------------------------------------------
+// PUT /manual/:id - Update a manual entry
+// ----------------------------------------------------------------------------
+app.put("/manual/:id", async (c)=>{
+  const id = c.req.param("id");
+  console.log("📝 Received manual update request for id:", id);
+  
+  try {
+    const body = await c.req.json();
+    console.log("➡️ Manual update payload:", body);
+    
+    // Verify entry exists and is manual
+    const { data: record, error: fetchError } = await supabase.from("school_closings").select("id, provider_id, is_manual, notes").eq("id", id).single();
+    if (fetchError || !record) {
+      return c.json({
+        error: "Entry not found"
+      }, 404);
+    }
+    
+    const isManual = record.provider_id === null || record.provider_id === "manual_entry" || record.is_manual === true || record.notes && record.notes.toLowerCase().includes("manual");
+    if (!isManual) {
+      return c.json({
+        error: "Cannot update non-manual entries (provider data)"
+      }, 403);
+    }
+    
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
+    
+    // Validate required fields
+    if (!organization_name || !status_description) {
+      console.error("❌ Missing required fields");
+      return c.json({
+        error: "organization_name and status_description are required"
+      }, 400);
+    }
+    
+    // Build raw_data object
+    const raw_data: any = {};
+    if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
+    if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
+    if (notes) raw_data.NOTES = notes;
+    if (zip) raw_data.ZIP = zip;
+    
+    // Update the record
+    const { data, error } = await supabase.from("school_closings").update({
+      state: state || null,
+      city: city || null,
+      county_name: county_name || null,
+      organization_name,
+      type: type || "School",
+      status_day: status_day || "Today",
+      status_description,
+      notes: notes ? notes + " (manual)" : "Manual entry",
+      raw_data: Object.keys(raw_data).length > 0 ? raw_data : null,
+      fetched_at: new Date().toISOString()
+    }).eq("id", id).select();
+    
+    if (error) {
+      console.error("❌ Supabase update error:", error);
+      throw error;
+    }
+    
+    console.log("✅ Manual entry updated:", data);
+    return c.json({
+      ok: true,
+      message: "✅ Manual entry updated",
+      data
+    });
+  } catch (err) {
+    console.error("❌ Error updating manual entry:", err);
     return c.json({
       ok: false,
       error: err.message

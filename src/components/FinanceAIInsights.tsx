@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -83,6 +83,26 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const [savedInsights, setSavedInsights] = useState<any[]>([]);
   const [loadingInsights, setLoadingInsights] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Ref for the asset dropdown container
+  const assetDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (assetDropdownRef.current && !assetDropdownRef.current.contains(event.target as Node)) {
+        setIsAssetPopoverOpen(false);
+      }
+    };
+
+    if (isAssetPopoverOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isAssetPopoverOpen]);
 
   // Handle preselected security
   useEffect(() => {
@@ -102,7 +122,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -474,14 +494,30 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
 
   if (listView) {
     return (
-      <div className="space-y-4 border rounded-lg p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="w-5 h-5 text-purple-600" />
-            <h3 className="font-semibold">AI Market Insights</h3>
-            <Badge variant="secondary">
+      <div className="space-y-4 border rounded-lg p-6 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/10 dark:to-blue-950/10">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg shadow-lg">
+              <Brain className="w-5 h-5 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold">AI Market Insights</h3>
+            <Badge variant="secondary" className="text-sm">
               {searchQuery ? `${filteredInsights.length} of ${savedInsights.length}` : `${savedInsights.length} Saved`}
             </Badge>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search insights..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-[250px]"
+              />
+            </div>
+            
             <Dialog open={isDialogOpen} onOpenChange={(open) => {
               setIsDialogOpen(open);
               if (!open && onDialogClose) {
@@ -490,7 +526,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
             }}>
               <DialogTrigger asChild>
                 <Button 
-                  variant="outline" 
+                  variant="default" 
                   size="sm"
                   onClick={() => {
                     setSelectedIndex("");
@@ -501,6 +537,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
                     setCurrentQuestion("");
                     setCurrentModel("");
                   }}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 >
                   <Brain className="w-4 h-4 mr-2" />
                   Add AI Insights
@@ -555,7 +592,7 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
                       
                       {/* Asset Selection Results */}
                       {isAssetPopoverOpen && (
-                        <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }}>
+                        <div className="absolute top-full left-0 z-[100] mt-1 border rounded-lg bg-popover shadow-lg" style={{ minWidth: '400px', width: 'max-content', maxWidth: '600px' }} ref={assetDropdownRef}>
                           <div className="max-h-[400px] overflow-y-auto">
                             {/* Cryptocurrencies Group */}
                             {availableSecurities.filter(s => s.security.type === 'CRYPTO').length > 0 && (
@@ -847,15 +884,6 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
                 </div>
               </DialogContent>
             </Dialog>
-            <div className="relative ml-4">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search insights..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 w-[200px]"
-              />
-            </div>
           </div>
         </div>
 
