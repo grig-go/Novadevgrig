@@ -469,6 +469,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
     // First, save new data sources to the database
     const savedDataSourceIds: string[] = [];
+    const newlySavedSources: AgentDataSource[] = [];
 
     if (newDataSources.filter(ds => ds.name && ds.type).length > 0) {
       console.log('Saving new data sources to database...');
@@ -496,15 +497,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
           if (data) {
             console.log('Saved data source:', data);
-            savedDataSourceIds.push(data.id);
+            savedDataSourceIds.push((data as any).id);
 
-            // Add to formData.dataSources so it's included in the agent
+            // Track newly saved source
             const newAgentSource: AgentDataSource = {
-              id: `source-${Date.now()}-${savedDataSourceIds.length}`,
-              name: data.name,
-              feedId: data.id,
-              category: data.category as AgentDataType
+              id: (data as any).id, // Use database UUID directly, no temporary ID
+              name: (data as any).name,
+              feedId: (data as any).id,
+              category: (data as any).category as AgentDataType
             };
+
+            newlySavedSources.push(newAgentSource);
 
             setFormData(prev => ({
               ...prev,
@@ -520,6 +523,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       console.log(`Saved ${savedDataSourceIds.length} new data sources`);
     }
 
+    // Combine existing and newly saved sources
+    const allDataSources = [...(formData.dataSources || []), ...newlySavedSources];
+
+    // No need to update sourceMappings - they already use database UUIDs directly
     const newAgent: Agent = {
       id: editAgent?.id || `agent-${Date.now()}`,
       name: formData.name || 'Unnamed Agent',
@@ -530,7 +537,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       autoStart: formData.autoStart,
       generateDocs: formData.generateDocs,
       dataType: formData.dataType,
-      dataSources: formData.dataSources || [],
+      dataSources: allDataSources,
       relationships: formData.relationships || [],
       format: formData.format || 'JSON',
       formatOptions: formData.formatOptions || {},
@@ -819,7 +826,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
     const addDataSource = (sourceId: string, sourceName: string, sourceCategory: string, sourceType: string) => {
       const newSource: AgentDataSource = {
-        id: `source-${Date.now()}`,
+        id: sourceId, // Use database UUID directly, no temporary ID
         name: sourceName,
         feedId: sourceId,
         category: sourceCategory as AgentDataType,

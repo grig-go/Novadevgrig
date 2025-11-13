@@ -69,6 +69,23 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
   const schemaConfig = endpoint.schema_config || {};
   const metadata = schemaConfig.schema?.metadata || {};
 
+  // For RSS format, update sourceMappings based on actually connected sources
+  let sourceMappings = metadata.sourceMappings || [];
+  if (endpoint.output_format === 'rss' && connectedDataSources.length > 0) {
+    // Get the set of connected data source IDs (database UUIDs)
+    const connectedSourceIds = new Set(connectedDataSources.map((ds: any) => ds.feedId));
+
+    // Update sourceMappings to mark sources as enabled if they're in api_endpoint_sources
+    // Now that we use database UUIDs directly, mapping.sourceId will match the feedId
+    sourceMappings = sourceMappings.map((mapping: any) => ({
+      ...mapping,
+      enabled: connectedSourceIds.has(mapping.sourceId)
+    }));
+
+    console.log('[LOAD] Connected source IDs:', Array.from(connectedSourceIds));
+    console.log('[LOAD] Updated sourceMappings:', sourceMappings.map((m: any) => ({ sourceId: m.sourceId, enabled: m.enabled })));
+  }
+
   // Merge all format-specific options from metadata
   const formatOptions = {
     // Preserve environment/deployment settings at root
@@ -81,7 +98,7 @@ function convertAPIEndpointToAgent(endpoint: APIEndpoint): Agent {
     channelTitle: metadata.channelTitle,
     channelDescription: metadata.channelDescription,
     channelLink: metadata.channelLink,
-    sourceMappings: metadata.sourceMappings || [],
+    sourceMappings: sourceMappings,
     mergeStrategy: metadata.mergeStrategy,
     maxItemsPerSource: metadata.maxItemsPerSource,
     maxTotalItems: metadata.maxTotalItems
@@ -431,22 +448,46 @@ export function AgentsDashboardWithSupabase({
 
         // Then insert the new relationships
         if (agent.dataSources && agent.dataSources.length > 0) {
-          const sourceRelations = agent.dataSources.map((source: any, index: number) => ({
-            endpoint_id: agent.id,
-            data_source_id: source.feedId,
-            is_primary: index === 0, // First source is primary
-            join_config: {},
-            filter_config: {},
-            sort_order: index
-          }));
+          // Filter sources based on enabled status from formatOptions.sourceMappings (for RSS)
+          let sourcesToSave = agent.dataSources;
 
-          const { error: relationsError } = await supabase
-            .from('api_endpoint_sources')
-            .insert(sourceRelations);
+          if (agent.format === 'RSS' && agent.formatOptions?.sourceMappings) {
+            const enabledSourceIds = new Set(
+              agent.formatOptions.sourceMappings
+                .filter((m: any) => m.enabled)
+                .map((m: any) => m.sourceId)
+            );
 
-          if (relationsError) {
-            console.error('Failed to update source relations:', relationsError);
-            throw relationsError;
+            sourcesToSave = agent.dataSources.filter((source: any) =>
+              enabledSourceIds.has(source.id)
+            );
+
+            console.log('[EDIT] RSS enabled source IDs:', Array.from(enabledSourceIds));
+            console.log('[EDIT] Filtered sources to save:', sourcesToSave.map((s: any) => ({ id: s.id, feedId: s.feedId })));
+          }
+
+          if (sourcesToSave.length > 0) {
+            const sourceRelations = sourcesToSave.map((source: any, index: number) => ({
+              endpoint_id: agent.id,
+              data_source_id: source.feedId,
+              is_primary: index === 0, // First source is primary
+              join_config: {},
+              filter_config: {},
+              sort_order: index
+            }));
+
+            console.log('[EDIT] Inserting source relations:', sourceRelations);
+
+            const { error: relationsError } = await supabase
+              .from('api_endpoint_sources')
+              .insert(sourceRelations);
+
+            if (relationsError) {
+              console.error('Failed to update source relations:', relationsError);
+              throw relationsError;
+            }
+          } else {
+            console.log('[EDIT] No sources to save (all disabled or none selected)');
           }
         }
 
@@ -467,22 +508,48 @@ export function AgentsDashboardWithSupabase({
 
         // Insert api_endpoint_sources relationships
         if (newEndpoint && agent.dataSources && agent.dataSources.length > 0) {
-          const sourceRelations = agent.dataSources.map((source: any, index: number) => ({
-            endpoint_id: newEndpoint.id,
-            data_source_id: source.feedId,
-            is_primary: index === 0, // First source is primary
-            join_config: {},
-            filter_config: {},
-            sort_order: index
-          }));
+          // For RSS format with sourceMappings, only save enabled sources
+          let sourcesToSave = agent.dataSources;
 
-          const { error: relationsError } = await supabase
-            .from('api_endpoint_sources')
-            .insert(sourceRelations);
+          if (agent.format === 'RSS' && agent.formatOptions?.sourceMappings) {
+            // Get enabled source IDs from mappings (these are the local agent source IDs)
+            const enabledSourceIds = new Set(
+              agent.formatOptions.sourceMappings
+                .filter((m: any) => m.enabled)
+                .map((m: any) => m.sourceId)
+            );
 
-          if (relationsError) {
-            console.error('Failed to create source relations:', relationsError);
-            throw relationsError;
+            // Filter dataSources to only include enabled ones
+            sourcesToSave = agent.dataSources.filter((source: any) =>
+              enabledSourceIds.has(source.id)
+            );
+
+            console.log('RSS enabled source IDs:', Array.from(enabledSourceIds));
+            console.log('Filtered sources to save:', sourcesToSave.map((s: any) => ({ id: s.id, feedId: s.feedId })));
+          }
+
+          if (sourcesToSave.length > 0) {
+            const sourceRelations = sourcesToSave.map((source: any, index: number) => ({
+              endpoint_id: newEndpoint.id,
+              data_source_id: source.feedId,
+              is_primary: index === 0, // First source is primary
+              join_config: {},
+              filter_config: {},
+              sort_order: index
+            }));
+
+            console.log('Inserting source relations:', sourceRelations);
+
+            const { error: relationsError } = await supabase
+              .from('api_endpoint_sources')
+              .insert(sourceRelations);
+
+            if (relationsError) {
+              console.error('Failed to create source relations:', relationsError);
+              throw relationsError;
+            }
+          } else {
+            console.log('No sources to save (all disabled or none selected)');
           }
         }
 
