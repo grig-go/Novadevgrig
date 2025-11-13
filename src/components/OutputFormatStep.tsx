@@ -729,9 +729,13 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
               // Auto-suggest fields only if they're currently empty
               const currentMappings = updatedMapping.fieldMappings;
 
-              // In create mode, only auto-fill required fields (title, description, link)
-              // In edit mode, auto-fill all fields
-              if (isCreateMode) {
+              // Check if this is a newly added source (no optional fields set yet)
+              const isNewlyAddedSource = !currentMappings.pubDate && !currentMappings.guid &&
+                                         !currentMappings.author && !currentMappings.category;
+
+              // In create mode OR for newly added sources in edit mode, only auto-fill required fields
+              // For existing sources in edit mode, auto-fill all fields
+              if (isCreateMode || isNewlyAddedSource) {
                 updatedMapping.fieldMappings = {
                   title: currentMappings.title || smartMatchField(availableFields, 'title'),
                   description: currentMappings.description || smartMatchField(availableFields, 'description'),
