@@ -344,7 +344,7 @@ export function NewsDashboard({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 mb-1 text-[24px]">
-            <Newspaper className="w-6 h-6 text-blue-600" />
+            <Newspaper className="w-6 h-6 text-orange-600" />
             News Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
@@ -377,11 +377,11 @@ export function NewsDashboard({
 
       {/* Summary Statistics (KPIs) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 group">
+        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-orange-500/10 group">
           <CardContent className="p-6 relative">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
-                <Newspaper className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <div className="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                <Newspaper className="w-6 h-6 text-orange-600 dark:text-orange-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Articles</p>

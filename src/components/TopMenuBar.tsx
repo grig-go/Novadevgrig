@@ -27,6 +27,7 @@ interface TopMenuBarProps {
   roles?: Role[];
   permissions?: Permission[];
   onUpdateUser?: (updatedUser: Partial<User>) => void;
+  dashboardConfig?: any[];
 }
 
 export function TopMenuBar({ 
@@ -34,7 +35,8 @@ export function TopMenuBar({
   currentUser, 
   roles = [], 
   permissions = [],
-  onUpdateUser 
+  onUpdateUser,
+  dashboardConfig = []
 }: TopMenuBarProps) {
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof document !== 'undefined') {
@@ -53,6 +55,25 @@ export function TopMenuBar({
     if (onUpdateUser) {
       onUpdateUser(updatedUser);
     }
+  };
+  
+  // Helper function to check if a dashboard is visible
+  const isDashboardVisible = (dashboardId: string) => {
+    // If no config, show all dashboards (default behavior)
+    if (!dashboardConfig || dashboardConfig.length === 0) {
+      return true;
+    }
+    
+    // Find the dashboard in the config
+    const dashboard = dashboardConfig.find(d => d.dashboard_id === dashboardId);
+    
+    // If not found, hide by default
+    if (!dashboard) {
+      return false;
+    }
+    
+    // Return visibility status
+    return dashboard.visible;
   };
 
   // Branding Configuration
@@ -87,18 +108,27 @@ export function TopMenuBar({
   };
 
   // Tools Menu Configuration
+  const toolsMenuItems = [
+    { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents'), dashboardId: 'agents' },
+    { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds'), dashboardId: null },
+    { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media'), dashboardId: 'media_library' },
+    { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels'), dashboardId: null },
+  ];
+  
   const toolsMenu: MenuDropdown = {
     id: 'tools',
     label: 'Tools',
     icon: Wrench,
     sections: [
       {
-        items: [
-          { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents') },
-          { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds') },
-          { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media') },
-          { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels') },
-        ],
+        items: toolsMenuItems.filter(item => {
+          // Always show items that don't have a dashboard association
+          if (!item.dashboardId) {
+            return true;
+          }
+          // Filter based on dashboard visibility
+          return isDashboardVisible(item.dashboardId);
+        }),
       },
     ],
   };

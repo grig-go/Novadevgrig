@@ -9,7 +9,7 @@ import { Card, CardContent } from "./ui/card";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { RefreshCw, Download, Plus, Database, AlertTriangle, BarChart3, List, Vote, Crown, Building, Users, Flag, Edit, X, Loader2 } from "lucide-react";
+import { RefreshCw, Download, Plus, Database, AlertTriangle, BarChart3, List, Vote, Crown, Building, Users, Flag, Edit, X, Loader2, Rss } from "lucide-react";
 import { Race, CandidateProfile, Party, getFieldValue, isFieldOverridden, ElectionData } from "../types/election";
 import { Input } from "./ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "./ui/avatar";
@@ -978,11 +978,11 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
         <CardContent className="p-6 relative cursor-pointer hover:bg-muted/50 transition-colors" onClick={onNavigateToFeeds}>
           <div className="flex items-center gap-4">
             <motion.div 
-              className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+              className="p-3 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
               whileHover={{ scale: 1.1, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400 }}
             >
-              <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Providers</p>

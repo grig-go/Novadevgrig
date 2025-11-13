@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent } from "./components/ui/card";
-import { TopMenuBar } from "./components/TopMenuBar";
 import { ElectionDashboard } from "./components/ElectionDashboard";
 import { FinanceDashboard } from "./components/FinanceDashboard";
 import { SportsDashboard } from "./components/SportsDashboard";
@@ -10,11 +9,14 @@ import { NewsDashboard } from "./components/NewsDashboard";
 import { FeedsDashboardWithSupabase } from "./components/FeedsDashboardWithSupabase";
 import { AgentsDashboard } from "./components/AgentsDashboard";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
+import { TopMenuBar } from "./components/TopMenuBar";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { MediaLibrary } from "./components/MediaLibrary";
 import { ChannelsPage } from "./components/ChannelsPage";
+import { DashboardConfigDialog, useDashboardConfig } from "./components/DashboardConfigDialog";
+import { DashboardCardRenderer } from "./components/DashboardCardRenderer";
+import { getDashboardCardsData } from "./utils/dashboardCardsData";
 import { electionData as importedElectionData, initializeElectionData, isElectionDataLoading } from "./data/electionData";
-import { WeatherDataViewer } from "./components/WeatherDataViewer";
 import { mockFinanceData } from "./data/mockFinanceData";
 import { mockSportsData } from "./data/mockSportsData";
 import { mockNewsData } from "./data/mockNewsData";
@@ -54,6 +56,32 @@ export default function App() {
   const [agentsData, setAgentsData] = useState(mockAgentsData);
   const [usersData, setUsersData] = useState(mockUsersData);
   const [weatherData, setWeatherData] = useState(mockWeatherData);
+  const [showDashboardConfig, setShowDashboardConfig] = useState(false);
+  const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
+  const [dashboardConfigLoading, setDashboardConfigLoading] = useState(true);
+
+  // Keyboard shortcut listener for dashboard config (CTRL + SHIFT + G + M)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if CTRL + SHIFT + G + M are all pressed
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'g') {
+        // Wait for M key
+        const handleMKey = (ev: KeyboardEvent) => {
+          if (ev.key.toLowerCase() === 'm' && e.ctrlKey && e.shiftKey) {
+            e.preventDefault();
+            ev.preventDefault();
+            setShowDashboardConfig(true);
+            window.removeEventListener('keydown', handleMKey);
+          }
+        };
+        window.addEventListener('keydown', handleMKey);
+        setTimeout(() => window.removeEventListener('keydown', handleMKey), 500);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Debug dark mode
   useEffect(() => {
@@ -194,6 +222,56 @@ export default function App() {
     fetchNewsStats();
     fetchMediaStats();
     return () => { mounted = false; };
+  }, []);
+
+  // Fetch dashboard configuration for home page
+  useEffect(() => {
+    const fetchDashboardConfig = async () => {
+      try {
+        setDashboardConfigLoading(true);
+        const response = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/dashboard_config?page=home`,
+          {
+            headers: {
+              'Authorization': `Bearer ${publicAnonKey}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        const data = await response.json();
+        console.log("📊 Fetched dashboard config for home:", data);
+        console.log("📊 Dashboard config OK:", data.ok);
+        console.log("📊 Dashboard config dashboards:", data.dashboards);
+        console.log("📊 Dashboard config dashboards length:", data.dashboards?.length);
+
+        if (data.ok && data.dashboards && data.dashboards.length > 0) {
+          setDashboardConfig(data.dashboards);
+        } else {
+          // No config or error - set empty array to trigger fallback
+          setDashboardConfig([]);
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard config:", error);
+        setDashboardConfig([]); // Fallback to showing all dashboards
+      } finally {
+        setDashboardConfigLoading(false);
+      }
+    };
+
+    fetchDashboardConfig();
+
+    // Listen for dashboard config updates (when user saves in config modal)
+    const handleConfigUpdate = () => {
+      console.log("📊 Dashboard config updated, reloading...");
+      fetchDashboardConfig();
+    };
+
+    window.addEventListener('dashboardConfigUpdated', handleConfigUpdate);
+
+    return () => {
+      window.removeEventListener('dashboardConfigUpdated', handleConfigUpdate);
+    };
   }, []);
 
   const handleUpdateRace = (updatedRace: Race) => {
@@ -502,76 +580,92 @@ export default function App() {
     setCurrentView('feeds');
   };
 
-  const renderNavigation = () => (
-    <div className="flex items-center gap-2 mb-8">
-      <Button
-        variant={currentView === 'election' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('election')}
-        className="gap-2"
-      >
-        <Vote className="w-4 h-4" />
-        Elections
-      </Button>
-      <Button
-        variant={currentView === 'finance' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('finance')}
-        className="gap-2"
-      >
-        <TrendingUp className="w-4 h-4" />
-        Finance
-      </Button>
-      <Button
-        variant={currentView === 'sports' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('sports')}
-        className="gap-2"
-      >
-        <Trophy className="w-4 h-4" />
-        Sports
-      </Button>
-      <Button
-        variant={currentView === 'weather' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('weather')}
-        className="gap-2"
-      >
-        <Cloud className="w-4 h-4" />
-        Weather
-      </Button>
-      <Button
-        variant={currentView === 'news' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('news')}
-        className="gap-2"
-      >
-        <Newspaper className="w-4 h-4" />
-        News
-      </Button>
-      <Button
-        variant={currentView === 'agents' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('agents')}
-        className="gap-2"
-      >
-        <Bot className="w-4 h-4" />
-        Agents
-      </Button>
-      <Button
-        variant={currentView === 'media' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('media')}
-        className="gap-2"
-      >
-        <ImageIcon className="w-4 h-4" />
-        Media
-      </Button>
-      <Button
-        variant={currentView === 'school-closings' ? 'default' : 'outline'}
-        onClick={() => handleNavigate('school-closings')}
-        className="gap-2"
-      >
-        <School className="w-4 h-4" />
-        School Closings
-      </Button>
-    </div>
-  );
+  const renderNavigation = () => {
+    // Get active dashboards from config
+    const defaultDashboards = [
+      { dashboard_id: "election", visible: true, order_index: 0 },
+      { dashboard_id: "finance", visible: true, order_index: 1 },
+      { dashboard_id: "sports", visible: true, order_index: 2 },
+      { dashboard_id: "weather", visible: true, order_index: 3 },
+      { dashboard_id: "news", visible: true, order_index: 4 },
+      { dashboard_id: "agents", visible: true, order_index: 5 },
+      { dashboard_id: "school_closings", visible: true, order_index: 6 },
+      { dashboard_id: "media_library", visible: true, order_index: 7 }
+    ];
+    
+    const activeDashboards = dashboardConfig.length > 0 ? dashboardConfig : defaultDashboards;
+    
+    // Filter visible dashboards and sort by order_index
+    const visibleDashboards = activeDashboards
+      .filter(d => d.visible)
+      .sort((a, b) => a.order_index - b.order_index);
+    
+    // Map dashboard IDs to their button data
+    const dashboardButtons: Record<string, { view: AppView; icon: any; label: string }> = {
+      election: { view: 'election', icon: Vote, label: 'Elections' },
+      finance: { view: 'finance', icon: TrendingUp, label: 'Finance' },
+      sports: { view: 'sports', icon: Trophy, label: 'Sports' },
+      weather: { view: 'weather', icon: Cloud, label: 'Weather' },
+      news: { view: 'news', icon: Newspaper, label: 'News' },
+      school_closings: { view: 'school-closings', icon: School, label: 'School Closings' },
+      agents: { view: 'agents', icon: Bot, label: 'Agents' },
+      media_library: { view: 'media', icon: ImageIcon, label: 'Media' },
+    };
+    
+    return (
+      <div className="flex items-center gap-2 mb-8">
+        {visibleDashboards.map(dashboard => {
+          const buttonData = dashboardButtons[dashboard.dashboard_id];
+          if (!buttonData) return null;
+          
+          const Icon = buttonData.icon;
+          
+          return (
+            <Button
+              key={dashboard.dashboard_id}
+              variant={currentView === buttonData.view ? 'default' : 'outline'}
+              onClick={() => handleNavigate(buttonData.view)}
+              className="gap-2"
+            >
+              <Icon className="w-4 h-4" />
+              {buttonData.label}
+            </Button>
+          );
+        })}
+      </div>
+    );
+  };
 
-  const renderHome = () => (
+  const renderHome = () => {
+    // Calculate visible dashboard count for dynamic grid layout
+    const defaultDashboards = [
+      { dashboard_id: "election", visible: true, order_index: 0 },
+      { dashboard_id: "finance", visible: true, order_index: 1 },
+      { dashboard_id: "sports", visible: true, order_index: 2 },
+      { dashboard_id: "weather", visible: true, order_index: 3 },
+      { dashboard_id: "news", visible: true, order_index: 4 },
+      { dashboard_id: "agents", visible: true, order_index: 5 },
+      { dashboard_id: "school_closings", visible: true, order_index: 6 },
+      { dashboard_id: "media_library", visible: true, order_index: 7 }
+    ];
+    
+    const activeDashboards = dashboardConfig.length > 0 ? dashboardConfig : defaultDashboards;
+    const visibleCount = activeDashboards.filter(d => d.visible).length;
+    
+    // Dynamic grid layout based on card count
+    const getGridClass = () => {
+      if (visibleCount === 1) return 'grid grid-cols-1 gap-6 max-w-2xl mx-auto';
+      if (visibleCount === 2) return 'grid grid-cols-1 md:grid-cols-6 gap-6 max-w-6xl mx-auto';
+      if (visibleCount === 3) return 'grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto';
+      if (visibleCount === 4) return 'grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto';
+      if (visibleCount === 5) return 'grid grid-cols-1 md:grid-cols-6 gap-6 max-w-6xl mx-auto';
+      if (visibleCount === 6) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto';
+      if (visibleCount === 7) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-8 gap-6 max-w-7xl mx-auto';
+      if (visibleCount === 8) return 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto';
+      return 'grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto';
+    };
+    
+    return (
     <div className="space-y-8">
       <div className="text-center space-y-4">
         <div className="flex items-center justify-center gap-3">
@@ -603,400 +697,52 @@ export default function App() {
         </motion.p>
       </div>
       
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('election')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                <Vote className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Election Dashboard</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              View and edit AP Election data with comprehensive race tracking, candidate management, 
-              and real-time status updates.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                {electionLoading ? (
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                ) : (
-                  <span className="text-2xl font-semibold">{electionData.races.length}</span>
-                )}
-                <span className="text-xs text-muted-foreground">races</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Real-time editing</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Override tracking</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.1
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('finance')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Finance Dashboard</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Track market data across indices, stocks, and cryptocurrency with advanced analytics 
-              and portfolio management tools.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{financeStats.totalSecurities}</span>
-                <span className="text-xs text-muted-foreground">securities</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "..." : `${financeStats.stockCount} stocks`}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "..." : `${financeStats.etfCount} ETFs`}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {financeStats.loading ? "..." : `${financeStats.cryptoCount} crypto`}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.2
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('sports')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                <Trophy className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Sports Dashboard</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Manage comprehensive sports data across multiple leagues with team, player, game, 
-              and venue tracking from multiple providers.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{sportsStats.totalTeams}</span>
-                <span className="text-xs text-muted-foreground">teams</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{sportsStats.totalTournaments}</span>
-                <span className="text-xs text-muted-foreground">tournaments</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {sportsStats.hasActiveProvider ? 'Multi-league' : 'No provider'}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.3
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('weather')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                <Cloud className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Weather Dashboard</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Monitor comprehensive weather data with current conditions, forecasts, alerts, 
-              and specialized data including tropical systems and air quality.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{weatherStats.totalLocations}</span>
-                <span className="text-xs text-muted-foreground">locations</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{weatherStats.activeAlerts}</span>
-                <span className="text-xs text-muted-foreground">alerts</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {weatherStats.loading ? "Loading..." : weatherStats.error ? "Error" : "Real-time data"}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.4
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('news')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                <Newspaper className="w-6 h-6 text-orange-600 dark:text-orange-400" />
-              </div>
-              <h2 className="text-xl font-semibold">News Dashboard</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Monitor breaking news across multiple news providers including NewsAPI and NewsData.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                {newsStats.loading ? (
-                  <>
-                    <span className="text-2xl font-semibold">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    </span>
-                    <span className="text-xs text-muted-foreground">Loading...</span>
-                  </>
-                ) : newsStats.error ? (
-                  <>
-                    <span className="text-2xl font-semibold text-orange-500">!</span>
-                    <span className="text-xs text-muted-foreground">Error</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-2xl font-semibold">{newsStats.articlesCount}</span>
-                    <span className="text-xs text-muted-foreground">articles</span>
-                  </>
-                )}
-              </div>
-              <div className="flex flex-col">
-                {newsStats.loading ? (
-                  <>
-                    <span className="text-2xl font-semibold">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    </span>
-                    <span className="text-xs text-muted-foreground">Loading...</span>
-                  </>
-                ) : newsStats.error ? (
-                  <>
-                    <span className="text-2xl font-semibold text-orange-500">!</span>
-                    <span className="text-xs text-muted-foreground">Error</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-2xl font-semibold">{newsStats.providersCount}</span>
-                    <span className="text-xs text-muted-foreground">providers</span>
-                  </>
-                )}
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">
-                  {newsStats.loading ? "Loading..." : newsStats.error ? "Error" : "Stored"}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.5
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('agents')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                <Bot className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Agents</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              AI-powered content curation and automated data feeds that intelligently 
-              aggregate and prioritize information based on your preferences and workflows.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{agentsData.agents.length}</span>
-                <span className="text-xs text-muted-foreground">agents</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{agentsData.agents.filter(a => a.status === 'ACTIVE').length}</span>
-                <span className="text-xs text-muted-foreground">active</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">AI curation</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.6
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('school-closings')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-                <School className="w-6 h-6 text-red-600 dark:text-red-400" />
-              </div>
-              <h2 className="text-xl font-semibold">School Closings</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Monitor school closings, delays, and early dismissals across multiple districts with real-time status updates and location tracking.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">6</span>
-                <span className="text-xs text-muted-foreground">closings</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">2</span>
-                <span className="text-xs text-muted-foreground">delays</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Multi-county</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{
-            type: "spring",
-            stiffness: 260,
-            damping: 20,
-            delay: 0.7
-          }}
-          whileHover={{ 
-            y: -4,
-            transition: { type: "spring", stiffness: 400, damping: 17 }
-          }}
-        >
-        <Card className="cursor-pointer transition-shadow h-full" onClick={() => handleNavigate('media')}>
-          <CardContent className="p-6 flex flex-col h-full">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-900 rounded-lg">
-                <ImageIcon className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <h2 className="text-xl font-semibold">Media Library</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 flex-grow">
-              Manage and organize your media assets including images, videos, and audio files with advanced search and bulk operations.
-            </p>
-            <div className="flex items-center gap-6 pt-4 border-t">
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">{mediaStats.totalAssets}</span>
-                <span className="text-xs text-muted-foreground">assets</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-2xl font-semibold">0</span>
-                <span className="text-xs text-muted-foreground">uploads</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm text-muted-foreground">Cloud storage</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        </motion.div>
-
+      <div className={getGridClass()}>
+        {dashboardConfigLoading ? (
+          // Show loading state
+          <div className="col-span-full text-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto text-muted-foreground" />
+            <p className="text-muted-foreground mt-4">Loading dashboards...</p>
+          </div>
+        ) : dashboardConfig.length === 0 ? (
+          // No config found - show all dashboards in default order
+          <DashboardCardRenderer
+            dashboards={defaultDashboards}
+            cardDataMap={getDashboardCardsData({
+              handleNavigate,
+              electionLoading,
+              electionRacesCount: electionData.races.length,
+              financeStats,
+              sportsStats,
+              weatherStats,
+              newsStats,
+              agentsCount: agentsData.agents.length,
+              activeAgentsCount: agentsData.agents.filter(a => a.status === 'ACTIVE').length,
+              mediaStats
+            })}
+          />
+        ) : (
+          // Use dynamic dashboard renderer based on backend config
+          <DashboardCardRenderer
+            dashboards={dashboardConfig}
+            cardDataMap={getDashboardCardsData({
+              handleNavigate,
+              electionLoading,
+              electionRacesCount: electionData.races.length,
+              financeStats,
+              sportsStats,
+              weatherStats,
+              newsStats,
+              agentsCount: agentsData.agents.length,
+              activeAgentsCount: agentsData.agents.filter(a => a.status === 'ACTIVE').length,
+              mediaStats
+            })}
+          />
+        )}
       </div>
     </div>
   );
+  };
 
   const renderContent = () => {
     switch (currentView) {
@@ -1133,11 +879,16 @@ export default function App() {
         roles={usersData.roles}
         permissions={usersData.permissions}
         onUpdateUser={handleUpdateUser}
+        dashboardConfig={dashboardConfig}
       />
       <div className="container mx-auto px-4 py-8">
         {currentView !== 'home' && currentView !== 'users-groups' && currentView !== 'feeds' && currentView !== 'ai-connections' && renderNavigation()}
         {renderContent()}
       </div>
+      <DashboardConfigDialog
+        open={showDashboardConfig}
+        onOpenChange={setShowDashboardConfig}
+      />
     </div>
   );
 }

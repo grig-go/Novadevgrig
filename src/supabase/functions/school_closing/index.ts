@@ -68,7 +68,7 @@ app.post("/manual", async (c)=>{
   try {
     const body = await c.req.json();
     console.log("➡️ Manual entry payload:", body);
-    const { state, city, county_name, organization_name, type, status_day, status_description, notes } = body;
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
     // Validate required fields
     if (!organization_name || !status_description) {
       console.error("❌ Missing required fields");
@@ -95,6 +95,14 @@ app.post("/manual", async (c)=>{
         console.log("✅ Manual provider created");
       }
     }
+    
+    // Build raw_data object
+    const raw_data: any = {};
+    if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
+    if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
+    if (notes) raw_data.NOTES = notes;
+    if (zip) raw_data.ZIP = zip;
+    
     const { data, error } = await supabase.from("school_closings").insert([
       {
         provider_id: "manual_entry",
@@ -108,7 +116,8 @@ app.post("/manual", async (c)=>{
         status_description,
         notes: notes ? notes + " (manual)" : "Manual entry",
         source_format: "manual",
-        fetched_at: new Date().toISOString()
+        fetched_at: new Date().toISOString(),
+        raw_data: Object.keys(raw_data).length > 0 ? raw_data : null
       }
     ]).select();
     if (error) {
@@ -294,6 +303,82 @@ app.post("/fetch", async (c)=>{
     });
   } catch (err) {
     console.error("❌ Fetch error:", err);
+    return c.json({
+      ok: false,
+      error: err.message
+    }, 500);
+  }
+});
+// ----------------------------------------------------------------------------
+// PUT /manual/:id - Update a manual entry
+// ----------------------------------------------------------------------------
+app.put("/manual/:id", async (c)=>{
+  const id = c.req.param("id");
+  console.log("📝 Received manual update request for id:", id);
+  
+  try {
+    const body = await c.req.json();
+    console.log("➡️ Manual update payload:", body);
+    
+    // Verify entry exists and is manual
+    const { data: record, error: fetchError } = await supabase.from("school_closings").select("id, provider_id, is_manual, notes").eq("id", id).single();
+    if (fetchError || !record) {
+      return c.json({
+        error: "Entry not found"
+      }, 404);
+    }
+    
+    const isManual = record.provider_id === null || record.provider_id === "manual_entry" || record.is_manual === true || record.notes && record.notes.toLowerCase().includes("manual");
+    if (!isManual) {
+      return c.json({
+        error: "Cannot update non-manual entries (provider data)"
+      }, 403);
+    }
+    
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
+    
+    // Validate required fields
+    if (!organization_name || !status_description) {
+      console.error("❌ Missing required fields");
+      return c.json({
+        error: "organization_name and status_description are required"
+      }, 400);
+    }
+    
+    // Build raw_data object
+    const raw_data: any = {};
+    if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
+    if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
+    if (notes) raw_data.NOTES = notes;
+    if (zip) raw_data.ZIP = zip;
+    
+    // Update the record
+    const { data, error } = await supabase.from("school_closings").update({
+      state: state || null,
+      city: city || null,
+      county_name: county_name || null,
+      organization_name,
+      type: type || "School",
+      status_day: status_day || "Today",
+      status_description,
+      notes: notes ? notes + " (manual)" : "Manual entry",
+      raw_data: Object.keys(raw_data).length > 0 ? raw_data : null,
+      fetched_at: new Date().toISOString()
+    }).eq("id", id).select();
+    
+    if (error) {
+      console.error("❌ Supabase update error:", error);
+      throw error;
+    }
+    
+    console.log("✅ Manual entry updated:", data);
+    return c.json({
+      ok: true,
+      message: "✅ Manual entry updated",
+      data
+    });
+  } catch (err) {
+    console.error("❌ Error updating manual entry:", err);
     return c.json({
       ok: false,
       error: err.message

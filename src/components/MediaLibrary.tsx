@@ -1500,8 +1500,9 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 repeatDelay: 3,
                 ease: "easeInOut"
               }}
+              className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
             >
-              <HardDrive className="w-6 h-6" />
+              <ImageIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </motion.div>
             Media Library
           </h1>

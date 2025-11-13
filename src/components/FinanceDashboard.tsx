@@ -52,6 +52,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [changeFilter, setChangeFilter] = useState<"all" | "up" | "down">("all");
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [preselectedSecurityId, setPreselectedSecurityId] = useState<string | undefined>(undefined);
   const [providers, setProviders] = useState<DataProvider[]>([]);
@@ -651,7 +652,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       // Type filter
       const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(security.type);
 
-      return searchMatch && typeMatch;
+      // Change filter
+      const changeMatch = changeFilter === "all" || 
+        (changeFilter === "up" && snapshot?.changePct?.value > 0) ||
+        (changeFilter === "down" && snapshot?.changePct?.value < 0);
+
+      return searchMatch && typeMatch && changeMatch;
     });
 
     // Sort by symbol or name
@@ -665,7 +671,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         return bName.localeCompare(aName);
       }
     });
-  }, [activeSecurities, searchTerm, selectedTypes, sortOrder]);
+  }, [activeSecurities, searchTerm, selectedTypes, sortOrder, changeFilter]);
 
   const marketSummary = useMemo(() => {
     const filtered = filteredSecurities;
@@ -863,24 +869,24 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
           >
             <Card className="overflow-hidden relative group hover:shadow-lg transition-all duration-300 h-full">
               <motion.div
-                className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                className="absolute inset-0 bg-gradient-to-br from-green-500/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                 initial={false}
               />
               <CardContent className="p-6 relative z-10">
                 <div className="flex items-center gap-4">
                   <motion.div 
-                    className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg"
+                    className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg"
                     whileHover={{ scale: 1.1, rotate: 5 }}
                     transition={{ type: "spring", stiffness: 300 }}
                   >
-                    <Building2 className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                    <TrendingUp className="w-6 h-6 text-green-600 dark:text-green-400" />
                   </motion.div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Securities</p>
                     <motion.p 
                       className="text-2xl font-semibold"
                       key={marketSummary.totalSecurities}
-                      initial={{ scale: 1.2, color: "#3b82f6" }}
+                      initial={{ scale: 1.2, color: "#10b981" }}
                       animate={{ scale: 1, color: "currentColor" }}
                       transition={{ duration: 0.5 }}
                     >
@@ -1031,6 +1037,8 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
         securities={securities}
         sortOrder={sortOrder}
         onSortChange={setSortOrder}
+        changeFilter={changeFilter}
+        onChangeFilterChange={setChangeFilter}
       />
 
       {/* Securities by Type */}

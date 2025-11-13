@@ -1161,9 +1161,9 @@ export function ElectionAIInsights({
                   onOpenChange={() => toggleInsightExpansion(insight.id)}
                 >
                   <Card 
-                    className={`border-l-4 ${borderColor} ${bgGradient} min-w-[380px] max-w-[380px] flex-shrink-0 snap-start shadow-md hover:shadow-lg transition-all`}
+                    className={`border-l-4 ${borderColor} ${bgGradient} min-w-[380px] max-w-[380px] flex-shrink-0 snap-start shadow-md hover:shadow-lg transition-all ${!isExpanded ? 'h-[240px]' : ''}`}
                   >
-                    <CardHeader className="pb-3">
+                    <CardHeader className="pb-3 h-full flex flex-col">
                       <div className="flex items-start justify-between gap-2">
                         <CollapsibleTrigger className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer hover:opacity-80 transition-opacity text-left">
                           <div className={`p-1.5 rounded-lg border shrink-0 ${
@@ -1193,31 +1193,51 @@ export function ElectionAIInsights({
                         </button>
                       </div>
 
-                      {/* Status Banner - Always visible when not expanded */}
-                      {!isExpanded && hasAlert && (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-700">
-                          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-                          <span className="text-xs font-semibold text-red-700 dark:text-red-300">Critical Alert</span>
+                      {/* Collapsed Content Container */}
+                      {!isExpanded && (
+                        <div className="flex-1 flex flex-col justify-between min-h-0">
+                          <div className="space-y-2">
+                            {/* Status Banner - Always visible when not expanded */}
+                            {hasAlert && (
+                              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950/40 border border-red-300 dark:border-red-700">
+                                <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                                <span className="text-xs font-semibold text-red-700 dark:text-red-300">Critical Alert</span>
+                              </div>
+                            )}
+                            
+                            {/* Preview Text - When not expanded */}
+                            {preview && (
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {preview}...
+                              </p>
+                            )}
+                          </div>
+                          
+                          {/* Metadata Row - Always at bottom */}
+                          <div className="flex items-center gap-2 flex-wrap pt-2 mt-auto">
+                            <Badge variant="outline" className="text-xs">
+                              <Vote className="w-3 h-3 mr-1" />
+                              {selectedRaceIds.length || 0}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(insight.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
                         </div>
                       )}
                       
-                      {/* Preview Text - When not expanded */}
-                      {!isExpanded && preview && (
-                        <p className="text-sm text-muted-foreground line-clamp-2">
-                          {preview}...
-                        </p>
+                      {/* Metadata Row - When expanded */}
+                      {isExpanded && (
+                        <div className="flex items-center gap-2 flex-wrap pt-2">
+                          <Badge variant="outline" className="text-xs">
+                            <Vote className="w-3 h-3 mr-1" />
+                            {selectedRaceIds.length || 0}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(insight.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
                       )}
-                      
-                      {/* Metadata Row */}
-                      <div className="flex items-center gap-2 flex-wrap pt-2">
-                        <Badge variant="outline" className="text-xs">
-                          <Vote className="w-3 h-3 mr-1" />
-                          {selectedRaceIds.length || 0}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(insight.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
                     </CardHeader>
 
                     <CollapsibleContent>

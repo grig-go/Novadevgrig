@@ -16,7 +16,7 @@ import {
   DialogHeader, 
   DialogTitle 
 } from "./ui/dialog";
-import { Loader2 } from "lucide-react";
+import { Loader2, Rss } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { useWeatherData } from "../utils/useWeatherData";
@@ -632,7 +632,7 @@ export function WeatherDashboard({
               whileHover={{ scale: 1.1, rotate: 5 }}
               transition={{ type: "spring", stiffness: 400 }}
             >
-              <Wind className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <Rss className="w-6 h-6 text-purple-600 dark:text-purple-400" />
             </motion.div>
             <div>
               <p className="text-sm text-muted-foreground">Data Providers</p>
