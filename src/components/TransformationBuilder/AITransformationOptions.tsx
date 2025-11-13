@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { ChevronDown, ChevronUp, Trash2, Plus, Play, Info, ArrowRight } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { useToast } from '../ui/use-toast';
+import { isDevelopment, SKIP_AUTH_IN_DEV } from '../../utils/constants';
+import { publicAnonKey } from '../../utils/supabase/info';
 
 interface AITransformationOptionsProps {
   prompt: string;
@@ -138,7 +140,19 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
       }
 
       // Call the edge function
-      const { data: { session } } = await supabase.auth.getSession();
+      // In development mode with auth disabled, use the anon key instead of session token
+      const headers: Record<string, string> = {};
+
+      if (isDevelopment && SKIP_AUTH_IN_DEV) {
+        // Use anon key for development
+        headers['Authorization'] = `Bearer ${publicAnonKey}`;
+      } else {
+        // Use session token in production
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+      }
 
       const response = await supabase.functions.invoke('claude', {
         body: {
@@ -146,9 +160,7 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
           systemPrompt: localSystemPrompt || 'You are a data transformation assistant. Transform the input according to the instructions provided.',
           outputFormat: localOutputFormat
         },
-        headers: {
-          Authorization: `Bearer ${session?.access_token}`
-        }
+        headers
       });
 
       if (response.error) {
@@ -176,12 +188,21 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
       });
     } catch (error: any) {
       console.error('Test transformation error:', error);
+      console.error('Error details:', {
+        message: error?.message,
+        context: error?.context,
+        details: error?.details,
+        status: error?.status,
+        statusText: error?.statusText,
+        full: JSON.stringify(error, null, 2)
+      });
 
       let errorMessage = error.message || 'Failed to test transformation';
 
       // Provide more helpful error messages
       if (errorMessage.includes('Edge Function') || errorMessage.includes('FunctionsHttpError')) {
-        errorMessage = 'Claude AI function not available. Please ensure the edge function is deployed and ANTHROPIC_API_KEY is configured.';
+        const detailsMsg = error?.context?.body ? ` Details: ${JSON.stringify(error.context.body)}` : '';
+        errorMessage = `Claude AI function not available. Please ensure the edge function is deployed and ANTHROPIC_API_KEY is configured.${detailsMsg}`;
       } else if (errorMessage.includes('request')) {
         errorMessage = 'Failed to connect to Claude AI service. Please check your network connection and Supabase configuration.';
       }
