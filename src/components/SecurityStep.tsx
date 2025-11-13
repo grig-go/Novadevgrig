@@ -79,7 +79,10 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  // Store latest auth settings in ref for unmount sync
+  // Track if component is initialized to prevent sync loop
+  const isInitializedRef = useRef(false);
+
+  // Store latest auth settings in ref (updated synchronously, not in useEffect)
   const authSettingsRef = useRef({
     authEnabled,
     authType,
@@ -89,21 +92,19 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
     apiKeyHeaderName
   });
 
-  // Update ref whenever auth settings change
-  useEffect(() => {
-    authSettingsRef.current = {
-      authEnabled,
-      authType,
-      apiKeys,
-      bearerTokens,
-      basicAuthUsers,
-      apiKeyHeaderName
-    };
-  }, [authEnabled, authType, apiKeys, bearerTokens, basicAuthUsers, apiKeyHeaderName]);
+  // Update ref synchronously whenever state changes (before any renders)
+  authSettingsRef.current = {
+    authEnabled,
+    authType,
+    apiKeys,
+    bearerTokens,
+    basicAuthUsers,
+    apiKeyHeaderName
+  };
 
-  // Initialize authentication data from formData
+  // Initialize authentication data from formData (only on mount or when editing)
   useEffect(() => {
-    if (formData.authConfig) {
+    if (formData.authConfig && !isInitializedRef.current) {
       if (authType === 'api_key' && formData.authConfig.keys) {
         setApiKeys(formData.authConfig.keys); // Use 'keys' to match nova-old structure
       }
@@ -113,8 +114,45 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
       if (authType === 'basic' && formData.authConfig.users) {
         setBasicAuthUsers(formData.authConfig.users);
       }
+      isInitializedRef.current = true;
     }
   }, [formData.authConfig, authType]);
+
+  // Sync auth settings to parent immediately when they change (like nova-old)
+  useEffect(() => {
+    // Skip sync on first render
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      return;
+    }
+
+    const authConfig = authEnabled ? (() => {
+      switch (authType) {
+        case 'api_key':
+          return {
+            header_name: apiKeyHeaderName,
+            keys: apiKeys
+          };
+        case 'bearer':
+          return {
+            allowed_tokens: bearerTokens.split('\n').filter((t: string) => t.trim())
+          };
+        case 'basic':
+          return {
+            users: basicAuthUsers
+          };
+        default:
+          return {};
+      }
+    })() : undefined;
+
+    setFormData(prev => ({
+      ...prev,
+      requiresAuth: authEnabled,
+      auth: authEnabled ? authType : 'none',
+      authConfig
+    }));
+  }, [authEnabled, authType, apiKeys, bearerTokens, basicAuthUsers, apiKeyHeaderName]);
 
   // Auto-save draft for testing
   useEffect(() => {
@@ -225,40 +263,6 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
     };
   }, [draftId]);
 
-  // Sync auth settings to parent formData only on unmount to avoid infinite loop
-  useEffect(() => {
-    return () => {
-      // Use the ref to get the latest auth settings (avoids stale closure)
-      const authSettings = authSettingsRef.current;
-      const authConfig = authSettings.authEnabled ? (() => {
-        switch (authSettings.authType) {
-          case 'api_key':
-            return {
-              header_name: authSettings.apiKeyHeaderName,
-              keys: authSettings.apiKeys
-            };
-          case 'bearer':
-            return {
-              allowed_tokens: authSettings.bearerTokens.split('\n').filter(t => t.trim())
-            };
-          case 'basic':
-            return {
-              users: authSettings.basicAuthUsers
-            };
-          default:
-            return {};
-        }
-      })() : undefined;
-
-      setFormData(prev => ({
-        ...prev,  // IMPORTANT: Preserve all existing formData fields
-        requiresAuth: authSettings.authEnabled,
-        auth: authSettings.authType,
-        authConfig
-      }));
-    };
-  }, []);
-
   const getAuthConfig = () => {
     switch (authType) {
       case 'api_key':
@@ -307,7 +311,7 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
       setFormData(prev => ({
         ...prev,  // IMPORTANT: Preserve all existing formData fields
         requiresAuth: authSettings.authEnabled,
-        auth: authSettings.authType,
+        auth: authSettings.authEnabled ? authSettings.authType : 'none',
         authConfig
       }));
     },
