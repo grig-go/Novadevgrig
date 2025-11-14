@@ -42,15 +42,46 @@ export function useMappingEngine(
     sourceInfo?: any
   ): any => {
     let value;
-    
+
+    // Check if this mapping has array configuration
+    const arrayConfig = (mapping as any).arrayConfig ? JSON.parse((mapping as any).arrayConfig) : null;
+
     // Check if this is a metadata field
     if (mapping.sourcePath.startsWith('_source.')) {
       value = getMetadataValue(mapping.sourcePath, mapping.sourceId || '', sourceInfo);
+    } else if (arrayConfig && arrayConfig.mappingMode === 'array') {
+      // Handle array mapping - extract field from each array item
+      // e.g., "candidates[*].name" -> get array of names from candidates array
+      // e.g., "tags[0]" -> just "tags"
+      const arrayPathMatch = mapping.sourcePath.match(/^([^[]+)\[/);
+      const basePath = arrayPathMatch ? arrayPathMatch[1] : mapping.sourcePath;
+
+      // Check if there's a field path after the array notation
+      // e.g., "candidates[*].name" -> fieldPath is "name"
+      const fieldPathMatch = mapping.sourcePath.match(/\[[\*\d]+\]\.(.+)$/);
+      const fieldPath = fieldPathMatch ? fieldPathMatch[1] : null;
+
+      console.log(`Array mapping - sourcePath: ${mapping.sourcePath}, basePath: ${basePath}, fieldPath: ${fieldPath}`);
+      const arrayValue = getValueFromPath(sourceData, basePath);
+      console.log(`Array value found:`, arrayValue);
+
+      // Return the mapped array if it exists
+      if (Array.isArray(arrayValue)) {
+        if (fieldPath) {
+          // Extract the specific field from each array item
+          value = arrayValue.map(item => getValueFromPath(item, fieldPath));
+        } else {
+          // Return the entire array items
+          value = arrayValue;
+        }
+      } else {
+        value = null;
+      }
     } else {
       // Regular data field
       value = getValueFromPath(sourceData, mapping.sourcePath);
     }
-    
+
     // Apply transformation if specified
     if (mapping.transformId) {
       const transform = config.transformations.find(
@@ -60,29 +91,29 @@ export function useMappingEngine(
         value = applyTransformation(value, transform);
       }
     }
-    
+
     // Apply conditional logic
     if (mapping.conditional) {
       const conditionValue = mapping.conditional.when.startsWith('_source.')
         ? getMetadataValue(mapping.conditional.when, mapping.sourceId || '', sourceInfo)
         : getValueFromPath(sourceData, mapping.conditional.when);
-        
+
       const meetsCondition = evaluateCondition(
         conditionValue,
         mapping.conditional.operator,
         mapping.conditional.value
       );
-      
-      value = meetsCondition 
-        ? mapping.conditional.then 
+
+      value = meetsCondition
+        ? mapping.conditional.then
         : mapping.conditional.else;
     }
-    
+
     // Use fallback if value is null/undefined
     if (value === null || value === undefined) {
       value = mapping.fallbackValue;
     }
-    
+
     return value;
   }, [config.transformations, getMetadataValue]);
 
