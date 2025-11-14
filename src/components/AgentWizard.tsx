@@ -958,6 +958,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         return true; // Optional step
       case 'security':
         return true; // Optional step
+      case 'test':
+        return true; // Optional step - testing before deploying
       case 'review':
         return true;
       default:

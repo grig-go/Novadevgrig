@@ -2,6 +2,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 import type { DataSource } from "../types.ts";
 
+// Deno global type declaration (available in Deno runtime)
+declare const Deno: any;
+
 export async function fetchDataFromSource(
   dataSource: DataSource,
   supabase: any,
@@ -33,6 +36,26 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
 
   // Handle dynamic URL parameters
   let url = apiConfig.url;
+  let isNovaElectionUrl = false;
+
+  // Transform /nova/election URLs to actual Supabase Edge Function URLs
+  // This allows users to use any domain (localhost, dev server, etc.) for testing
+  // and it will automatically use the correct Supabase Edge Function URL
+  if (url.includes('/nova/election')) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    if (supabaseUrl) {
+      // Extract query string if present
+      const urlObj = new URL(url);
+      const queryString = urlObj.search; // includes the '?' if present
+
+      // Replace with Supabase Edge Function URL
+      url = `${supabaseUrl}/functions/v1/nova-election${queryString}`;
+      isNovaElectionUrl = true;
+      console.log(`Transformed /nova/election URL to: ${url}`);
+    } else {
+      console.warn("SUPABASE_URL not found, cannot transform /nova/election URL");
+    }
+  }
 
   // Check if there are parameter mappings configured
   if (apiConfig.parameter_mappings && Array.isArray(apiConfig.parameter_mappings)) {
@@ -64,7 +87,15 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   const headers: Record<string, string> = {};
 
   // Add authentication headers
-  if (apiConfig.auth_type === "bearer" && apiConfig.auth_token) {
+  if (isNovaElectionUrl) {
+    // For transformed nova-election URLs, use Supabase anon key
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (anonKey) {
+      headers["Authorization"] = `Bearer ${anonKey}`;
+      headers["apikey"] = anonKey;
+      console.log("Added Supabase authentication headers for nova-election");
+    }
+  } else if (apiConfig.auth_type === "bearer" && apiConfig.auth_token) {
     headers["Authorization"] = `Bearer ${apiConfig.auth_token}`;
   } else if (apiConfig.auth_type === "api_key") {
     if (apiConfig.api_key_header && apiConfig.api_key_value) {
