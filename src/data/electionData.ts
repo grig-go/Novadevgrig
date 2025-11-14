@@ -844,6 +844,7 @@ export const initializeElectionData = async (): Promise<ElectionData> => {
       electionData = data;
 
       console.log('Election data loaded successfully with', electionData.races.length, 'races');
+      console.log(electionData);
       isElectionDataLoading = false;
 
       return electionData;
@@ -885,4 +886,40 @@ export function clearElectionDataCache(): void {
   console.log('Clearing election data cache - forcing fresh fetch on next call');
   cachedElectionData = null; // Clear cache
   cachedRawData.clear(); // Clear raw data cache
+}
+
+// Function to fetch election data from the API endpoint
+export async function fetchElectionDataFromAPI(
+  year?: number,
+  raceType?: 'presidential' | 'senate' | 'house',
+  level?: 'national' | 'state' | 'district' | 'county'
+): Promise<any> {
+  try {
+    // Build query string
+    const params = new URLSearchParams();
+    if (year) params.append('year', year.toString());
+    if (raceType) params.append('raceType', raceType);
+    if (level) params.append('level', level);
+
+    const queryString = params.toString();
+    const url = `/nova/election${queryString ? '?' + queryString : ''}`;
+
+    console.log('Fetching from API:', url);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`API Error: ${errorData.error || response.statusText}`);
+    }
+
+    const result = await response.json();
+
+    console.log(`API returned response`);
+    return result;
+
+  } catch (error) {
+    console.error('Failed to fetch from API:', error);
+    throw error;
+  }
 }
