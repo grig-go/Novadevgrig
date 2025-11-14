@@ -453,7 +453,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   }
 
   const handleUpdateParty = async (updatedParty: Party) => {
-    //return false;
+    return false;
     try {
       // Prepare the update data for PostgreSQL
       const updateData: any = {
