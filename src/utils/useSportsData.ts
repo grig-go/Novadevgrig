@@ -25,6 +25,8 @@ export function useSportsData() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchSportsData = async () => {
+    // COMMENTED OUT FOR REFACTORING - Sports data fetching will be refactored
+    /*
     try {
       setLoading(true);
       setError(null);
@@ -125,6 +127,19 @@ export function useSportsData() {
     } finally {
       setLoading(false);
     }
+    */
+    
+    // Temporary: Return zero stats during refactoring
+    setLoading(false);
+    setStats({
+      totalTeams: 0,
+      totalGames: 0,
+      totalVenues: 0,
+      totalTournaments: 0,
+      providers: 0,
+      lastUpdated: new Date().toISOString(),
+      hasActiveProvider: false,
+    });
   };
 
   useEffect(() => {
