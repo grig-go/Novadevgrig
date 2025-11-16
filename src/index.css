@@ -1682,10 +1682,6 @@
     list-style-type: decimal;
   }
 
-  .list-disc {
-    list-style-type: disc;
-  }
-
   .auto-rows-min {
     grid-auto-rows: min-content;
   }
