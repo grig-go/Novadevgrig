@@ -5975,6 +5975,10 @@
     color: var(--color-red-400);
   }
 
+  .dark\:text-white:is(.dark *) {
+    color: var(--color-white);
+  }
+
   .dark\:text-yellow-200:is(.dark *) {
     color: var(--color-yellow-200);
   }
