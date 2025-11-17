@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -39,6 +39,40 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('response');
+
+  // Track the current test agent for cleanup on unmount
+  const currentTestAgentRef = useRef<{ id: string; slug: string } | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup function to delete test agent
+  const cleanupTestAgent = async (agentId: string, slug: string) => {
+    try {
+      await supabase
+        .from('api_endpoints')
+        .delete()
+        .eq('id', agentId);
+      console.log('Cleaned up temporary test endpoint:', slug);
+    } catch (cleanupError) {
+      console.error('Failed to clean up test endpoint:', cleanupError);
+    }
+  };
+
+  // Cleanup on component unmount (e.g., page refresh)
+  useEffect(() => {
+    return () => {
+      // Cancel any ongoing request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // Clean up test agent if one exists
+      if (currentTestAgentRef.current) {
+        const { id, slug } = currentTestAgentRef.current;
+        // Fire-and-forget cleanup (can't await in cleanup function)
+        cleanupTestAgent(id, slug);
+      }
+    };
+  }, []);
 
   const getEndpointUrl = () => {
     const baseUrl = window.location.origin;
@@ -174,6 +208,11 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
 
       tempAgentId = saveResult.agentId;
 
+      // Store in ref for cleanup on unmount
+      if (tempAgentId && tempSlug) {
+        currentTestAgentRef.current = { id: tempAgentId, slug: tempSlug };
+      }
+
       // Wait a moment for database consistency
       await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -190,13 +229,23 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
 
       const startTime = Date.now();
 
+      // Create AbortController for request timeout and cancellation
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      // Set timeout for 60 seconds
+      const timeoutId = setTimeout(() => {
+        abortController.abort();
+      }, 60000);
+
       // Make request to the actual endpoint
       const requestOptions: RequestInit = {
         method: testMethod,
         headers: {
           'Content-Type': 'application/json',
           ...parsedHeaders
-        }
+        },
+        signal: abortController.signal
       };
 
       // Add body for non-GET/DELETE methods
@@ -205,6 +254,7 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
       }
 
       const response = await fetch(testUrl, requestOptions);
+      clearTimeout(timeoutId);
       const responseTime = Date.now() - startTime;
 
       // Get response data
@@ -254,30 +304,30 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
       }
     } catch (error: any) {
       console.error('Test error:', error);
+
+      // Check if request was aborted (timeout or manual cancellation)
+      const isAborted = error.name === 'AbortError';
+
       setTestResult({
         success: false,
-        error: error.message || 'Unknown error occurred',
+        error: isAborted ? 'Request timed out after 60 seconds' : (error.message || 'Unknown error occurred'),
         responseTime: 0,
         statusCode: 500
       });
       toast({
-        title: 'Test Error',
-        description: error.message || 'An error occurred while testing',
+        title: isAborted ? 'Request Timeout' : 'Test Error',
+        description: isAborted ? 'The test request timed out after 60 seconds' : (error.message || 'An error occurred while testing'),
         variant: 'destructive'
       });
     } finally {
+      // Clear abort controller ref
+      abortControllerRef.current = null;
+
       // Clean up: Delete the temporary test endpoint
-      if (tempAgentId) {
-        try {
-          await supabase
-            .from('api_endpoints')
-            .delete()
-            .eq('id', tempAgentId);
-          console.log('Cleaned up temporary test endpoint:', tempSlug);
-        } catch (cleanupError) {
-          console.error('Failed to clean up test endpoint:', cleanupError);
-          // Don't show error to user, just log it
-        }
+      if (tempAgentId && tempSlug) {
+        await cleanupTestAgent(tempAgentId, tempSlug);
+        // Clear the ref after cleanup
+        currentTestAgentRef.current = null;
       }
 
       setIsLoading(false);
