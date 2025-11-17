@@ -95,6 +95,60 @@ app.get("/locations", async (c)=>{
     return jsonErr(c, 500, "LOCATIONS_FETCH_FAILED", err);
   }
 });
+// SEARCH locations using WeatherAPI geocoding (MUST be before /locations/:id)
+app.get("/locations/search", async (c)=>{
+  try {
+    const query = c.req.query("q");
+    if (!query) {
+      return jsonErr(c, 400, "INVALID_QUERY", "Query parameter 'q' is required");
+    }
+    // Get active provider
+    const { data: providers, error: provError } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("is_active", true);
+    if (provError) {
+      console.error("Error fetching provider:", provError);
+      return jsonErr(c, 500, "PROVIDER_FETCH_FAILED", provError.message);
+    }
+    // Find WeatherAPI provider
+    const weatherApiProvider = providers?.find((p)=>p.type === "weatherapi" || p.name === "WeatherAPI.com");
+    if (!weatherApiProvider) {
+      console.error("No WeatherAPI provider found. Available providers:", providers);
+      return jsonErr(c, 400, "NO_ACTIVE_PROVIDER", "No active WeatherAPI provider configured. Please configure a provider in Settings.");
+    }
+    console.log(`Using provider: ${weatherApiProvider.name}`);
+    const apiKey = weatherApiProvider.api_key;
+    if (!apiKey) {
+      return jsonErr(c, 500, "API_KEY_MISSING", "WeatherAPI key not configured");
+    }
+    const searchUrl = `https://api.weatherapi.com/v1/search.json?key=${apiKey}&q=${query}`;
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) {
+      throw new Error(`Weather API error: ${searchRes.status}`);
+    }
+    const searchResults = await searchRes.json();
+    const formattedResults = searchResults.map((loc)=>{
+      return {
+        id: generateLocationId(loc.name, loc.region),
+        name: loc.name,
+        admin1: loc.region,
+        country: loc.country,
+        lat: loc.lat,
+        lon: loc.lon,
+        provider_id: weatherApiProvider.id,
+        provider_name: weatherApiProvider.name,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    });
+    return c.json({
+      ok: true,
+      results: formattedResults
+    });
+  } catch (err) {
+    console.error("Error searching locations:", err);
+    return jsonErr(c, 500, "LOCATION_SEARCH_FAILED", err);
+  }
+});
 // GET a single location by ID
 app.get("/locations/:id", async (c)=>{
   try {
@@ -224,60 +278,6 @@ app.put("/locations/:id", async (c)=>{
   } catch (err) {
     console.error("Error updating location:", err);
     return jsonErr(c, 500, "LOCATION_UPDATE_FAILED", err);
-  }
-});
-// SEARCH locations using WeatherAPI geocoding
-app.get("/locations/search", async (c)=>{
-  try {
-    const query = c.req.query("q");
-    if (!query) {
-      return jsonErr(c, 400, "INVALID_QUERY", "Query parameter 'q' is required");
-    }
-    // Get active provider
-    const { data: providers, error: provError } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("is_active", true);
-    if (provError) {
-      console.error("Error fetching provider:", provError);
-      return jsonErr(c, 500, "PROVIDER_FETCH_FAILED", provError.message);
-    }
-    // Find WeatherAPI provider
-    const weatherApiProvider = providers?.find((p)=>p.type === "weatherapi" || p.name === "WeatherAPI.com");
-    if (!weatherApiProvider) {
-      console.error("No WeatherAPI provider found. Available providers:", providers);
-      return jsonErr(c, 400, "NO_ACTIVE_PROVIDER", "No active WeatherAPI provider configured. Please configure a provider in Settings.");
-    }
-    console.log(`Using provider: ${weatherApiProvider.name}`);
-    const apiKey = weatherApiProvider.api_key;
-    if (!apiKey) {
-      return jsonErr(c, 500, "API_KEY_MISSING", "WeatherAPI key not configured");
-    }
-    const searchUrl = `https://api.weatherapi.com/v1/search.json?key=${apiKey}&q=${query}`;
-    const searchRes = await fetch(searchUrl);
-    if (!searchRes.ok) {
-      throw new Error(`Weather API error: ${searchRes.status}`);
-    }
-    const searchResults = await searchRes.json();
-    const formattedResults = searchResults.map((loc)=>{
-      return {
-        id: generateLocationId(loc.name, loc.region),
-        name: loc.name,
-        admin1: loc.region,
-        country: loc.country,
-        lat: loc.lat,
-        lon: loc.lon,
-        provider_id: weatherApiProvider.id,
-        provider_name: weatherApiProvider.name,
-        is_active: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-    });
-    return c.json({
-      ok: true,
-      results: formattedResults
-    });
-  } catch (err) {
-    console.error("Error searching locations:", err);
-    return jsonErr(c, 500, "LOCATION_SEARCH_FAILED", err);
   }
 });
 // ============================================================================

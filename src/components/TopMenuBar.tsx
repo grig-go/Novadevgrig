@@ -15,11 +15,12 @@ import {
   Rss,
   Tv,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
 import emergentLogo from "figma:asset/14eb232dfd8c5b46f028102fb55aac1720da01bb.png";
 import { User, Role, Permission } from "../types/users";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
+import { supabase } from "../utils/supabase/client";
 
 interface TopMenuBarProps {
   onNavigate: (view: string) => void;
@@ -45,6 +46,29 @@ export function TopMenuBar({
     return false;
   });
   const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [apps, setApps] = useState<Array<{ 
+    id: string; 
+    name: string; 
+    app_url: string; 
+    sort_order: number;
+    app_key: string;
+  }>>([]);
+
+  // Fetch apps from backend
+  useEffect(() => {
+    const fetchApps = async () => {
+      const { data, error } = await supabase.rpc("list_active_applications");
+      
+      if (!error && data) {
+        console.log("Applications fetched from backend:", data);
+        setApps(data); // dropdown items
+      } else if (error) {
+        console.error("Failed to fetch applications:", error);
+      }
+    };
+    
+    fetchApps();
+  }, []);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -91,21 +115,23 @@ export function TopMenuBar({
   };
 
   // Apps Menu Configuration
-  const appsMenu: MenuDropdown = {
+  const appsMenu: MenuDropdown | undefined = apps.length > 0 ? {
     id: 'apps',
     label: 'Apps',
     icon: LayoutGrid,
     sections: [
       {
-        items: [
-          { id: 'nova', label: 'Nova', onClick: () => onNavigate('home') },
-          { id: 'pulsar', label: 'Pulsar', disabled: true },
-          { id: 'fusion', label: 'Fusion', disabled: true },
-          { id: 'nexus', label: 'Nexus', disabled: true },
-        ],
+        items: apps.map(app => ({
+          id: app.id,
+          label: app.name,
+          onClick: () => {
+            console.log('App clicked:', app.name, 'navigating to:', app.app_url);
+            window.open(app.app_url, '_blank');
+          },
+        })),
       },
     ],
-  };
+  } : undefined;
 
   // Tools Menu Configuration
   const toolsMenuItems = [

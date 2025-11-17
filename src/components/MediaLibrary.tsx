@@ -1997,7 +1997,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 </div>
               </div>
               <CardContent className="p-3 space-y-2 flex-1 flex flex-col">
-                <p className="truncate -mt-1 text-[rgba(10,10,10,0.77)] font-bold font-[Aoboshi_One]">{asset.name}</p>
+                <p className="truncate -mt-1 text-[rgba(10,10,10,0.77)] dark:text-white font-bold font-[Aoboshi_One]">{asset.name}</p>
                 <div className="flex items-center gap-2 flex-wrap">
                   {asset.tags.slice(0, 2).map(tag => (
                     <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
