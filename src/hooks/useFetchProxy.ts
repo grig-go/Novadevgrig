@@ -136,7 +136,7 @@ export const useFetchProxy = () => {
       // Get the current session for authentication
       const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session) {
+      if (!session && !skipAuth) {
         throw new Error('Authentication required. Please log in to test data sources.');
       }
 
@@ -151,7 +151,7 @@ export const useFetchProxy = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          ...(session ? { 'Authorization': `Bearer ${session.access_token}` } : {})
         },
         body: JSON.stringify({
           url,
