@@ -4500,8 +4500,6 @@ END;
 $function$
 ;
 
-create type "public"."geometry_dump" as ("path" integer[], "geom" public.geometry);
-
 CREATE OR REPLACE FUNCTION public.get_active_feeds_by_category(p_category text)
  RETURNS TABLE(id uuid, name text, type text, configuration jsonb, created_at timestamp with time zone)
  LANGUAGE plpgsql
@@ -4719,12 +4717,6 @@ BEGIN
 END;
 $function$
 ;
-
-create type "public"."http_header" as ("field" character varying, "value" character varying);
-
-create type "public"."http_request" as ("method" public.http_method, "uri" character varying, "headers" public.http_header[], "content_type" character varying, "content" character varying);
-
-create type "public"."http_response" as ("status" integer, "content_type" character varying, "headers" public.http_header[], "content" character varying);
 
 CREATE OR REPLACE FUNCTION public.inspect_pg_net_tables()
  RETURNS json
@@ -6553,9 +6545,6 @@ create or replace view "public"."v_user_activity" as  SELECT users.role,
     count(*) FILTER (WHERE (users.last_login > (now() - '30 days'::interval))) AS active_last_30_days
    FROM public.users
   GROUP BY users.role, users.status;
-
-
-create type "public"."valid_detail" as ("valid" boolean, "reason" character varying, "location" public.geometry);
 
 CREATE OR REPLACE FUNCTION public.validate_channel_hierarchy()
  RETURNS trigger
