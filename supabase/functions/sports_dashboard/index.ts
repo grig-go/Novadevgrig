@@ -1,8 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2.49.8';
 import { Hono } from 'npm:hono';
 import { cors } from 'npm:hono/cors';
-// import * as kv from './kv_store.tsx'; // COMMENTED OUT - not using kv store right now
-const BUILD_ID = new Date().toISOString();
 console.log('[sports_dashboard] boot', BUILD_ID);
 const app = new Hono().basePath('/sports_dashboard');
 // Disable noisy logger that breaks JSON responses

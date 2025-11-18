@@ -39,5 +39,5 @@ enabled = false
 [functions.vizrt-ticker]
 verify_jwt = false
 
-[functions.school-closings]
+[functions.school_closing]
 verify_jwt = false
