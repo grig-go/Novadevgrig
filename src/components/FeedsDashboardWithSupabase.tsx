@@ -353,7 +353,7 @@ export function FeedsDashboardWithSupabase({
       console.log('[Edit] Fetching leagues from backend endpoint');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/sportmonks/soccer/leagues`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`,
         {
           method: 'GET',
           headers: {
@@ -1274,7 +1274,7 @@ export function FeedsDashboardWithSupabase({
                         try {
                           console.log('[FetchLeagues] Fetching leagues from SportMonks...');
                           
-                          const endpoint = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/sportmonks/soccer/leagues`;
+                          const endpoint = `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`;
                           const response = await fetch(endpoint, {
                             headers: {
                               'Authorization': `Bearer ${publicAnonKey}`,

@@ -94,7 +94,7 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       
       // Call backend to fetch and add all teams from this league
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/add-league`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/add-league`,
         {
           method: 'POST',
           headers: { 
@@ -157,7 +157,7 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       
       // Call backend to remove all teams from this league
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/remove-league`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/remove-league`,
         {
           method: 'POST',
           headers: { 

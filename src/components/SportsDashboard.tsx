@@ -85,69 +85,75 @@ export function SportsDashboard({
         return;
       }
       
+      // COMMENTED OUT - not using sports_dashboard edge function right now
       // Fetch all sports data in parallel
-      const [teamsRes, gamesRes, venuesRes, tournamentsRes] = await Promise.all([
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/games`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/venues`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/tournaments`, {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
-        }),
-      ]);
+      // const [teamsRes, gamesRes, venuesRes, tournamentsRes] = await Promise.all([
+      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`, {
+      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
+      //   }),
+      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/games`, {
+      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
+      //   }),
+      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/venues`, {
+      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
+      //   }),
+      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`, {
+      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
+      //   }),
+      // ]);
 
-      if (teamsRes.ok && gamesRes.ok && venuesRes.ok && tournamentsRes.ok) {
-        const [teamsData, gamesData, venuesData, tournamentsData] = await Promise.all([
-          teamsRes.json(),
-          gamesRes.json(),
-          venuesRes.json(),
-          tournamentsRes.json(),
-        ]);
+      // if (teamsRes.ok && gamesRes.ok && venuesRes.ok && tournamentsRes.ok) {
+      //   const [teamsData, gamesData, venuesData, tournamentsData] = await Promise.all([
+      //     teamsRes.json(),
+      //     gamesRes.json(),
+      //     venuesRes.json(),
+      //     tournamentsRes.json(),
+      //   ]);
 
-        // Transform backend data to SportsEntityWithOverrides format
-        const transformToEntity = (item: any): SportsEntityWithOverrides => ({
-          entity: item,
-          overrides: [],
-          lastUpdated: item.lastUpdated || new Date().toISOString(),
-          primaryProvider: item.primaryProvider || 'sportradar',
-        });
+      // Transform backend data to SportsEntityWithOverrides format
+      // const transformToEntity = (item: any): SportsEntityWithOverrides => ({
+      //   entity: item,
+      //   overrides: [],
+      //   lastUpdated: item.lastUpdated || new Date().toISOString(),
+      //   primaryProvider: item.primaryProvider || 'sportradar',
+      // });
 
-        setTeams((teamsData.teams || []).map(transformToEntity));
-        setGames((gamesData.games || []).map(transformToEntity));
-        setVenues((venuesData.venues || []).map(transformToEntity));
-        setTournaments((tournamentsData.tournaments || []).map(transformToEntity));
-        
-        // Extract unique leagues from tournaments (tournaments are competitions/leagues)
-        const tournamentsArray = tournamentsData.tournaments || [];
-        const seenIds = new Set<string>();
-        const uniqueLeagues: League[] = [];
-        
-        for (const tournament of tournamentsArray) {
-          if (!seenIds.has(tournament.id)) {
-            seenIds.add(tournament.id);
-            uniqueLeagues.push({
-              id: tournament.id,
-              name: tournament.name,
-              abbrev: tournament.abbrev,
-              sport: tournament.sport || 'unknown',
-              country: 'INTL',
-              brand: tournament.brand || {
-                primary_color: '#000000',
-                secondary_color: '#FFFFFF',
-              },
-            });
-          }
-        }
-        setLeagues(uniqueLeagues);
-        setLastUpdated(new Date().toISOString());
-      } else {
-        console.error('Failed to fetch sports data');
-      }
+      // setTeams((teamsData.teams || []).map(transformToEntity));
+      // setGames((gamesData.games || []).map(transformToEntity));
+      // setVenues((venuesData.venues || []).map(transformToEntity));
+      // setTournaments((tournamentsData.tournaments || []).map(transformToEntity));
+      // 
+      // // Extract unique leagues from tournaments (tournaments are competitions/leagues)
+      // const tournamentsArray = tournamentsData.tournaments || [];
+      // const seenIds = new Set<string>();
+      // const uniqueLeagues: League[] = [];
+      // 
+      // for (const tournament of tournamentsArray) {
+      //   if (!seenIds.has(tournament.id)) {
+      //     seenIds.add(tournament.id);
+      //     uniqueLeagues.push({
+      //       id: tournament.id,
+      //       name: tournament.name,
+      //       abbrev: tournament.abbrev,
+      //       sport: tournament.sport || 'unknown',
+      //       country: 'INTL',
+      //       brand: tournament.brand || {
+      //         primary_color: '#000000',
+      //         secondary_color: '#FFFFFF',
+      //       },
+      //     });
+      //   }
+      // }
+      // setLeagues(uniqueLeagues);
+      // setLastUpdated(new Date().toISOString());
+      
+      // Return empty data for now - not using sports_dashboard edge function
+      setTeams([]);
+      setGames([]);
+      setVenues([]);
+      setTournaments([]);
+      setLeagues([]);
+      setLastUpdated(new Date().toISOString());
     } catch (error) {
       console.error('Error fetching sports data:', error);
       toast.error('Failed to load sports data');
@@ -203,37 +209,38 @@ export function SportsDashboard({
 
       toast.info(`Syncing sports data from ${activeSportsProviders.length} provider(s)...`);
       
+      // COMMENTED OUT - not using sports_dashboard edge function right now
       // Sync data from all active providers
-      await Promise.all(
-        activeSportsProviders.map(async (provider: any) => {
-          try {
-            console.log(`[Sports Refresh] Syncing provider ${provider.id} (${provider.name})`);
-            const response = await fetch(
-              `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/sync`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${publicAnonKey}`,
-                },
-                body: JSON.stringify({ providerId: provider.id }),
-              }
-            );
-            
-            if (!response.ok) {
-              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-              console.error(`[Sports Refresh] Failed to sync provider ${provider.id}:`, errorData);
-              toast.error(`Failed to sync ${provider.name}`);
-            } else {
-              const result = await response.json();
-              console.log(`[Sports Refresh] Successfully synced ${provider.id}:`, result);
-            }
-          } catch (err) {
-            console.error(`[Sports Refresh] Exception syncing provider ${provider.id}:`, err);
-            toast.error(`Error syncing ${provider.name}`);
-          }
-        })
-      );
+      // await Promise.all(
+      //   activeSportsProviders.map(async (provider: any) => {
+      //     try {
+      //       console.log(`[Sports Refresh] Syncing provider ${provider.id} (${provider.name})`);
+      //       const response = await fetch(
+      //         `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/sync`,
+      //         {
+      //           method: 'POST',
+      //           headers: {
+      //             'Content-Type': 'application/json',
+      //             Authorization: `Bearer ${publicAnonKey}`,
+      //           },
+      //           body: JSON.stringify({ providerId: provider.id }),
+      //         }
+      //       );
+      //       
+      //       if (!response.ok) {
+      //         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      //         console.error(`[Sports Refresh] Failed to sync provider ${provider.id}:`, errorData);
+      //         toast.error(`Failed to sync ${provider.name}`);
+      //       } else {
+      //         const result = await response.json();
+      //         console.log(`[Sports Refresh] Successfully synced ${provider.id}:`, result);
+      //       }
+      //     } catch (err) {
+      //       console.error(`[Sports Refresh] Exception syncing provider ${provider.id}:`, err);
+      //       toast.error(`Error syncing ${provider.name}`);
+      //     }
+      //   })
+      // );
 
       // Refetch all data after sync
       console.log('[Sports Refresh] Refetching all sports data...');
@@ -261,7 +268,7 @@ export function SportsDashboard({
 
       // Step 2: Get current provider list
       const providersResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-providers`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
         {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }
@@ -292,7 +299,7 @@ export function SportsDashboard({
           console.log(`[Sports Initialize] Syncing provider ${provider.id} (${provider.name})`);
           
           const syncResponse = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/sync`,
+            `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/sync`,
             {
               method: 'POST',
               headers: {
@@ -935,7 +942,7 @@ export function SportsDashboard({
                     
                     toast.info('Fetching standings...');
                     const response = await fetch(
-                      `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/standings/${leagueId}`,
+                      `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/standings/${leagueId}`,
                       {
                         headers: { Authorization: `Bearer ${publicAnonKey}` }
                       }

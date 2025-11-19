@@ -136,7 +136,7 @@ export function SportsDebugPanel() {
       // 2. Fetch Tournaments
       console.log('[Debug] Fetching tournaments...');
       const tournamentsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/tournaments`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       
@@ -155,7 +155,7 @@ export function SportsDebugPanel() {
       // 3. Fetch Teams
       console.log('[Debug] Fetching teams...');
       const teamsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       
@@ -260,7 +260,7 @@ export function SportsDebugPanel() {
       console.log('[Cleanup] Starting tournament deduplication...');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/tournaments/cleanup`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments/cleanup`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${publicAnonKey}` },
@@ -294,7 +294,7 @@ export function SportsDebugPanel() {
       leagueId,
       leagueName: debugData.tournaments?.find((t: any) => t.id === leagueId)?.name || leagueId,
       request: {
-        url: `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/standings/${leagueId}`,
+        url: `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/standings/${leagueId}`,
         method: 'GET',
         headers: {
           Authorization: `Bearer ${publicAnonKey.substring(0, 20)}...`
@@ -356,7 +356,7 @@ export function SportsDebugPanel() {
       // Fetch teams info
       console.log('👥 [Standings Test] Fetching teams info...');
       const teamsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
         { headers: { Authorization: `Bearer ${publicAnonKey}` } }
       );
       
@@ -434,7 +434,7 @@ export function SportsDebugPanel() {
       console.log('[Refresh Branding] Starting...');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/refresh-branding`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/refresh-branding`,
         {
           method: 'POST',
           headers: { 
