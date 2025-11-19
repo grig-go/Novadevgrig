@@ -89,6 +89,80 @@
                 });
                 res.end(errorResponse);
               }
+            } else if (req.url?.startsWith('/nova/weather')) {
+              // Handle /nova/weather endpoint
+              const queryString = req.url.includes('?') ? req.url.split('?')[1] : '';
+
+              console.log('Proxying nova weather request');
+              console.log('Query string:', queryString);
+
+              try {
+                // Use Supabase credentials from info file
+                const supabaseUrl = `https://${projectId}.supabase.co`;
+
+                // Create headers object
+                const headers: Record<string, string> = {
+                  'Authorization': `Bearer ${publicAnonKey}`,
+                  'Accept': req.headers.accept || '*/*',
+                };
+
+                // Construct the full URL
+                const targetUrl = `${supabaseUrl}/functions/v1/nova-weather${queryString ? '?' + queryString : ''}`;
+                console.log('Target URL:', targetUrl);
+
+                // Make request to Edge Function
+                const response = await fetch(targetUrl, {
+                  method: req.method || 'GET',
+                  headers,
+                });
+
+                console.log('Response status:', response.status);
+
+                // Get response as ArrayBuffer
+                const responseBuffer = await response.arrayBuffer();
+                const responseData = Buffer.from(responseBuffer);
+
+                // Forward response headers
+                const responseHeaders: Record<string, string> = {};
+                let hasContentLength = false;
+
+                response.headers.forEach((value, key) => {
+                  const lowerKey = key.toLowerCase();
+
+                  if (['content-encoding', 'transfer-encoding', 'connection'].includes(lowerKey)) {
+                    return;
+                  }
+
+                  if (lowerKey === 'content-length') {
+                    hasContentLength = true;
+                    responseHeaders[key] = responseData.length.toString();
+                  } else {
+                    responseHeaders[key] = value;
+                  }
+                });
+
+                if (!hasContentLength) {
+                  responseHeaders['Content-Length'] = responseData.length.toString();
+                }
+
+                // Write response
+                res.writeHead(response.status, responseHeaders);
+                res.end(responseData);
+
+              } catch (error) {
+                console.error('Proxy error:', error);
+
+                const errorResponse = JSON.stringify({
+                  error: 'Proxy error',
+                  details: error instanceof Error ? error.message : String(error),
+                });
+
+                res.writeHead(500, {
+                  'Content-Type': 'application/json',
+                  'Content-Length': Buffer.byteLength(errorResponse).toString(),
+                });
+                res.end(errorResponse);
+              }
             } else if (req.url?.startsWith('/api/')) {
               const slug = req.url.replace('/api/', '').split('?')[0];
               const queryString = req.url.includes('?') ? req.url.split('?')[1] : '';

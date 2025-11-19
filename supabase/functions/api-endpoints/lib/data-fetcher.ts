@@ -37,6 +37,7 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   // Handle dynamic URL parameters
   let url = apiConfig.url;
   let isNovaElectionUrl = false;
+  let isNovaWeatherUrl = false;
 
   // Transform /nova/election URLs to actual Supabase Edge Function URLs
   // This allows users to use any domain (localhost, dev server, etc.) for testing
@@ -54,6 +55,25 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
       console.log(`Transformed /nova/election URL to: ${url}`);
     } else {
       console.warn("SUPABASE_URL not found, cannot transform /nova/election URL");
+    }
+  }
+
+  // Transform /nova/weather URLs to actual Supabase Edge Function URLs
+  // This allows users to use any domain (localhost, dev server, etc.) for testing
+  // and it will automatically use the correct Supabase Edge Function URL
+  if (url.includes('/nova/weather')) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    if (supabaseUrl) {
+      // Extract query string if present
+      const urlObj = new URL(url);
+      const queryString = urlObj.search; // includes the '?' if present
+
+      // Replace with Supabase Edge Function URL
+      url = `${supabaseUrl}/functions/v1/nova-weather${queryString}`;
+      isNovaWeatherUrl = true;
+      console.log(`Transformed /nova/weather URL to: ${url}`);
+    } else {
+      console.warn("SUPABASE_URL not found, cannot transform /nova/weather URL");
     }
   }
 
@@ -94,6 +114,14 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
       console.log("Added Supabase authentication headers for nova-election");
+    }
+  } else if (isNovaWeatherUrl) {
+    // For transformed nova-weather URLs, use Supabase anon key
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (anonKey) {
+      headers["Authorization"] = `Bearer ${anonKey}`;
+      headers["apikey"] = anonKey;
+      console.log("Added Supabase authentication headers for nova-weather");
     }
   } else if (apiConfig.auth_type === "bearer" && apiConfig.auth_token) {
     headers["Authorization"] = `Bearer ${apiConfig.auth_token}`;
