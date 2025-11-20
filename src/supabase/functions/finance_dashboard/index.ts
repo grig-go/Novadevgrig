@@ -110,12 +110,12 @@ app.get("/health", (c)=>c.json({
     build: BUILD_ID
   }));
 // ============================================================================
-// STOCKS / CRYPTO ROUTES (alpaca_stocks table)
+// STOCKS / CRYPTO ROUTES (f_stocks table)
 // ============================================================================
 // GET all stocks/crypto
 app.get("/stocks", async (c)=>{
   try {
-    const { data, error } = await supabase.from("alpaca_stocks").select("*").order("symbol");
+    const { data, error } = await supabase.from("f_stocks").select("*").order("symbol");
     if (error) return jsonErr(c, 500, "STOCKS_FETCH_FAILED", error.message);
     return c.json({
       ok: true,
@@ -134,7 +134,7 @@ app.post("/stocks/refresh", async (c)=>{
       return jsonErr(c, 500, "ALPACA_NOT_CONFIGURED", "Alpaca API credentials not configured");
     }
     // Get all stocks/crypto from database
-    const { data: securities, error: fetchError } = await supabase.from("alpaca_stocks").select("*");
+    const { data: securities, error: fetchError } = await supabase.from("f_stocks").select("*");
     if (fetchError) {
       return jsonErr(c, 500, "STOCKS_FETCH_FAILED", fetchError.message);
     }
@@ -205,7 +205,7 @@ app.post("/stocks/refresh", async (c)=>{
             last_update: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
-          const { error: updateError } = await supabase.from("alpaca_stocks").update(updateData).eq("symbol", symbol);
+          const { error: updateError } = await supabase.from("f_stocks").update(updateData).eq("symbol", symbol);
           if (updateError) {
             console.error(`❌ Failed to update ${symbol}:`, updateError);
             failed++;
@@ -258,7 +258,7 @@ app.post("/stocks/refresh", async (c)=>{
             last_update: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
-          const { error: updateError } = await supabase.from("alpaca_stocks").update(updateData).eq("symbol", symbol);
+          const { error: updateError } = await supabase.from("f_stocks").update(updateData).eq("symbol", symbol);
           if (updateError) {
             console.error(`❌ Failed to update ${symbol}:`, updateError);
             failed++;
@@ -299,7 +299,7 @@ app.post("/stocks/refresh", async (c)=>{
 app.get("/stocks/:symbol", async (c)=>{
   try {
     const symbol = c.req.param("symbol");
-    const { data, error } = await supabase.from("alpaca_stocks").select("*").eq("symbol", symbol).single();
+    const { data, error } = await supabase.from("f_stocks").select("*").eq("symbol", symbol).single();
     if (error) {
       if (error.code === "PGRST116") {
         return jsonErr(c, 404, "STOCK_NOT_FOUND", `Stock ${symbol} not found`);
@@ -322,7 +322,7 @@ app.post("/stocks", async (c)=>{
     if (!symbol || !name) {
       return jsonErr(c, 400, "INVALID_INPUT", "symbol and name are required");
     }
-    // ✅ Normalize type to always match DB constraint
+    // ✅ Normalize type — keep CRYPTO/ETF/INDEX as-is, but convert us_equity/STOCK to EQUITY
     const normalizedType = (()=>{
       if (!type) return "EQUITY";
       const t = type.toString().trim().toUpperCase();
@@ -335,7 +335,7 @@ app.post("/stocks", async (c)=>{
       if ([
         "US_EQUITY",
         "STOCK"
-      ].includes(t)) return "us_equity";
+      ].includes(t)) return "EQUITY";
       if (t === "CRYPTOCURRENCY") return "CRYPTO";
       return "EQUITY";
     })();
@@ -345,7 +345,7 @@ app.post("/stocks", async (c)=>{
       type: normalizedType,
       exchange
     });
-    const { data, error } = await supabase.from("alpaca_stocks").upsert({
+    const { data, error } = await supabase.from("f_stocks").upsert({
       symbol,
       name,
       type: normalizedType,
@@ -409,7 +409,7 @@ app.put("/stocks/:symbol", async (c)=>{
     if (body.source_id !== undefined) updateData.source_id = body.source_id;
     if (body.volume !== undefined) updateData.volume = body.volume;
     if (body.logo_url !== undefined) updateData.logo_url = body.logo_url;
-    const { data, error } = await supabase.from("alpaca_stocks").update(updateData).eq("symbol", symbol).select().single();
+    const { data, error } = await supabase.from("f_stocks").update(updateData).eq("symbol", symbol).select().single();
     if (error) {
       if (error.code === "PGRST116") {
         return jsonErr(c, 404, "STOCK_NOT_FOUND", `Stock ${symbol} not found`);
@@ -429,7 +429,7 @@ app.put("/stocks/:symbol", async (c)=>{
 app.delete("/stocks/:symbol", async (c)=>{
   try {
     const symbol = c.req.param("symbol");
-    const { error } = await supabase.from("alpaca_stocks").delete().eq("symbol", symbol);
+    const { error } = await supabase.from("f_stocks").delete().eq("symbol", symbol);
     if (error) return jsonErr(c, 500, "STOCK_DELETE_FAILED", error.message);
     console.log(`✅ Deleted stock/crypto: ${symbol}`);
     return c.json({
@@ -443,7 +443,7 @@ app.delete("/stocks/:symbol", async (c)=>{
 // GET stocks with custom names (overrides)
 app.get("/stocks/overrides/list", async (c)=>{
   try {
-    const { data, error } = await supabase.from("alpaca_stocks").select("symbol, name, custom_name, type").not("custom_name", "is", null);
+    const { data, error } = await supabase.from("f_stocks").select("symbol, name, custom_name, type").not("custom_name", "is", null);
     if (error) return jsonErr(c, 500, "OVERRIDES_FETCH_FAILED", error.message);
     return c.json({
       ok: true,

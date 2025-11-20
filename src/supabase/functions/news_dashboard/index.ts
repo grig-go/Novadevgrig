@@ -66,15 +66,13 @@ app.get("/health", (c)=>{
     build: BUILD_ID
   });
 });
-
 // ============================================================================
 // NEWS ARTICLES ROUTES
 // ============================================================================
 // Get stored articles from database
-app.get("/news-articles/stored", async (c) => {
+app.get("/news-articles/stored", async (c)=>{
   try {
     const supabase = getSupabaseClient();
-    
     // Get query parameters
     const url = new URL(c.req.url);
     const limit = parseInt(url.searchParams.get("limit") || "100");
@@ -83,50 +81,36 @@ app.get("/news-articles/stored", async (c) => {
     const language = url.searchParams.get("language");
     const country = url.searchParams.get("country");
     const search = url.searchParams.get("search");
-    const fromDate = url.searchParams.get("from_date");
-
-    console.log("[NEWS STORED] Query params:", { limit, provider, source, language, country, search, fromDate });
-
+    console.log("[NEWS STORED] Query params:", {
+      limit,
+      provider,
+      source,
+      language,
+      country,
+      search
+    });
     // Build query
-    let query = supabase
-      .from("news_articles")
-      .select("*", { count: "exact" });
-
-    // Apply filters - only filter by language/country if articles have those fields populated
-    // Using .is('null').or() pattern to include both matching AND null values
+    let query = supabase.from("news_articles").select("*", {
+      count: "exact"
+    });
+    // Apply filters
     if (provider) query = query.eq("provider", provider);
     if (source) query = query.eq("source", source);
-    
-    // For language and country: only apply filter if explicitly set, otherwise return all
-    // Don't filter out articles with null language/country
-    if (language) {
-      query = query.or(`language.eq.${language},language.is.null`);
-    }
-    if (country) {
-      query = query.or(`country.eq.${country},country.is.null`);
-    }
-    
-    // Time filter: published_at >= fromDate
-    if (fromDate) {
-      query = query.gte("published_at", fromDate);
-    }
-    
+    if (language) query = query.eq("language", language);
+    if (country) query = query.eq("country", country);
     if (search) {
       query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
     }
-
     // Apply ordering and limit
-    query = query.order("published_at", { ascending: false }).limit(limit);
-
+    query = query.order("published_at", {
+      ascending: false
+    }).limit(limit);
     const { data, error, count } = await query;
-
     if (error) {
       console.error("[NEWS STORED] Error fetching articles:", error);
       return jsonErr(c, 500, "FETCH_FAILED", error.message);
     }
-
-    console.log(`[NEWS STORED] ✅ Fetched ${data?.length || 0} articles (total: ${count || 0})`);
-
+    console.log(`[NEWS STORED] ✅ Fetched ${data?.length || 0} articles`);
     return c.json({
       ok: true,
       articles: data || [],
@@ -136,14 +120,12 @@ app.get("/news-articles/stored", async (c) => {
     return jsonErr(c, 500, "STORED_ARTICLES_FETCH_FAILED", error);
   }
 });
-
 // Fetch new articles from external APIs
 app.post("/news-articles", async (c)=>{
   try {
     console.log("[NEWS FETCH] ========== NEW REQUEST ==========");
     const body = await safeJson(c);
     const { providers, q, country, language, perProviderLimit = 10, totalLimit = 50 } = body;
-    
     console.log("[NEWS FETCH] Request body:", JSON.stringify(body, null, 2));
     console.log("[NEWS FETCH] Providers array:", JSON.stringify(providers, null, 2));
     console.log("[NEWS FETCH] Request params:", {
@@ -154,7 +136,6 @@ app.post("/news-articles", async (c)=>{
       perProviderLimit,
       totalLimit
     });
-    
     if (!Array.isArray(providers) || providers.length === 0) {
       console.error("[NEWS FETCH] ❌ Invalid providers array");
       return jsonErr(c, 400, "INVALID_PROVIDERS", "providers array is required");

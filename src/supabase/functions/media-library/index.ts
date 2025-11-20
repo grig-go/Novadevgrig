@@ -16,7 +16,6 @@ serve(async (req)=>{
   try {
     const url = new URL(req.url);
     const method = req.method.toUpperCase();
-    console.log(`[DEBUG] Method: ${method}, Pathname: ${url.pathname}`);
     const supabase = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
     // ============================================================
     // ✅ GET /systems — fetch all systems
@@ -96,7 +95,7 @@ serve(async (req)=>{
       let query = supabase.from("media_assets").select(`
           id, name, file_name, description, file_url, thumbnail_url, storage_path,
           media_type, created_by, ai_model_used, tags, created_at, metadata,
-          latitude, longitude, on_map,
+          latitude, longitude,
           media_distribution (
             id, path, status, last_sync,
             systems ( name, ip_address, port, system_type, channel )
@@ -146,98 +145,12 @@ serve(async (req)=>{
           size: asset.metadata?.size || null,
           latitude: asset.latitude,
           longitude: asset.longitude,
-          on_map: asset.on_map === true,
           distribution: dist
         };
       });
       return new Response(JSON.stringify({
         data: formatted,
         count
-      }), {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
-      });
-    }
-    // ============================================================
-    // POST /generate-thumbnail — Generate thumbnail for video
-    // ============================================================
-    if (method === "POST" && url.pathname.includes("/generate-thumbnail")) {
-      console.log("🎬 Handling video thumbnail generation");
-      const formData = await req.formData();
-      const thumbnailFile = formData.get("thumbnail");
-      const videoAssetId = formData.get("video_asset_id");
-      if (!thumbnailFile || !videoAssetId) {
-        return new Response(JSON.stringify({
-          error: "Missing thumbnail file or video_asset_id"
-        }), {
-          status: 400,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json"
-          }
-        });
-      }
-      // Fetch the video asset to get its info
-      const { data: videoAsset, error: fetchError } = await supabase.from("media_assets").select("id, name, storage_path").eq("id", videoAssetId).single();
-      if (fetchError || !videoAsset) {
-        return new Response(JSON.stringify({
-          error: "Video asset not found"
-        }), {
-          status: 404,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json"
-          }
-        });
-      }
-      const bucketName = "media";
-      const timestamp = Date.now();
-      const thumbnailPath = `video/thumbnails/${timestamp}_${crypto.randomUUID()}.jpg`;
-      // Upload thumbnail to storage
-      const { data: thumbnailUploadData, error: thumbnailUploadError } = await supabase.storage.from(bucketName).upload(thumbnailPath, thumbnailFile, {
-        contentType: 'image/jpeg',
-        upsert: false
-      });
-      if (thumbnailUploadError) {
-        return new Response(JSON.stringify({
-          error: "Failed to upload thumbnail",
-          details: thumbnailUploadError.message
-        }), {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json"
-          }
-        });
-      }
-      const { data: thumbnailUrlData } = supabase.storage.from(bucketName).getPublicUrl(thumbnailUploadData.path);
-      // Update the video asset with new thumbnail URL
-      const { data: updatedAsset, error: updateError } = await supabase.from("media_assets").update({
-        thumbnail_url: thumbnailUrlData.publicUrl
-      }).eq("id", videoAssetId).select().single();
-      if (updateError) {
-        // Clean up uploaded thumbnail if DB update fails
-        await supabase.storage.from(bucketName).remove([
-          thumbnailUploadData.path
-        ]);
-        return new Response(JSON.stringify({
-          error: "Failed to update asset",
-          details: updateError.message
-        }), {
-          status: 500,
-          headers: {
-            ...corsHeaders,
-            "Content-Type": "application/json"
-          }
-        });
-      }
-      console.log("✅ Video thumbnail generated successfully:", thumbnailUrlData.publicUrl);
-      return new Response(JSON.stringify({
-        success: true,
-        thumbnail_url: thumbnailUrlData.publicUrl,
-        data: updatedAsset
       }), {
         headers: {
           ...corsHeaders,
@@ -253,7 +166,6 @@ serve(async (req)=>{
       const formData = await req.formData();
       const id = formData.get("id");
       const file = formData.get("file");
-      const thumbnailFile = formData.get("thumbnail"); // Video thumbnail
       const name = formData.get("name");
       const description = formData.get("description") || "";
       const tagsStr = formData.get("tags") || "[]";
@@ -269,10 +181,6 @@ serve(async (req)=>{
       // Update metadata only
       if (id && !file) {
         const updateData = {};
-        // Parse on_map (optional)
-        const onMapStr = formData.get("on_map");
-        if (onMapStr === "true") updateData.on_map = true;
-        if (onMapStr === "false") updateData.on_map = false;
         if (name) updateData.name = name;
         if (description !== undefined) updateData.description = description;
         if (tags) updateData.tags = tags;
@@ -282,6 +190,16 @@ serve(async (req)=>{
         if (latitude !== null) updateData.latitude = latitude;
         if (longitude !== null) updateData.longitude = longitude;
         const { data, error } = await supabase.from("media_assets").update(updateData).eq("id", id).select().single();
+        if (error) return new Response(JSON.stringify({
+          error: "Failed to update asset",
+          details: error.message
+        }), {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json"
+          }
+        });
         return new Response(JSON.stringify({
           data
         }), {
@@ -321,29 +239,6 @@ serve(async (req)=>{
         }
       });
       const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
-      // Handle video thumbnail upload
-      let thumbnailUrl = urlData.publicUrl;
-      if (mediaType === "video" && thumbnailFile) {
-        try {
-          console.log("🎬 Uploading video thumbnail...");
-          const thumbnailPath = `${folder}/thumbnails/${timestamp}_${crypto.randomUUID()}.jpg`;
-          // Upload thumbnail to storage
-          const { data: thumbnailUploadData, error: thumbnailUploadError } = await supabase.storage.from(bucketName).upload(thumbnailPath, thumbnailFile, {
-            contentType: 'image/jpeg',
-            upsert: false
-          });
-          if (thumbnailUploadError) {
-            console.error("⚠️ Failed to upload thumbnail:", thumbnailUploadError);
-          } else {
-            const { data: thumbnailUrlData } = supabase.storage.from(bucketName).getPublicUrl(thumbnailUploadData.path);
-            thumbnailUrl = thumbnailUrlData.publicUrl;
-            console.log("✅ Video thumbnail uploaded successfully:", thumbnailUrl);
-          }
-        } catch (thumbnailError) {
-          console.error("⚠️ Failed to process video thumbnail:", thumbnailError);
-        // Continue with video URL as fallback
-        }
-      }
       // Insert DB record
       const { data: assetData, error: dbError } = await supabase.from("media_assets").insert({
         name: name || file.name,
@@ -351,7 +246,7 @@ serve(async (req)=>{
         description,
         storage_path: uploadData.path,
         file_url: urlData.publicUrl,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: urlData.publicUrl,
         media_type: mediaType,
         created_by: createdBy,
         ai_model_used: aiModelUsed,
