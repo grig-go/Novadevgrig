@@ -141,6 +141,8 @@
     --color-cyan-50: oklch(.984 .019 200.873);
     --color-cyan-500: oklch(.715 .143 215.221);
     --color-cyan-950: oklch(.302 .056 229.695);
+    --color-sky-500: oklch(.685 .169 237.323);
+    --color-sky-600: oklch(.588 .158 241.966);
     --color-blue-50: oklch(.97 .014 254.604);
     --color-blue-100: oklch(.932 .032 255.585);
     --color-blue-200: oklch(.882 .059 254.128);
@@ -2391,6 +2393,16 @@
     background-color: var(--color-indigo-100);
   }
 
+  .bg-indigo-500\/10 {
+    background-color: color-mix(in srgb, oklch(.585 .233 277.117) 10%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-indigo-500\/10 {
+      background-color: color-mix(in oklab, var(--color-indigo-500) 10%, transparent);
+    }
+  }
+
   .bg-input-background {
     background-color: var(--input-background);
   }
@@ -2461,6 +2473,16 @@
 
   .bg-pink-500 {
     background-color: var(--color-pink-500);
+  }
+
+  .bg-pink-500\/10 {
+    background-color: color-mix(in srgb, oklch(.656 .241 354.308) 10%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-pink-500\/10 {
+      background-color: color-mix(in oklab, var(--color-pink-500) 10%, transparent);
+    }
   }
 
   .bg-popover {
@@ -2573,6 +2595,16 @@
 
   .bg-secondary {
     background-color: var(--secondary);
+  }
+
+  .bg-sky-500\/10 {
+    background-color: color-mix(in srgb, oklch(.685 .169 237.323) 10%, transparent);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-sky-500\/10 {
+      background-color: color-mix(in oklab, var(--color-sky-500) 10%, transparent);
+    }
   }
 
   .bg-slate-50 {
@@ -3575,10 +3607,6 @@
     }
   }
 
-  .text-orange-500 {
-    color: var(--color-orange-500);
-  }
-
   .text-orange-600 {
     color: var(--color-orange-600);
   }
@@ -3647,6 +3675,10 @@
     color: var(--color-purple-900);
   }
 
+  .text-red-300 {
+    color: var(--color-red-300);
+  }
+
   .text-red-400 {
     color: var(--color-red-400);
   }
@@ -3673,6 +3705,10 @@
 
   .text-secondary-foreground {
     color: var(--secondary-foreground);
+  }
+
+  .text-sky-600 {
+    color: var(--color-sky-600);
   }
 
   .text-slate-100 {
@@ -3855,6 +3891,11 @@
   .outline {
     outline-style: var(--tw-outline-style);
     outline-width: 1px;
+  }
+
+  .blur {
+    --tw-blur: blur(8px);
+    filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
   }
 
   .drop-shadow-md {

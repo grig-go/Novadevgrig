@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import { Button } from "./components/ui/button";
-import { Card, CardContent } from "./components/ui/card";
 import { ElectionDashboard } from "./components/ElectionDashboard";
 import { FinanceDashboard } from "./components/FinanceDashboard";
 import { SportsDashboard } from "./components/SportsDashboard";
@@ -9,37 +9,55 @@ import { NewsDashboard } from "./components/NewsDashboard";
 import { FeedsDashboardWithSupabase } from "./components/FeedsDashboardWithSupabase";
 import { AgentsDashboard } from "./components/AgentsDashboard";
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
-import { TopMenuBar } from "./components/TopMenuBar";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { MediaLibrary } from "./components/MediaLibrary";
 import { ChannelsPage } from "./components/ChannelsPage";
-import { DashboardConfigDialog, useDashboardConfig } from "./components/DashboardConfigDialog";
-import { DashboardCardRenderer } from "./components/DashboardCardRenderer";
-import { getDashboardCardsData } from "./utils/dashboardCardsData";
-import { electionData as importedElectionData, initializeElectionData, isElectionDataLoading } from "./data/electionData";
-import { mockFinanceData } from "./data/mockFinanceData";
-import { mockSportsData } from "./data/mockSportsData";
-import { mockNewsData } from "./data/mockNewsData";
-import { mockFeedsData } from "./data/mockFeedsData";
-import { mockAgentsData } from "./data/mockAgentsData";
-import { mockUsersData } from "./data/mockUsersData";
-import { mockWeatherData } from "./data/mockWeatherData";
-import { Race, CandidateProfile, Party } from "./types/election";
-import { FinanceSecurityWithSnapshot } from "./types/finance";
-import { SportsEntityWithOverrides, SportsView } from "./types/sports";
-import { WeatherLocationWithOverrides } from "./types/weather";
-import { NewsArticleWithOverrides } from "./types/news";
-import { Feed, FeedCategory } from "./types/feeds";
-import { Agent } from "./types/agents";
-import { Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, Loader2, ImageIcon, School } from "lucide-react";
-import { motion } from "framer-motion";
+import { TopMenuBar } from "./components/TopMenuBar";
+import { DashboardConfigDialog } from "./components/DashboardConfigDialog";
+import { DashboardCardRenderer, getDashboardCardsData } from "./components/DashboardCardRenderer";
+import { 
+  Vote, 
+  TrendingUp, 
+  Trophy, 
+  Cloud, 
+  Newspaper, 
+  Rss, 
+  Bot, 
+  Users, 
+  Wrench,
+  ImageIcon,
+  School,
+  Loader2
+} from "lucide-react";
+import { 
+  mockFinanceData, 
+  mockAgentsData, 
+  mockUsersData,
+  importedElectionData,
+  isElectionDataLoading,
+  initializeElectionData
+} from "./data";
+import type { 
+  Race, 
+  CandidateProfile, 
+  Party,
+  FinanceSecurityWithSnapshot,
+  SportsEntityWithOverrides,
+  WeatherLocationWithOverrides,
+  NewsArticleWithOverrides,
+  Feed,
+  FeedCategory,
+  Agent,
+  SportsView
+} from "./types";
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
 import { useSportsData } from "./utils/useSportsData";
 import { useNewsFeed } from "./utils/useNewsFeed";
 import { useNewsProviders } from "./utils/useNewsProviders";
-import { projectId, publicAnonKey } from "./utils/supabase/info";
+import { getEdgeFunctionUrl, getRestUrl, getSupabaseHeaders } from "./utils/supabase/config";
 import SchoolClosingsDashboard from "./components/SchoolClosingsDashboard";
+import { WeatherDataViewer } from "./components/WeatherDataViewer";
 
 type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels' | 'school-closings';
 
@@ -50,12 +68,8 @@ export default function App() {
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
   const [financeData, setFinanceData] = useState(mockFinanceData);
-  const [sportsData, setSportsData] = useState(mockSportsData);
-  const [newsData, setNewsData] = useState(mockNewsData);
-  const [feedsData, setFeedsData] = useState(mockFeedsData);
   const [agentsData, setAgentsData] = useState(mockAgentsData);
   const [usersData, setUsersData] = useState(mockUsersData);
-  const [weatherData, setWeatherData] = useState(mockWeatherData);
   const [showDashboardConfig, setShowDashboardConfig] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
   const [dashboardConfigLoading, setDashboardConfigLoading] = useState(true);
@@ -149,22 +163,17 @@ export default function App() {
       try {
         // Fetch stored articles count
         const articlesResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored?limit=1000`,
+          getEdgeFunctionUrl('news_dashboard/news-articles/stored?limit=1000'),
           {
-            headers: { 
-              Authorization: `Bearer ${publicAnonKey}`,
-            }
+            headers: getSupabaseHeaders()
           }
         );
         
         // Fetch active providers count
         const providersResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,is_active&category=eq.news&is_active=eq.true`,
+          getRestUrl('data_providers_public?select=id,is_active&category=eq.news&is_active=eq.true'),
           {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'apikey': publicAnonKey,
-            }
+            headers: getSupabaseHeaders()
           }
         );
         
@@ -194,12 +203,9 @@ export default function App() {
     const fetchMediaStats = async () => {
       try {
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/media_assets?select=id`,
+          getRestUrl('media_assets?select=id'),
           {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'apikey': publicAnonKey,
-            }
+            headers: getSupabaseHeaders()
           }
         );
         
@@ -230,12 +236,9 @@ export default function App() {
       try {
         setDashboardConfigLoading(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/dashboard_config?page=home`,
+          getEdgeFunctionUrl('dashboard_config?page=home'),
           {
-            headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
-              'Content-Type': 'application/json'
-            }
+            headers: getSupabaseHeaders()
           }
         );
 
@@ -328,16 +331,14 @@ export default function App() {
       
       // Determine if this is a crypto or stock based on ID format
       const isCrypto = securityId.startsWith('crypto:');
-      const endpoint = isCrypto 
-        ? `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${securityId.replace('crypto:', '')}`
-        : `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/${securityId}`;
+      const path = isCrypto 
+        ? `finance_dashboard/crypto/${securityId.replace('crypto:', '')}`
+        : `finance_dashboard/stocks/${securityId}`;
       
       // Call backend to delete from database
-      const response = await fetch(endpoint, {
+      const response = await fetch(getEdgeFunctionUrl(path), {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: getSupabaseHeaders(),
       });
       
       if (!response.ok) {
