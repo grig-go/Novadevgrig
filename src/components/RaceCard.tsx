@@ -10,7 +10,7 @@ import { InlineTextEdit, InlineNumberEdit, InlineSelectEdit, InlineBooleanEdit }
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { updateRacesFieldOverride, updateRaceFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { EditImageDialog } from "./EditImageDialog";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { GenerateSyntheticScenarioModal } from "./GenerateSyntheticScenarioModal";
 import { useSyntheticRaceWorkflow } from "../utils/useSyntheticRaceWorkflow";
 import {

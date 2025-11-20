@@ -88,7 +88,7 @@ import {
   STABILITY_MODELS,
   getProvidersWithDynamicModels,
 } from "../types/ai";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 export function AIConnectionsDashboard() {
   const [providers, setProviders] = useState<AIProviderWithMaskedKey[]>([]);

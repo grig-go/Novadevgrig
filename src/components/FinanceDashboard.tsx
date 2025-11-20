@@ -11,7 +11,7 @@ import { Button } from "./ui/button";
 import { TrendingUp, TrendingDown, Minus, Building2, Database, Brain, Rss, CheckCircle2, AlertCircle, Eye, Loader2, RefreshCw, X } from "lucide-react";
 import { projectId, publicAnonKey, projectId3, publicAnonKey3 } from "../utils/supabase/info";
 import { toast } from "sonner@2.0.3";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 interface FinanceDashboardProps {
   securities: FinanceSecurityWithSnapshot[];

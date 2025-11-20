@@ -43,7 +43,7 @@ import {
   Check
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 interface WeatherCardProps {
   location: WeatherLocationWithOverrides;

@@ -21,7 +21,7 @@ import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Checkbox } from "./ui/checkbox";
 import { Slider } from "./ui/slider";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 import { MediaAsset, MediaType, MediaSource, SyncStatus } from "../types/media";
 import { toast } from "sonner@2.0.3";
