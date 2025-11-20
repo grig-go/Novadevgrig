@@ -1303,8 +1303,9 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION fetch_county_data_extended(
-  p_race_type TEXT, 
+  p_race_type TEXT,
   p_year INT,
+  p_state TEXT DEFAULT 'all',
   p_offset INT DEFAULT 0,
   p_limit INT DEFAULT 5000
 )
@@ -1325,16 +1326,16 @@ RETURNS TABLE (
   election_year INT,
   election_name TEXT,
   percent_reporting DECIMAL
-) 
+)
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET statement_timeout = '60s'
 AS $$
 BEGIN
   SET LOCAL statement_timeout = '60s';
-  
+
   RETURN QUERY
-  SELECT 
+  SELECT
     cr.votes::INT,
     cr.vote_percentage::DECIMAL,
     cr.winner::BOOLEAN,
@@ -1358,10 +1359,11 @@ BEGIN
   JOIN e_races r ON rr.race_id = r.id
   JOIN e_geographic_divisions gd ON r.division_id = gd.id
   JOIN e_elections e ON r.election_id = e.id
-  WHERE 
+  WHERE
     r.type = p_race_type
     AND gd.type = 'county'
     AND e.year = p_year
+    AND (p_state = 'all' OR SUBSTRING(gd.code, 1, 2) = p_state)
   ORDER BY cr.id
   LIMIT p_limit
   OFFSET p_offset;
