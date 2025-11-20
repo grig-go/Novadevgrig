@@ -602,11 +602,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [editAgent, open]);
 
-  // Dynamic steps - include configureNewSources only if there are new sources to configure
+  // Check if Nova Weather is selected
+  const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+  const hasNovaWeatherSelected = selectedDataTypes.includes('Nova Weather');
+
+  // Dynamic steps - exclude dataSources when Nova Weather is selected, include configureNewSources only if there are new sources to configure
   const steps: WizardStep[] = [
     'basic',
     'dataType',
-    'dataSources',
+    // Skip dataSources step if Nova Weather is selected
+    ...(hasNovaWeatherSelected ? [] : ['dataSources' as WizardStep]),
     ...(newDataSources.filter(ds => ds.name && ds.type).length > 0 ? ['configureNewSources' as WizardStep] : []),
     'relationships',
     'outputFormat',

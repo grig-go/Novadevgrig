@@ -69,11 +69,6 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     return selection.mergeMode || 'combined';
   });
 
-  const [isExistingConfig] = useState(() => {
-    return selection.sources && selection.sources.length > 0 &&
-           selection.sources.some((s: any) => s.primaryPath !== undefined);
-  });
-
   const [testingSource, setTestingSource] = useState<string | null>(null);
   const [justTestedSource, setJustTestedSource] = useState<string | null>(null);
   const { toast } = useToast();
@@ -194,12 +189,11 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   };
 
   const autoDetectPath = (sourceId: string) => {
-    if (isExistingConfig) {
-      const existingSource = selection.sources?.find((s: any) => s.id === sourceId);
-      if (existingSource && existingSource.primaryPath !== undefined) {
-        updateSourcePath(sourceId, existingSource.primaryPath);
-        return;
-      }
+    // Always check for existing saved path first, regardless of isExistingConfig
+    const existingSource = selection.sources?.find((s: any) => s.id === sourceId);
+    if (existingSource && existingSource.primaryPath !== undefined) {
+      updateSourcePath(sourceId, existingSource.primaryPath);
+      return;
     }
 
     const data = sampleData[sourceId];
@@ -443,14 +437,30 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                   setExpandedSources(allIds);
 
                   // Auto-detect paths for all sources
-                  const newPaths: Record<string, string> = {};
+                  const newPaths: Record<string, string> = { ...sourcePaths };
                   allIds.forEach(id => {
-                    autoDetectPath(id);
-                    // Initialize with empty path, will be updated by autoDetectPath
-                    newPaths[id] = sourcePaths[id] || '';
+                    // Check for existing saved path first
+                    const existingSource = selection.sources?.find((s: any) => s.id === id);
+                    if (existingSource && existingSource.primaryPath !== undefined) {
+                      newPaths[id] = existingSource.primaryPath;
+                    } else {
+                      // Auto-detect from sample data
+                      const data = sampleData[id];
+                      if (data) {
+                        const paths = findArraysAndObjects(data);
+                        if (paths.length === 1) {
+                          newPaths[id] = paths[0].path;
+                        } else if (paths.length > 0) {
+                          const arrayPath = paths.find(p => p.type === 'array');
+                          if (arrayPath) {
+                            newPaths[id] = arrayPath.path;
+                          }
+                        }
+                      }
+                    }
                   });
 
-                  // Update the parent component with the selection
+                  setSourcePaths(newPaths);
                   updateSelection(allIds, newPaths);
                 }}
               >

@@ -611,6 +611,14 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     }));
   }, [format]);
 
+  // Sync formatOptions changes back to formData
+  useEffect(() => {
+    setFormData((prevFormData: any) => ({
+      ...prevFormData,
+      formatOptions
+    }));
+  }, [formatOptions, setFormData]);
+
   const updateFormatOption = (key: string, value: any) => {
     setFormatOptions((prev: any) => ({
       ...prev,
