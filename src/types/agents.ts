@@ -6,7 +6,7 @@ export type AgentAuthType = 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2' |
 export type AgentFormat = 'RSS' | 'ATOM' | 'JSON';
 export type AgentStatus = 'ACTIVE' | 'PAUSED' | 'ERROR';
 export type AgentCacheType = 'OFF' | '5M' | '15M' | '30M' | '1H';
-export type AgentDataType = 'Elections' | 'Finance' | 'Sports' | 'Weather' | 'News';
+export type AgentDataType = 'Elections' | 'Finance' | 'Sports' | 'Weather' | 'News' | 'Nova Weather';
 
 // Database schema matching api_endpoints table
 export interface APIEndpoint {

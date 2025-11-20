@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -441,6 +441,10 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   isCreateMode = false
 }) => {
   const { toast } = useToast();
+
+  // Store discovered fields in a ref to persist across renders
+  const discoveredFieldsRef = useRef<Record<string, string[]>>({});
+
   const [format, setFormat] = useState(formData.format || 'JSON');
   const [formatOptions, setFormatOptions] = useState<any>({
     // JSON options
@@ -605,7 +609,7 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
         sourceMappings: format === 'RSS' ? sourceMappings : formatOptions.sourceMappings
       }
     }));
-  }, [format, formatOptions, sourceMappings]);
+  }, [format]);
 
   const updateFormatOption = (key: string, value: any) => {
     setFormatOptions((prev: any) => ({
@@ -618,7 +622,24 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
     if (onTestDataSource) {
       setTestingSource(source.id);
       try {
-        await onTestDataSource(source);
+        const result = await onTestDataSource(source);
+
+        // If the test was successful and returned fields, store them in the ref
+        if (result && result.fields) {
+          // Store fields in the ref to persist across renders
+          discoveredFieldsRef.current[source.id] = result.fields;
+
+          // Also update formData with the discovered fields
+          setFormData((prev: any) => ({
+            ...prev,
+            dataSources: prev.dataSources?.map((ds: any) =>
+              String(ds.id) === String(source.id)
+                ? { ...ds, fields: result.fields }
+                : ds
+            )
+          }));
+        }
+
         toast({
           title: 'Test successful',
           description: `Successfully tested ${source.name}`,
@@ -887,20 +908,23 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
           </CardHeader>
           <CardContent className="space-y-3">
             {formData.dataSources.map((source: any) => {
-              const hasFields = source.fields && source.fields.length > 0;
+              // Use fields from ref if available, otherwise from source
+              const fields = discoveredFieldsRef.current[source.id] || source.fields;
+              const hasFields = fields && fields.length > 0;
+
               return (
                 <div key={source.id} className="flex items-center justify-between p-3 border rounded-lg">
                   <div className="flex items-center gap-3">
                     <div>
                       <div className="font-medium">{source.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        {source.type} • {hasFields ? `${source.fields.length} fields` : 'Not tested'}
+                        {source.type} • {hasFields ? `${fields.length} fields` : 'Not tested'}
                       </div>
                     </div>
                     {hasFields && (
                       <Badge variant="secondary">
-                        {source.fields.slice(0, 3).join(', ')}
-                        {source.fields.length > 3 && `... +${source.fields.length - 3}`}
+                        {fields.slice(0, 3).join(', ')}
+                        {fields.length > 3 && `... +${fields.length - 3}`}
                       </Badge>
                     )}
                   </div>

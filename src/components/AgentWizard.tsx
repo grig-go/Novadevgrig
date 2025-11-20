@@ -20,6 +20,7 @@ import {
 import { ChevronLeft, ChevronRight, Check, Plus, X, Vote, TrendingUp, Trophy, Cloud, Newspaper, Link2, Database, AlertCircle } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { supabase } from "../utils/supabase/client";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 import OutputFormatStep from "./OutputFormatStep";
 import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
@@ -37,14 +38,15 @@ interface AgentWizardProps {
 
 type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
-const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News'];
+const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather'];
 
 const dataTypeIcons: Record<AgentDataType, any> = {
   'Elections': Vote,
   'Finance': TrendingUp,
   'Sports': Trophy,
   'Weather': Cloud,
-  'News': Newspaper
+  'News': Newspaper,
+  'Nova Weather': Cloud
 };
 
 export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds = [] }: AgentWizardProps) {
@@ -112,6 +114,101 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // State for sample data from data sources
   const [sampleData, setSampleData] = useState<Record<string, any>>({});
+
+  // State for Nova Weather dynamic options
+  const [novaWeatherProviders, setNovaWeatherProviders] = useState<Array<{ id: string; name: string; type: string }>>([]);
+  const [novaWeatherChannels, setNovaWeatherChannels] = useState<Array<{ id: string; name: string }>>([]);
+  const [novaWeatherStates, setNovaWeatherStates] = useState<string[]>([]);
+
+  // Load Nova Weather options when needed
+  useEffect(() => {
+    const hasNovaWeather = newDataSources.some(ds => ds.category === 'Nova Weather');
+    if (!hasNovaWeather) return;
+
+    const loadNovaWeatherOptions = async () => {
+      try {
+        // Load providers
+        const providersResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+        if (providersResponse.ok) {
+          const providersData = await providersResponse.json();
+          setNovaWeatherProviders(providersData.providers || []);
+        }
+
+        // Load weather data first to get states and channel IDs
+        const weatherResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+
+        let channelIdsInUse: string[] = [];
+
+        if (weatherResponse.ok) {
+          const weatherData = await weatherResponse.json();
+          if (weatherData.ok && weatherData.data) {
+            // Get unique states from locations
+            const uniqueStates = Array.from(
+              new Set(
+                weatherData.data
+                  .map((loc: any) => loc.location.admin1)
+                  .filter(Boolean)
+              )
+            ).sort();
+            setNovaWeatherStates(uniqueStates as string[]);
+
+            // Get unique channel IDs from locations
+            channelIdsInUse = Array.from(
+              new Set(
+                weatherData.data
+                  .map((loc: any) => loc.location.channel_id)
+                  .filter(Boolean)
+              )
+            );
+          }
+        }
+
+        // Load channels and filter to only those with locations assigned
+        const channelsResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+        if (channelsResponse.ok) {
+          const channelsData = await channelsResponse.json();
+          const allChannels = channelsData.channels || [];
+
+          // Filter to only channels that have locations assigned
+          const assignedChannels = allChannels.filter((ch: { id: string; name: string }) =>
+            channelIdsInUse.includes(ch.id)
+          );
+
+          // Sort by name
+          assignedChannels.sort((a: { name: string }, b: { name: string }) =>
+            a.name.localeCompare(b.name)
+          );
+
+          setNovaWeatherChannels(assignedChannels);
+        }
+      } catch (error) {
+        console.error('Error loading Nova Weather options:', error);
+      }
+    };
+
+    loadNovaWeatherOptions();
+  }, [newDataSources]);
 
   // Check if slug already exists
   const checkSlugExists = async (slug: string) => {
@@ -595,6 +692,24 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         setNewDataSources((prev: any) => prev.map((ds: any, idx: number) =>
           idx === i ? { ...ds, id: data.id, isNew: false } : ds
         ));
+
+        // Also add to formData.dataSources so it's available for testing in Output Format step
+        const newAgentSource: AgentDataSource = {
+          id: data.id,
+          name: source.name,
+          feedId: data.id,
+          category: source.category as AgentDataType,
+          type: source.type,
+          api_config: source.api_config,
+          rss_config: source.rss_config,
+          database_config: source.database_config,
+          file_config: source.file_config
+        };
+
+        setFormData((prev: Partial<Agent>) => ({
+          ...prev,
+          dataSources: [...(prev.dataSources || []), newAgentSource]
+        }));
       }
 
       console.log(`Successfully saved ${unsavedDataSources.length} data source(s)`);
@@ -610,6 +725,45 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleNext = async () => {
+    // Special handling when leaving dataType step with Nova Weather selected
+    if (currentStep === 'dataType') {
+      const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+
+      if (selectedDataTypes.includes('Nova Weather')) {
+        // Generate unique ID for Nova Weather
+        const uniqueId = Date.now().toString();
+        const currentDomain = window.location.origin;
+
+        // Create a Nova Weather data source with default filters
+        const novaWeatherSource = {
+          name: `Nova Weather ${uniqueId}`,
+          type: 'api',
+          category: 'Nova Weather',
+          api_config: {
+            url: `${currentDomain}/nova/weather?type=current&channel=all&dataProvider=all&state=all`,
+            method: 'GET',
+            headers: {},
+            data_path: 'locations',  // Use data_path for the actual field
+            dataPath: 'locations',    // Keep both for compatibility
+            dynamicUrlParams: [],
+            // Store Nova Weather filter settings
+            novaWeatherFilters: {
+              type: 'current',
+              channel: 'all',
+              dataProvider: 'all',
+              state: 'all'
+            }
+          }
+        };
+
+        // Set the new data source and skip to configureNewSources
+        setNewDataSources([novaWeatherSource]);
+        setCurrentStep('configureNewSources');
+        setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
+        return;
+      }
+    }
+
     // Check if we're leaving the "configureNewSources" step
     if (currentStep === 'configureNewSources') {
       // Check if there are unsaved data sources
@@ -683,7 +837,16 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             .single();
 
           if (error) throw error;
-          if (data) savedDataSourceIds.push((data as any).id);
+          if (data) {
+            savedDataSourceIds.push((data as any).id);
+
+            // Update newDataSources with the saved ID so cleanup can work
+            setNewDataSources((prev) => prev.map(ds =>
+              ds.name === newSource.name && ds.type === newSource.type && !ds.id
+                ? { ...ds, id: (data as any).id }
+                : ds
+            ));
+          }
         }
       }
 
@@ -833,6 +996,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               ...prev,
               dataSources: [...(prev.dataSources || []), newAgentSource]
             }));
+
+            // Update newDataSources with the saved ID so cleanup can work
+            setNewDataSources((prev) => prev.map(ds =>
+              ds.name === newSource.name && ds.type === newSource.type && !ds.id
+                ? { ...ds, id: (data as any).id }
+                : ds
+            ));
           }
         } catch (error) {
           console.error('Failed to save new data source:', error);
@@ -883,7 +1053,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
       // Only close dialog locally if requested AND save succeeded
       if (closeDialog) {
-        handleClose();
+        handleClose(true); // Pass true to indicate successful save
       }
     } catch (error) {
       // Don't close dialog on error - user can see the error toast and fix it
@@ -891,7 +1061,35 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   };
 
-  const handleClose = () => {
+  const handleClose = async (agentSavedSuccessfully: boolean = false) => {
+    // Clean up any Nova Weather data sources that were saved but not associated with an agent
+    // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
+    if (!agentSavedSuccessfully) {
+      const novaWeatherSources = newDataSources.filter(
+        ds => ds.category === 'Nova Weather' && ds.id
+      );
+
+      if (novaWeatherSources.length > 0) {
+        console.log('Cleaning up unused Nova Weather data sources...');
+        for (const source of novaWeatherSources) {
+          try {
+            const { error } = await supabase
+              .from('data_sources')
+              .delete()
+              .eq('id', source.id);
+
+            if (error) {
+              console.error('Error deleting unused Nova Weather source:', error);
+            } else {
+              console.log('Deleted unused Nova Weather source:', source.id);
+            }
+          } catch (error) {
+            console.error('Failed to delete unused Nova Weather source:', error);
+          }
+        }
+      }
+    }
+
     setCurrentStep('basic');
     setFormData({
       name: '',
@@ -915,6 +1113,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       cache: '15M'
     });
     setNewDataSources([]); // Clear new data sources
+    setTestResults({}); // Clear test connection results
+    setTestLoading({}); // Clear test loading states
+    setTestParams({}); // Clear test parameters
     onClose();
   };
 
@@ -1108,8 +1309,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Remove category
         newCategories = selectedCategories.filter(c => c !== category);
       } else {
-        // Add category
-        newCategories = [...selectedCategories, category];
+        // Special handling for Nova Weather - it should be exclusive
+        if (category === 'Nova Weather') {
+          // Clear all other selections when Nova Weather is selected
+          newCategories = ['Nova Weather'];
+        } else if (selectedCategories.includes('Nova Weather')) {
+          // If Nova Weather is currently selected, replace it with the new selection
+          newCategories = [category];
+        } else {
+          // Normal addition for other categories
+          newCategories = [...selectedCategories, category];
+        }
       }
 
       setFormData({ ...formData, dataType: newCategories });
@@ -1468,14 +1678,18 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       <Input
                         value={source.api_config?.url || ''}
                         onChange={(e) => {
-                          const updated = [...newDataSources];
-                          updated[actualIndex] = {
-                            ...updated[actualIndex],
-                            api_config: { ...updated[actualIndex].api_config, url: e.target.value }
-                          };
-                          setNewDataSources(updated);
+                          // Don't allow editing Nova Weather URL
+                          if (source.category !== 'Nova Weather') {
+                            const updated = [...newDataSources];
+                            updated[actualIndex] = {
+                              ...updated[actualIndex],
+                              api_config: { ...updated[actualIndex].api_config, url: e.target.value }
+                            };
+                            setNewDataSources(updated);
+                          }
                         }}
                         placeholder="https://api.example.com/v1/data"
+                        disabled={source.category === 'Nova Weather'}
                       />
                     </div>
 
@@ -1591,35 +1805,232 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                     <div className="space-y-2">
                       <Label>Data Path (optional)</Label>
                       <Input
-                        value={source.api_config?.data_path || ''}
+                        value={source.api_config?.data_path || source.api_config?.dataPath || ''}
                         onChange={(e) => {
                           const updated = [...newDataSources];
                           updated[actualIndex] = {
                             ...updated[actualIndex],
-                            api_config: { ...updated[actualIndex].api_config, data_path: e.target.value }
+                            api_config: {
+                              ...updated[actualIndex].api_config,
+                              data_path: e.target.value,
+                              dataPath: e.target.value // Store both for compatibility
+                            }
                           };
                           setNewDataSources(updated);
                         }}
-                        placeholder="data.items"
+                        placeholder={source.category === 'Nova Weather' ? "locations" : "data.items"}
                       />
                       <p className="text-xs text-muted-foreground">
                         JSON path to the array of items (e.g., 'data.items' or 'results')
                       </p>
                     </div>
 
-                    {/* Dynamic URL Parameters Section */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
+                    {/* Nova Weather Filter Options */}
+                    {source.category === 'Nova Weather' && (
+                      <div className="space-y-3">
                         <div>
-                          <Label>Dynamic URL Parameters</Label>
+                          <Label>Filter Options</Label>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Map query parameters from your endpoint URL to placeholders in this data source URL
+                            Configure query parameters for the Nova Weather API
                           </p>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Type</Label>
+                            <Select
+                              value={source.api_config?.novaWeatherFilters?.type || 'current'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaWeatherFilters || {};
+                                filters.type = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'current',
+                                  channel: filters.channel || 'all',
+                                  dataProvider: filters.dataProvider || 'all',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaWeatherFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="current">Current</SelectItem>
+                                <SelectItem value="hourly">Hourly</SelectItem>
+                                <SelectItem value="daily">Daily</SelectItem>
+                                <SelectItem value="alerts">Alerts</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Channel</Label>
+                            <Select
+                              value={source.api_config?.novaWeatherFilters?.channel || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaWeatherFilters || {};
+                                filters.channel = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'current',
+                                  channel: filters.channel || 'all',
+                                  dataProvider: filters.dataProvider || 'all',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaWeatherFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select channel" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Data Channels</SelectItem>
+                                <SelectItem value="assigned">Assigned Channels</SelectItem>
+                                {novaWeatherChannels.map((channel) => (
+                                  <SelectItem key={channel.id} value={channel.id}>
+                                    {channel.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Data Provider</Label>
+                            <Select
+                              value={source.api_config?.novaWeatherFilters?.dataProvider || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaWeatherFilters || {};
+                                filters.dataProvider = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'current',
+                                  channel: filters.channel || 'all',
+                                  dataProvider: filters.dataProvider || 'all',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaWeatherFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select provider" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Data Providers</SelectItem>
+                                {novaWeatherProviders.map((provider) => (
+                                  <SelectItem key={provider.id} value={provider.id}>
+                                    {provider.name} ({provider.type})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">State</Label>
+                            <Select
+                              value={source.api_config?.novaWeatherFilters?.state || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaWeatherFilters || {};
+                                filters.state = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'current',
+                                  channel: filters.channel || 'all',
+                                  dataProvider: filters.dataProvider || 'all',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaWeatherFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select state" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All States</SelectItem>
+                                {novaWeatherStates.map((state) => (
+                                  <SelectItem key={state} value={state}>
+                                    {state}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Show current URL preview */}
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-blue-700 dark:text-blue-300 font-mono break-all">
+                            {source.api_config?.url || ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather */}
+                    {source.category !== 'Nova Weather' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label>Dynamic URL Parameters</Label>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Map query parameters from your endpoint URL to placeholders in this data source URL
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
                             const updated = [...newDataSources];
                             const newMapping = { queryParam: '', urlPlaceholder: '', required: false };
                             updated[actualIndex] = {
@@ -1724,10 +2135,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                           </div>
                         </Card>
                       ))}
-                    </div>
+                      </div>
+                    )}
 
                     {/* Test Parameters Section for APIs with dynamic parameters */}
-                    {source.api_config?.parameter_mappings && source.api_config.parameter_mappings.length > 0 && (
+                    {source.api_config?.parameter_mappings && source.api_config.parameter_mappings.length > 0 && source.category !== 'Nova Weather' && (
                       <div className="space-y-3 pt-3 border-t">
                         <div>
                           <Label>Test Parameters</Label>
@@ -2302,18 +2714,43 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           }
         }
 
+        // Helper function to recursively extract all field paths
+        const extractAllFields = (obj: any, prefix = ''): string[] => {
+          const fieldsList: string[] = [];
+
+          if (!obj || typeof obj !== 'object') return fieldsList;
+
+          Object.keys(obj).forEach(key => {
+            // Skip private fields
+            if (key.startsWith('_') || key.startsWith('$')) return;
+
+            const fieldPath = prefix ? `${prefix}.${key}` : key;
+            const value = obj[key];
+
+            // Always add the field itself
+            fieldsList.push(fieldPath);
+
+            // If it's an object (but not array), recurse to get nested fields
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+              fieldsList.push(...extractAllFields(value, fieldPath));
+            }
+            // If it's an array with objects, extract fields from first item
+            else if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+              fieldsList.push(...extractAllFields(value[0], fieldPath));
+            }
+          });
+
+          return fieldsList;
+        };
+
         // Extract fields from the response
         if (Array.isArray(targetData) && targetData.length > 0) {
           const firstItem = targetData[0];
           if (typeof firstItem === 'object' && firstItem !== null) {
-            fields = Object.keys(firstItem).filter(key =>
-              !key.startsWith('_') && !key.startsWith('$')
-            );
+            fields = extractAllFields(firstItem);
           }
         } else if (typeof targetData === 'object' && targetData !== null) {
-          fields = Object.keys(targetData).filter(key =>
-            !key.startsWith('_') && !key.startsWith('$')
-          );
+          fields = extractAllFields(targetData);
         }
       } else if (fullSource.type === 'rss') {
         // RSS feeds have standard fields
@@ -2358,7 +2795,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       setFormData((prev: Partial<Agent>) => ({
         ...prev,
         dataSources: prev.dataSources?.map((ds: AgentDataSource) =>
-          ds.id === source.id
+          String(ds.id) === String(source.id)
             ? { ...ds, fields }
             : ds
         )
@@ -2630,7 +3067,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       case 'dataSources':
         return 'Data Sources';
       case 'configureNewSources':
-        return 'Configure New Sources';
+        // Check if Nova Weather is selected
+        const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
+        return selectedDataTypes.includes('Nova Weather') ? 'Configure New Sources' : 'Configure New Sources';
       case 'relationships':
         return 'Data Relationships';
       case 'outputFormat':

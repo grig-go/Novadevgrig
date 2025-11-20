@@ -441,7 +441,17 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                   setSelectedSources(allIds);
                   // Expand all sources when selecting all
                   setExpandedSources(allIds);
-                  allIds.forEach(id => autoDetectPath(id));
+
+                  // Auto-detect paths for all sources
+                  const newPaths: Record<string, string> = {};
+                  allIds.forEach(id => {
+                    autoDetectPath(id);
+                    // Initialize with empty path, will be updated by autoDetectPath
+                    newPaths[id] = sourcePaths[id] || '';
+                  });
+
+                  // Update the parent component with the selection
+                  updateSelection(allIds, newPaths);
                 }}
               >
                 Select All
@@ -453,6 +463,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                 onClick={() => {
                   setSelectedSources(new Set());
                   setSourcePaths({});
+                  // Update the parent component with empty selection
+                  updateSelection(new Set(), {});
                 }}
               >
                 Clear All
