@@ -1394,7 +1394,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     try {
       setAssigningSystem(true);
-      console.log("📌 Assigning system:", systemId, "to media:", selectedAsset.id);
+      console.log("��� Assigning system:", systemId, "to media:", selectedAsset.id);
       
       const system = availableSystems.find(s => s.id === systemId);
 
@@ -1639,9 +1639,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 repeatDelay: 3,
                 ease: "easeInOut"
               }}
-              className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
             >
-              <ImageIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <ImageIcon className="w-6 h-6 text-pink-600 dark:text-pink-400" />
             </motion.div>
             Media Library
           </h1>

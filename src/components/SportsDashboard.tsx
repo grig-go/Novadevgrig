@@ -27,10 +27,12 @@ import { motion } from "framer-motion";
 
 interface SportsDashboardProps {
   onNavigateToFeeds?: () => void;
+  onNavigateToProviders?: () => void;
 }
 
 export function SportsDashboard({ 
-  onNavigateToFeeds
+  onNavigateToFeeds,
+  onNavigateToProviders
 }: SportsDashboardProps) {
   const [currentView, setCurrentView] = useState<SportsView>('teams');
   const [showAIInsights, setShowAIInsights] = useState(false);
