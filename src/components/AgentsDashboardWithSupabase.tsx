@@ -227,6 +227,57 @@ export function AgentsDashboardWithSupabase({
     category: feed.category
   }));
 
+  // Cleanup unused Nova Weather data sources
+  const cleanupUnusedNovaWeatherSources = async () => {
+    try {
+      // Get all Nova Weather data sources
+      const { data: novaWeatherSources, error: sourcesError } = await supabase
+        .from('data_sources')
+        .select('id')
+        .eq('category', 'Nova Weather');
+
+      if (sourcesError) {
+        console.error('Failed to fetch Nova Weather sources:', sourcesError);
+        return;
+      }
+
+      if (!novaWeatherSources || novaWeatherSources.length === 0) {
+        return; // No Nova Weather sources to clean up
+      }
+
+      // Get all data source IDs that are referenced by api_endpoint_sources
+      const { data: usedSources, error: usedError } = await supabase
+        .from('api_endpoint_sources')
+        .select('data_source_id')
+        .in('data_source_id', novaWeatherSources.map(s => s.id));
+
+      if (usedError) {
+        console.error('Failed to fetch used sources:', usedError);
+        return;
+      }
+
+      // Find unused Nova Weather sources
+      const usedSourceIds = new Set(usedSources?.map(s => s.data_source_id) || []);
+      const unusedSources = novaWeatherSources.filter(s => !usedSourceIds.has(s.id));
+
+      if (unusedSources.length > 0) {
+        // Delete unused Nova Weather sources
+        const { error: deleteError } = await supabase
+          .from('data_sources')
+          .delete()
+          .in('id', unusedSources.map(s => s.id));
+
+        if (deleteError) {
+          console.error('Failed to delete unused Nova Weather sources:', deleteError);
+        } else {
+          console.log(`Cleaned up ${unusedSources.length} unused Nova Weather data source(s)`);
+        }
+      }
+    } catch (error) {
+      console.error('Error during Nova Weather cleanup:', error);
+    }
+  };
+
   // Load agents from database
   const loadAgents = async () => {
     try {
@@ -255,6 +306,9 @@ export function AgentsDashboardWithSupabase({
       // Convert APIEndpoint to Agent format for UI
       const convertedAgents = (data || []).map(convertAPIEndpointToAgent);
       setAgents(convertedAgents);
+
+      // Clean up unused Nova Weather sources after loading agents
+      await cleanupUnusedNovaWeatherSources();
     } catch (error) {
       console.error('Failed to load agents:', error);
       toast({
