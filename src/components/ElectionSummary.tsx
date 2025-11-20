@@ -282,60 +282,78 @@ export function ElectionSummary({ races, onUpdateRace }: ElectionSummaryProps) {
   console.log(summaryData.presidential.demCandidate)
 
   return (
-    <div className="space-y-6">
-      {/* Presidential Election - Visual D3 Version */}
-      {hasPresidentialRace && (
-        <PresidentialElectoralChart 
-          demVotes={summaryData.presidential.electoralVotes?.demVotes || 0}
-          repVotes={summaryData.presidential.electoralVotes?.repVotes || 0}
-          uncalledVotes={summaryData.presidential.electoralVotes?.uncalledVotes || 0}
-          demCandidate={summaryData.presidential.demCandidate}
-          repCandidate={summaryData.presidential.repCandidate}
-          race={summaryData.presidential.race}
-          status={summaryData.presidential.race.status}
-        />
-      )}
+    <Card className="max-w-7xl mx-auto">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center gap-2">
+          <Crown className="w-5 h-5" />
+          President - Electoral College
+          {summaryData.presidential.race?.status === 'CALLED' && (
+            <Badge variant="outline" className="ml-auto bg-green-100 text-green-700 border-green-300">
+              CALLED
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between mb-6">
+          {/* Left - Dem Candidate */}
+          <div className="flex items-center gap-3 min-w-[200px]">
+            {summaryData.presidential.demCandidate && (
+              <Avatar className="h-10 w-10">
+                <AvatarImage 
+                  src={summaryData.presidential.demCandidate.headshot} 
+                  alt={summaryData.presidential.demCandidate.name} 
+                />
+                <AvatarFallback>
+                  <User className="h-5 w-5" />
+                </AvatarFallback>
+              </Avatar>
+            )}
+            <div>
+              <div className="font-semibold">{summaryData.presidential.demCandidate ? getFieldValue(summaryData.presidential.demCandidate.name) : 'Kamala Harris'}</div>
+              <div className="text-sm text-blue-600">Democratic</div>
+            </div>
+          </div>
 
-      {/* Congressional Elections - Visual D3 Version */}
-      <div className="grid grid-cols-1 gap-6">
-        {/* U.S. Senate */}
-        {(summaryData.senate.statusCounts.total > 0) && (
-          <CongressionalChart 
-            title="U.S. Senate"
-            icon={<Building className="w-5 h-5" />}
-            demSeats={summaryData.senate.partyCounts.demSeats}
-            repSeats={summaryData.senate.partyCounts.repSeats}
-            indSeats={summaryData.senate.partyCounts.indSeats}
-            uncalledSeats={summaryData.senate.partyCounts.uncalledSeats}
-            totalSeats={100}
-            majorityThreshold={51}
-          />
-        )}
+          {/* Right - Rep Candidate */}
+          <div className="flex items-center gap-3 min-w-[200px] justify-end">
+            <div className="text-right">
+              <div className="font-semibold">{summaryData.presidential.repCandidate ? getFieldValue(summaryData.presidential.repCandidate.name) : 'Donald Trump'}</div>
+              <div className="text-sm text-red-600">Republican</div>
+            </div>
+            {summaryData.presidential.repCandidate && (
+              <Avatar className="h-10 w-10">
+                <AvatarImage 
+                  src={summaryData.presidential.repCandidate.headshot} 
+                  alt={summaryData.presidential.repCandidate.name} 
+                />
+                <AvatarFallback>
+                  <User className="h-5 w-5" />
+                </AvatarFallback>
+              </Avatar>
+            )}
+          </div>
+        </div>
 
-        {/* U.S. House */}
-        {(summaryData.house.statusCounts.total > 0) && (
-          <CongressionalChart 
-            title="U.S. House"
-            icon={<Home className="w-5 h-5" />}
-            demSeats={summaryData.house.partyCounts.demSeats}
-            repSeats={summaryData.house.partyCounts.repSeats}
-            indSeats={summaryData.house.partyCounts.indSeats}
-            uncalledSeats={summaryData.house.partyCounts.uncalledSeats}
-            totalSeats={435}
-            majorityThreshold={218}
-          />
-        )}
-      </div>
+        {/* D3 Bar Chart */}
+        <svg ref={svgRef} width="100%" height="120" />
 
-      {/* Race Status Overview - Visual D3 Version */}
-      <RaceStatusChart 
-        hasPresidentialRace={hasPresidentialRace}
-        presidentialCounts={summaryData.presidential.statusCounts}
-        senateCounts={summaryData.senate.statusCounts}
-        houseCounts={summaryData.house.statusCounts}
-        governorCounts={summaryData.governor.statusCounts}
-      />
-    </div>
+        <div className="flex justify-center gap-6 mt-4">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-600 rounded-sm" />
+            <span className="text-sm">{summaryData.presidential.electoralVotes?.demVotes || 0} DEM</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-gray-400 rounded-sm" />
+            <span className="text-sm">{summaryData.presidential.electoralVotes?.uncalledVotes || 0} UNCALLED</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-600 rounded-sm" />
+            <span className="text-sm">{summaryData.presidential.electoralVotes?.repVotes || 0} REP</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -456,7 +474,7 @@ function PresidentialElectoralChart({
   }, [demVotes, repVotes, uncalledVotes]);
 
   return (
-    <Card>
+    <Card className="max-w-7xl mx-auto">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2">
           <Crown className="w-5 h-5" />
