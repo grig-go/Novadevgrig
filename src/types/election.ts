@@ -28,16 +28,18 @@ export interface Candidate {
   first_name?: string;
   last_name?: string;
   ballot_order?: number;
-  electoralVotes?: number; // Electoral votes won by this candidate (for presidential races)
+  ElectoralVotes?: number; // Electoral votes won by this candidate (for presidential races)
 }
 
 // Enhanced race with override support
 export interface Race {
   id: string;
-  race_id: string;
+  race_id: string; // UUID from e_races table
   race_results_id: string;
+  election_id: string; // UUID from e_elections table
   candidate_results_id: string;
   ap_race_id?: string; // Original AP Race ID
+  synthetic_race_id?: string; // UUID from e_synthetic_races table (for synthetic races only)
   title: string | FieldOverride<string>;
   office: string | FieldOverride<string>;
   state: string;
@@ -56,7 +58,20 @@ export interface Race {
   called_timestamp?: string | FieldOverride<string>;
   uncontested?: boolean;
   num_elect?: number;
-  electoralVotes?: number; // For presidential races
+  ElectoralVotes?: number; // For presidential races
+  // AI/Synthetic race fields
+  summary?: string | { text: string }; // AI-generated summary for synthetic races
+  scenario_input?: {
+    name?: string;
+    aiProvider?: string;
+    override_by?: string | null;
+    turnoutShift?: number;
+    democratShift?: number;
+    countyStrategy?: string;
+    republicanShift?: number;
+    independentShift?: number;
+    customInstructions?: string;
+  };
 }
 
 // Political Party with detailed information
@@ -97,13 +112,22 @@ export interface Party {
 export interface CandidateProfile {
   id: string;
   ap_candidate_id?: string;
+  candidate_id?: string; // From search results
   candidate_results_id?: string; // Database ID for candidate results
-  firstName: string;
-  lastName: string;
-  fullName: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  full_name?: string; // From search results
+  display_name?: string; // From search results
+  short_name?: string; // From search results
   originalName?: string; // Original name before any overrides
-  party: 'DEM' | 'REP' | 'IND' | 'GRN' | 'LIB' | 'OTH';
+  party?: 'DEM' | 'REP' | 'IND' | 'GRN' | 'LIB' | 'OTH';
+  party_id?: string; // From search results
+  party_name?: string; // From search results (e.g., "Democratic Party")
+  party_abbreviation?: string; // From search results (e.g., "Dem")
   headshot?: string;
+  photov?: string; // From search results - alternate field name
+  photo_url?: string; // From search results - alternate field name
   bio?: string;
   birthDate?: string;
   birthPlace?: string;

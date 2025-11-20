@@ -10,12 +10,14 @@ import { Slider } from "./ui/slider";
 import { Label } from "./ui/label";
 import { Race, getFieldValue } from "../types/election";
 import { currentElectionYear } from '../utils/constants';
+import { supabase } from "../utils/supabase/client";
 import { 
   Search, 
   Filter,
   Database,
   Sparkles,
-  LoaderIcon
+  LoaderIcon,
+  Bug
 } from "lucide-react";
 
 interface ElectionFiltersProps {
@@ -34,6 +36,11 @@ interface ElectionFiltersProps {
   races: Race[];
   resultCount: number;
   lastUpdated: string;
+  onShowSyntheticRaces: (syntheticRaces: any[]) => void; // Callback to pass synthetic races to parent
+  showingSyntheticRaces: boolean; // Whether synthetic races are currently being displayed
+  onHideSyntheticRaces: () => void; // Callback to hide synthetic races
+  onDebugPayload: () => void; // Callback to show debug data
+  isLoadingDebugData: boolean; // Loading state for debug data
 }
 
 interface GenerationResults {
@@ -58,7 +65,12 @@ export function ElectionFilters({
   states,
   races,
   resultCount,
-  lastUpdated
+  lastUpdated,
+  onShowSyntheticRaces,
+  showingSyntheticRaces,
+  onHideSyntheticRaces,
+  onDebugPayload,
+  isLoadingDebugData
 }: ElectionFiltersProps) {
   
   // Synthetic data generation state
@@ -119,6 +131,62 @@ export function ElectionFilters({
     setSelectedRace("");
   };
 
+  // Fetch synthetic races from database
+  const handleFetchSyntheticRaces = async () => {
+    try {
+      setIsGenerating(true);
+      
+      // First, get the list of all synthetic race IDs
+      const { data: raceList, error: listError } = await supabase.rpc('e_list_synthetic_races');
+      
+      console.log("Synthetic race list:", raceList);
+      
+      if (listError) {
+        console.error("Error fetching synthetic race list:", listError);
+        return;
+      }
+      
+      if (!raceList || !Array.isArray(raceList) || raceList.length === 0) {
+        console.log("No synthetic races found");
+        onShowSyntheticRaces([]);
+        return;
+      }
+      
+      // Fetch full details for each synthetic race
+      const fullRaces = await Promise.all(
+        raceList.map(async (race: any) => {
+          const raceId = race.synthetic_race_id || race.id;
+          const { data, error } = await supabase.rpc("e_get_synthetic_race_full", {
+            p_synthetic_race_id: raceId,
+          });
+          
+          if (error) {
+            console.error(`Error fetching full details for race ${raceId}:`, error);
+            return null;
+          }
+          
+          console.log("FULL SYNTHETIC RACE (raw RPC response):", data);
+          // RPC returns an array, extract the first element which is the race object
+          const raceData = Array.isArray(data) && data.length > 0 ? data[0] : data;
+          console.log("EXTRACTED RACE DATA:", raceData);
+          return raceData;
+        })
+      );
+      
+      // Filter out any null results from errors
+      const validRaces = fullRaces.filter(race => race !== null);
+      
+      console.log("All full synthetic races:", validRaces);
+      
+      // Pass synthetic races to parent component for display
+      onShowSyntheticRaces(validRaces);
+    } catch (err) {
+      console.error("Error fetching synthetic races:", err);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Reset selected race when base dataset changes
   useEffect(() => {
     setSelectedRace("");
@@ -163,20 +231,33 @@ export function ElectionFilters({
         {/* Election Year Data Sets */}
         <div className="flex flex-wrap gap-2 mb-6">
           <Button
-            variant="outline"
+            variant={showingSyntheticRaces ? "default" : "outline"}
             size="sm"
-            onClick={() => setSyntheticDialogOpen(true)}
+            onClick={handleFetchSyntheticRaces}
             className="gap-2"
+            disabled={isGenerating}
           >
-            <Database className="w-4 h-4" />
-            Generate Synthetic Data
+            {isGenerating ? (
+              <>
+                <LoaderIcon className="w-4 h-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <Database className="w-4 h-4" />
+                Synthetic Data
+              </>
+            )}
           </Button>
           {years.map((year) => (
             <Button
               key={year.key}
-              variant={selectedYear === year.key ? "default" : "outline"}
+              variant={selectedYear === year.key && !showingSyntheticRaces ? "default" : "outline"}
               size="sm"
-              onClick={() => onYearChange(year.key)}
+              onClick={() => {
+                onHideSyntheticRaces();
+                onYearChange(year.key);
+              }}
             >
               {year.label}
             </Button>
@@ -245,6 +326,28 @@ export function ElectionFilters({
             <Filter className="w-4 h-4" />
             Clear
           </Button>
+
+          {showingSyntheticRaces && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDebugPayload}
+              className="gap-2"
+              disabled={isLoadingDebugData}
+            >
+              {isLoadingDebugData ? (
+                <>
+                  <LoaderIcon className="w-4 h-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Bug className="w-4 h-4" />
+                  Debug Payload
+                </>
+              )}
+            </Button>
+          )}
         </div>
 
         {/* Active Filters */}
@@ -360,12 +463,12 @@ export function ElectionFilters({
                     <SelectContent>
                       <SelectItem value="">All races in dataset</SelectItem>
                       {races.slice(0, 20).map((race) => {
-                        const raceName = getFieldValue(race.name);
-                        const raceType = getFieldValue(race.type);
-                        const state = getFieldValue(race.state);
+                        const raceTitle = getFieldValue(race.title);
+                        const raceType = getFieldValue(race.raceType);
+                        const state = race.state;
                         return (
                           <SelectItem key={race.id} value={race.id}>
-                            {state} - {raceType}: {raceName}
+                            {state} - {raceType}: {raceTitle}
                           </SelectItem>
                         );
                       })}

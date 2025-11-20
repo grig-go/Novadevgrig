@@ -165,7 +165,7 @@ export function ElectionSummary({ races, onUpdateRace }: ElectionSummaryProps) {
           // Check if any candidate has won electoral votes
           let electoralVotesAssigned = false;
           race.candidates.forEach(candidate => {
-            const candidateElectoralVotes = candidate.electoralVotes || 0;
+            const candidateElectoralVotes = candidate.ElectoralVotes || 0;
             if (candidateElectoralVotes > 0) {
               electoralVotesAssigned = true;
               const party = getFieldValue(candidate.party);
