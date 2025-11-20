@@ -163,8 +163,49 @@ app.post("/fetch", async (c)=>{
       const zoneId = ""; // not used for sample mode
       console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
       console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to fetch sample XML: HTTP ${res.status}`);
+
+      // Try direct fetch first, then fallback to proxies
+      let res;
+      let fetchSuccess = false;
+
+      try {
+        console.log(`🔗 Fetching sample XML directly: ${url}`);
+        res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+            'Accept': 'text/xml, application/xml, */*',
+          },
+        });
+        if (res.ok) {
+          fetchSuccess = true;
+        }
+      } catch (directError) {
+        console.warn(`⚠️ Direct fetch failed:`, directError.message);
+      }
+
+      // Try proxies if direct fetch failed
+      if (!fetchSuccess) {
+        const proxies = [
+          { name: 'corsproxy.io', url: (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}` },
+          { name: 'thingproxy', url: (u: string) => `https://thingproxy.freeboard.io/fetch/${u}` },
+        ];
+
+        for (const proxy of proxies) {
+          try {
+            console.log(`🔄 Trying ${proxy.name} for sample XML...`);
+            res = await fetch(proxy.url(url));
+            if (res.ok) {
+              fetchSuccess = true;
+              console.log(`✅ ${proxy.name} successful`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`⚠️ ${proxy.name} failed`);
+          }
+        }
+      }
+
+      if (!res || !res.ok) throw new Error(`Failed to fetch sample XML: ${res?.status || 'all methods failed'}`);
       const xmlText = await res.text();
       const parsed = parser.parse(xmlText);
       let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
@@ -173,8 +214,14 @@ app.post("/fetch", async (c)=>{
       ].filter(Boolean);
       console.log(`📚 Sample mode: ${records.length} records found`);
       // 🧹 Clean existing rows for provider (region 42)
-      const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
-      if (deleteError) console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${regionId}`);
+      const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId).select();
+      if (deleteError) {
+        console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      } else {
+        console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows`);
+      }
+
       // 🧩 Upsert new records
       const rows = records.map((item)=>({
           provider_id: "school_provider:news12_closings",
@@ -192,13 +239,26 @@ app.post("/fetch", async (c)=>{
           fetched_at: new Date().toISOString(),
           raw_data: item
         }));
-      const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+
+      console.log(`📝 Upserting ${rows.length} records...`);
+      console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
+        org: r.organization_name,
+        status: r.status_description,
+        day: r.status_day
+      })));
+
+      const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
         onConflict: "provider_id,organization_name,status_day",
         ignoreDuplicates: false
-      });
-      if (upsertError) throw upsertError;
-      console.log(`✅ Sample mode: ${rows.length} records upserted`);
-      totalInserted = rows.length;
+      }).select();
+
+      if (upsertError) {
+        console.error(`❌ Upsert error:`, upsertError);
+        throw upsertError;
+      }
+
+      console.log(`✅ Sample mode: ${upsertedRows?.length || rows.length} records upserted successfully`);
+      totalInserted = upsertedRows?.length || rows.length;
     } else {
       // ----------------------------------------------------------------------------
       // 3️⃣ Live mode: use base_url + endpoint
@@ -240,26 +300,132 @@ app.post("/fetch", async (c)=>{
         const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId={zone_id}";
         // Replace placeholders
         let endpoint = endpointTemplate.replace("{region_id}", region_id || "").replace("{zone_id}", zone_id || "");
-        if (!endpoint.startsWith("/")) endpoint = `/${endpoint}`;
+        
+        // Fix double slash issue
+        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
+          endpoint = endpoint.substring(1);
+        } else if (!baseUrl.endsWith("/") && !endpoint.startsWith("/")) {
+          endpoint = `/${endpoint}`;
+        }
+        
         const url = `${baseUrl}${endpoint}`;
         console.log(`🌐 Fetching XML for region_id=${region_id}, zone_id=${zone_id}`);
         console.log(`🔗 URL: ${url}`);
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn(`⚠️ Region ${region_id} failed: HTTP ${res.status}`);
-          continue;
+
+        let xmlText;
+
+        try {
+          // Legacy server redirects HTTP to HTTPS but has TLS issues
+          // Solution: Use a CORS proxy or alternative fetching method
+
+          const useProxy = config.use_cors_proxy === true;
+          let fetchUrl = url;
+
+          if (useProxy) {
+            // Use CORS Anywhere or similar proxy
+            const proxyUrl = config.cors_proxy_url || 'https://corsproxy.io/?';
+            fetchUrl = `${proxyUrl}${encodeURIComponent(url)}`;
+            console.log(`🔄 Using CORS proxy: ${fetchUrl}`);
+          } else {
+            console.log(`🔗 Fetching directly: ${url}`);
+          }
+
+          const res = await fetch(fetchUrl, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+              'Accept': 'text/xml, application/xml, */*',
+            },
+          });
+
+          console.log(`📊 Response status: ${res.status}`);
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          }
+
+          xmlText = await res.text();
+          console.log(`✅ Fetch successful, received ${xmlText.length} bytes`);
+
+        } catch (fetchError) {
+          console.error(`❌ Direct fetch failed for region ${region_id}:`, fetchError.message);
+
+          // Fallback to proxy services (skip legacy TLS due to Deno limitations)
+          const proxies = [
+            {
+              name: 'corsproxy.io',
+              url: (targetUrl: string) => `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+            },
+            {
+              name: 'thingproxy.freeboard.io',
+              url: (targetUrl: string) => `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
+            },
+            {
+              name: 'api.codetabs.com',
+              url: (targetUrl: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+            },
+          ];
+
+          let proxySuccess = false;
+
+          for (const proxy of proxies) {
+            try {
+              console.log(`🔄 Trying proxy: ${proxy.name}...`);
+              const proxyUrl = proxy.url(url);
+
+              // Add timeout for proxy requests
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+              const proxyRes = await fetch(proxyUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+                },
+                signal: controller.signal,
+              });
+
+              clearTimeout(timeoutId);
+
+              if (!proxyRes.ok) {
+                console.warn(`⚠️ ${proxy.name} returned ${proxyRes.status}`);
+                continue;
+              }
+
+              xmlText = await proxyRes.text();
+              console.log(`✅ Proxy ${proxy.name} successful, received ${xmlText.length} bytes`);
+              proxySuccess = true;
+              break;
+            } catch (proxyError) {
+              console.warn(`⚠️ ${proxy.name} failed:`, proxyError.message);
+              continue;
+            }
+          }
+
+          if (!proxySuccess) {
+            console.error(`❌ All fetch methods failed for region ${region_id}`);
+            continue;
+          }
         }
-        const xmlText = await res.text();
+
         const parsed = parser.parse(xmlText);
         let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
         if (!Array.isArray(records)) records = [
           records
         ].filter(Boolean);
         console.log(`📚 Region ${region_id}: ${records.length} records found`);
-        if (records.length === 0) continue;
+        if (records.length === 0) {
+          console.log(`⏭️ Skipping region ${region_id} - no records to insert`);
+          continue;
+        }
+
         // 🧹 Clean existing rows for same provider + region + zone
-        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id);
-        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${region_id}, zone=${zone_id}`);
+        const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id).select();
+        if (deleteError) {
+          console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        } else {
+          console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows for region ${region_id}`);
+        }
+
         // 🧩 Prepare and upsert new records
         const rows = records.map((item)=>({
             provider_id: "school_provider:news12_closings",
@@ -277,16 +443,26 @@ app.post("/fetch", async (c)=>{
             fetched_at: new Date().toISOString(),
             raw_data: item
           }));
-        const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+
+        console.log(`📝 Upserting ${rows.length} records for region ${region_id}...`);
+        console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
+          org: r.organization_name,
+          status: r.status_description,
+          day: r.status_day
+        })));
+
+        const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
           onConflict: "provider_id,organization_name,status_day",
           ignoreDuplicates: false
-        });
+        }).select();
+
         if (upsertError) {
           console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
           continue;
         }
-        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${rows.length} records upserted`);
-        totalInserted += rows.length;
+
+        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${upsertedRows?.length || rows.length} records upserted successfully`);
+        totalInserted += upsertedRows?.length || rows.length;
       }
     } // 👈 closes live mode else block
     // ----------------------------------------------------------------------------
