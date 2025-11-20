@@ -1067,7 +1067,7 @@ app.put("/providers", async (c)=>{
 app.get("/channels", async (c)=>{
   try {
     console.log("📺 Fetching channels list for weather location assignment");
-    const { data, error } = await supabase.from("channels").select("id, name").eq("status", "active").order("name");
+    const { data, error } = await supabase.from("channels").select("id, name").eq("active", true).order("name");
     if (error) {
       console.error("Failed to fetch channels:", error);
       return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", error.message);

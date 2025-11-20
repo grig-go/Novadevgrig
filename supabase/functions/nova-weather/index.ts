@@ -25,24 +25,52 @@ function getFieldValue(field: any): any {
   return field;
 }
 
+// State code to full name mapping
+const STATE_CODES: Record<string, string> = {
+  'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas', 'CA': 'California',
+  'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware', 'FL': 'Florida', 'GA': 'Georgia',
+  'HI': 'Hawaii', 'ID': 'Idaho', 'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa',
+  'KS': 'Kansas', 'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+  'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi', 'MO': 'Missouri',
+  'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada', 'NH': 'New Hampshire', 'NJ': 'New Jersey',
+  'NM': 'New Mexico', 'NY': 'New York', 'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio',
+  'OK': 'Oklahoma', 'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+  'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah', 'VT': 'Vermont',
+  'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia', 'WI': 'Wisconsin', 'WY': 'Wyoming',
+  'DC': 'District of Columbia', 'PR': 'Puerto Rico', 'VI': 'Virgin Islands', 'GU': 'Guam',
+  'AS': 'American Samoa', 'MP': 'Northern Mariana Islands'
+};
+
 // Transform weather data for API response
 function transformWeatherData(
   locations: any[],
   type: string,
   channel: string,
-  dataProvider: string
+  dataProvider: string,
+  state: string,
+  channelMap: Map<string, string>
 ): any {
   const now = new Date().toISOString();
 
   // Filter by channel if specified
   let filteredLocations = locations;
 
+  console.log(`Channel filter: ${channel}, Total locations before filter: ${locations.length}`);
+
   if (channel && channel !== 'all') {
     if (channel === 'assigned') {
       // Show all locations that have ANY channel assigned
+      console.log('Filtering for assigned channels...');
       filteredLocations = filteredLocations.filter(
-        (loc) => loc.location.channel_id != null && loc.location.channel_id !== ""
+        (loc) => {
+          const hasChannel = loc.location.channel_id != null && loc.location.channel_id !== "";
+          if (hasChannel) {
+            console.log(`Location ${loc.location.name} has channel: ${loc.location.channel_id}`);
+          }
+          return hasChannel;
+        }
       );
+      console.log(`Locations with assigned channels: ${filteredLocations.length}`);
     } else {
       // Show locations with specific channel
       filteredLocations = filteredLocations.filter(
@@ -58,8 +86,31 @@ function transformWeatherData(
     );
   }
 
+  // Filter by state if specified
+  if (state && state !== 'all') {
+    console.log(`Filtering by state: ${state}`);
+    console.log(`Sample admin1 values:`, filteredLocations.slice(0, 3).map(loc => loc.location.admin1));
+
+    // Convert state code to full name if needed (e.g., "NJ" -> "New Jersey")
+    const stateFullName = STATE_CODES[state.toUpperCase()] || state;
+    console.log(`State full name: ${stateFullName}`);
+
+    filteredLocations = filteredLocations.filter(
+      (loc) => {
+        const admin1Lower = loc.location.admin1?.toLowerCase();
+        const stateMatch = admin1Lower === state.toLowerCase() || admin1Lower === stateFullName.toLowerCase();
+        if (stateMatch) {
+          console.log(`State match found: ${loc.location.name} (${loc.location.admin1})`);
+        }
+        return stateMatch;
+      }
+    );
+    console.log(`Locations after state filter: ${filteredLocations.length}`);
+  }
+
   // Transform based on type
   const transformedLocations = filteredLocations.map(location => {
+    const channelId = location.location.channel_id;
     const baseLocation = {
       id: location.location.id,
       name: getFieldValue(location.location.name),
@@ -69,7 +120,8 @@ function transformWeatherData(
       country: location.location.country,
       state: location.location.admin1,
       timezone: location.location.timezone,
-      channelId: location.location.channel_id,
+      channelId: channelId,
+      channelName: channelId ? channelMap.get(channelId) || null : null,
       providerId: location.location.provider_id,
     };
 
@@ -161,7 +213,7 @@ function transformWeatherData(
                 conditionCode: hour.conditionCode,
                 icon: hour.icon,
                 cloudCover: hour.cloudCover,
-                precipitationProbability: hour.precipitationProbability,
+                precipitationProbability: hour.precipProbability !== undefined && hour.precipProbability !== null ? hour.precipProbability : (hour.precipitationProbability !== undefined && hour.precipitationProbability !== null ? hour.precipitationProbability : 0),
                 precipitationAmount: hour.precipitationAmount,
               };
             }),
@@ -176,8 +228,8 @@ function transformWeatherData(
           weatherData = {
             items: location.data.daily.items.map((day: any) => {
               // Extract actual values from potential override objects
-              const tempMaxValue = getFieldValue(day.temperatureMax);
-              const tempMinValue = getFieldValue(day.temperatureMin);
+              const tempMaxValue = getFieldValue(day.tempMax || day.temperatureMax);
+              const tempMinValue = getFieldValue(day.tempMin || day.temperatureMin);
               const pressureValue = getFieldValue(day.pressure);
 
               return {
@@ -207,7 +259,7 @@ function transformWeatherData(
                 sunrise: day.sunrise,
                 sunset: day.sunset,
                 moonPhase: day.moonPhase,
-                precipitationProbability: day.precipitationProbability,
+                precipitationProbability: day.precipProbability !== undefined && day.precipProbability !== null ? day.precipProbability : (day.precipitationProbability !== undefined && day.precipitationProbability !== null ? day.precipitationProbability : 0),
                 precipitationAmount: day.precipitationAmount,
               };
             }),
@@ -227,8 +279,8 @@ function transformWeatherData(
               severity: alert.severity,
               urgency: alert.urgency,
               certainty: alert.certainty,
-              effective: alert.effective,
-              expires: alert.expires,
+              from: alert.start || alert.effective,
+              until: alert.end || alert.expires,
               areas: alert.areas,
               source: alert.source,
             })),
@@ -244,7 +296,7 @@ function transformWeatherData(
     return {
       location: baseLocation,
       weather: weatherData,
-      lastUpdated: location.data?.lastUpdated || now,
+      lastUpdated: location.data?.current?.asOf || location.data?.lastUpdated || now,
     };
   });
 
@@ -267,6 +319,7 @@ function transformWeatherData(
     type,
     channel: channel || 'all',
     dataProvider: dataProvider || 'all',
+    state: state || 'all',
     lastUpdated: now,
     totalLocations: locationsWithData.length,
     locations: locationsWithData,
@@ -286,16 +339,19 @@ serve(async (req) => {
     const url = new URL(req.url);
     const channelParam = url.searchParams.get('channel');
     const dataProviderParam = url.searchParams.get('dataProvider');
+    const stateParam = url.searchParams.get('state');
     const typeParam = url.searchParams.get('type');
 
     console.log('Weather API Request:', {
       channel: channelParam,
       dataProvider: dataProviderParam,
+      state: stateParam,
       type: typeParam
     });
 
     const channel = channelParam || 'all';
     const dataProvider = dataProviderParam || 'all';
+    const state = stateParam || 'all';
     const type = typeParam || 'current';
 
     // Validate type parameter
@@ -349,12 +405,32 @@ serve(async (req) => {
 
     console.log(`Successfully fetched ${weatherData.length} weather locations`);
 
+    // Fetch all channels to get channel names
+    const { data: channels, error: channelsError } = await supabase
+      .from("channels")
+      .select("id, name")
+      .eq("active", true);
+
+    if (channelsError) {
+      console.error("Error fetching channels:", channelsError);
+    }
+
+    // Create a map of channel_id to channel_name
+    const channelMap = new Map<string, string>();
+    if (channels) {
+      channels.forEach((ch: any) => {
+        channelMap.set(ch.id, ch.name);
+      });
+    }
+
     // Transform the data to user-friendly format with filtering
     const transformedData = transformWeatherData(
       weatherData,
       type,
       channel,
-      dataProvider
+      dataProvider,
+      state,
+      channelMap
     );
 
     return new Response(
