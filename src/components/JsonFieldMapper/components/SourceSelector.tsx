@@ -191,7 +191,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   const autoDetectPath = (sourceId: string) => {
     // Always check for existing saved path first, regardless of isExistingConfig
     const existingSource = selection.sources?.find((s: any) => s.id === sourceId);
-    if (existingSource && existingSource.primaryPath !== undefined) {
+    // Only use existing path if it's defined AND not empty
+    if (existingSource && existingSource.primaryPath !== undefined && existingSource.primaryPath !== '') {
       updateSourcePath(sourceId, existingSource.primaryPath);
       return;
     }
@@ -203,9 +204,18 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     if (paths.length === 1) {
       updateSourcePath(sourceId, paths[0].path);
     } else if (paths.length > 0) {
-      const arrayPath = paths.find(p => p.type === 'array');
-      if (arrayPath) {
-        updateSourcePath(sourceId, arrayPath.path);
+      // Filter to get only array paths
+      const arrayPaths = paths.filter(p => p.type === 'array');
+
+      if (arrayPaths.length > 0) {
+        // Prefer non-root array paths (paths with non-empty path property)
+        const nonRootArrayPath = arrayPaths.find(p => p.path && p.path !== '');
+        if (nonRootArrayPath) {
+          updateSourcePath(sourceId, nonRootArrayPath.path);
+        } else {
+          // Fallback to first array path (could be root)
+          updateSourcePath(sourceId, arrayPaths[0].path);
+        }
       }
     }
   };
@@ -441,7 +451,8 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                   allIds.forEach(id => {
                     // Check for existing saved path first
                     const existingSource = selection.sources?.find((s: any) => s.id === id);
-                    if (existingSource && existingSource.primaryPath !== undefined) {
+                    // Only use existing path if it's defined AND not empty
+                    if (existingSource && existingSource.primaryPath !== undefined && existingSource.primaryPath !== '') {
                       newPaths[id] = existingSource.primaryPath;
                     } else {
                       // Auto-detect from sample data
@@ -451,9 +462,18 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                         if (paths.length === 1) {
                           newPaths[id] = paths[0].path;
                         } else if (paths.length > 0) {
-                          const arrayPath = paths.find(p => p.type === 'array');
-                          if (arrayPath) {
-                            newPaths[id] = arrayPath.path;
+                          // Filter to get only array paths
+                          const arrayPaths = paths.filter(p => p.type === 'array');
+
+                          if (arrayPaths.length > 0) {
+                            // Prefer non-root array paths (paths with non-empty path property)
+                            const nonRootArrayPath = arrayPaths.find(p => p.path && p.path !== '');
+                            if (nonRootArrayPath) {
+                              newPaths[id] = nonRootArrayPath.path;
+                            } else {
+                              // Fallback to first array path (could be root)
+                              newPaths[id] = arrayPaths[0].path;
+                            }
                           }
                         }
                       }
