@@ -581,18 +581,37 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
       if (novaWeatherSources.length > 0) {
         // Convert AgentDataSource to the format expected by newDataSources
-        const convertedSources = novaWeatherSources.map((ds: AgentDataSource) => ({
-          id: ds.id,
-          feedId: ds.feedId,
-          name: ds.name,
-          type: ds.type,
-          category: ds.category,
-          api_config: ds.api_config,
-          rss_config: ds.rss_config,
-          database_config: ds.database_config,
-          file_config: ds.file_config,
-          isExisting: true // Flag to indicate this is an existing source
-        }));
+        const convertedSources = novaWeatherSources.map((ds: AgentDataSource) => {
+          // Parse Nova Weather filters from URL if not already present
+          let api_config = ds.api_config;
+          if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
+            const url = new URL(api_config.url);
+            const params = new URLSearchParams(url.search);
+            api_config = {
+              ...api_config,
+              novaWeatherFilters: {
+                type: params.get('type') || 'current',
+                channel: params.get('channel') || 'all',
+                dataProvider: params.get('dataProvider') || 'all',
+                state: params.get('state') || 'all'
+              }
+            };
+          }
+
+          return {
+            id: ds.id,
+            feedId: ds.feedId,
+            name: ds.name,
+            type: ds.type,
+            category: ds.category,
+            api_config,
+            rss_config: ds.rss_config,
+            database_config: ds.database_config,
+            file_config: ds.file_config,
+            isExisting: true // Flag to indicate this is an existing source
+          };
+        });
+        console.log('Loaded Nova Weather sources for editing:', convertedSources);
         setNewDataSources(convertedSources);
       }
     } else if (!editAgent && open) {
@@ -678,8 +697,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           continue;
         }
 
-        // Skip if already saved AND not marked for update
+        // Skip if already saved and not marked as existing (for update)
+        // We want to process: new sources (!id) OR existing sources that need updating (isExisting)
         if (source.id && !source.isExisting) {
+          // This source has been saved before but isn't marked for update, skip it
           continue;
         }
 
@@ -719,6 +740,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Check if this is an existing source (has isExisting flag or already has an id)
         if (source.isExisting && source.id) {
           // UPDATE existing source
+          console.log('Updating existing Nova Weather source:', source.id, dataSourceData);
           const updateResult = await supabase
             .from('data_sources')
             .update(dataSourceData)
@@ -831,11 +853,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
     // Check if we're leaving the "configureNewSources" step
     if (currentStep === 'configureNewSources') {
-      // Check if there are unsaved data sources
-      const hasUnsavedDataSources = newDataSources.some((ds: any) => !ds.id && ds.name && ds.type);
+      // Check if there are unsaved data sources OR existing sources that need updating
+      const hasDataSourcesToSave = newDataSources.some((ds: any) =>
+        ds.name && ds.type && (!ds.id || ds.isExisting)
+      );
 
-      if (hasUnsavedDataSources) {
-        // Save all data sources before proceeding
+      if (hasDataSourcesToSave) {
+        // Save all data sources before proceeding (both new and existing)
         const saveSuccess = await saveAllNewDataSources();
 
         if (!saveSuccess) {
@@ -1007,12 +1031,28 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     // Sync auth settings from SecurityStep before saving and get the auth data synchronously
     const authData = securityStepRef.current?.syncAuthToFormData();
 
-    // First, save new data sources to the database (only those not yet saved)
+    // First, save/update Nova Weather data sources if needed
+    const hasNovaWeatherSources = newDataSources.some(ds =>
+      ds.category === 'Nova Weather' && ds.name && ds.type && (ds.isExisting || !ds.id)
+    );
+
+    if (hasNovaWeatherSources) {
+      console.log('Saving/updating Nova Weather data sources before final save...');
+      const saveSuccess = await saveAllNewDataSources();
+      if (!saveSuccess) {
+        console.error('Failed to save Nova Weather data sources');
+        return; // Don't proceed if data source save failed
+      }
+    }
+
+    // Now save any other new data sources (non-Nova Weather)
     const savedDataSourceIds: string[] = [];
     const newlySavedSources: AgentDataSource[] = [];
 
-    // Only save data sources that don't have an ID yet (haven't been saved)
-    const unsavedSources = newDataSources.filter(ds => !ds.id && ds.name && ds.type);
+    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather
+    const unsavedSources = newDataSources.filter(ds =>
+      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather'
+    );
     if (unsavedSources.length > 0) {
       console.log('Saving new data sources to database...');
 
@@ -1922,6 +1962,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
                                 updated[actualIndex] = {
                                   ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
                                   api_config: {
                                     ...updated[actualIndex].api_config,
                                     url: `${baseUrl}?${params.toString()}`,
@@ -1963,6 +2004,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
                                 updated[actualIndex] = {
                                   ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
                                   api_config: {
                                     ...updated[actualIndex].api_config,
                                     url: `${baseUrl}?${params.toString()}`,
@@ -2007,6 +2049,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
                                 updated[actualIndex] = {
                                   ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
                                   api_config: {
                                     ...updated[actualIndex].api_config,
                                     url: `${baseUrl}?${params.toString()}`,
@@ -2050,6 +2093,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
                                 updated[actualIndex] = {
                                   ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
                                   api_config: {
                                     ...updated[actualIndex].api_config,
                                     url: `${baseUrl}?${params.toString()}`,
