@@ -573,6 +573,28 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         'basic', 'dataType', 'dataSources', 'configureNewSources',
         'relationships', 'outputFormat', 'transformations', 'security', 'review'
       ]));
+
+      // Load existing Nova Weather data sources into newDataSources for editing
+      const novaWeatherSources = (editAgent.dataSources || []).filter(
+        (ds: AgentDataSource) => ds.category === 'Nova Weather'
+      );
+
+      if (novaWeatherSources.length > 0) {
+        // Convert AgentDataSource to the format expected by newDataSources
+        const convertedSources = novaWeatherSources.map((ds: AgentDataSource) => ({
+          id: ds.id,
+          feedId: ds.feedId,
+          name: ds.name,
+          type: ds.type,
+          category: ds.category,
+          api_config: ds.api_config,
+          rss_config: ds.rss_config,
+          database_config: ds.database_config,
+          file_config: ds.file_config,
+          isExisting: true // Flag to indicate this is an existing source
+        }));
+        setNewDataSources(convertedSources);
+      }
     } else if (!editAgent && open) {
       // Reset to default when creating a new agent
       setFormData({
@@ -599,6 +621,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       setCurrentStep('basic');
       // In create mode, reset visited steps to only 'basic'
       setVisitedSteps(new Set<WizardStep>(['basic']));
+      // Clear newDataSources in create mode
+      setNewDataSources([]);
     }
   }, [editAgent, open]);
 
@@ -606,13 +630,14 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
   const hasNovaWeatherSelected = selectedDataTypes.includes('Nova Weather');
 
-  // Dynamic steps - exclude dataSources when Nova Weather is selected, include configureNewSources only if there are new sources to configure
+  // Dynamic steps - exclude dataSources when Nova Weather is selected, include configureNewSources for Nova Weather
   const steps: WizardStep[] = [
     'basic',
     'dataType',
     // Skip dataSources step if Nova Weather is selected
     ...(hasNovaWeatherSelected ? [] : ['dataSources' as WizardStep]),
-    ...(newDataSources.filter(ds => ds.name && ds.type).length > 0 ? ['configureNewSources' as WizardStep] : []),
+    // Show configureNewSources if there are new sources OR if editing Nova Weather agent
+    ...((newDataSources.filter(ds => ds.name && ds.type).length > 0 || (hasNovaWeatherSelected && editAgent)) ? ['configureNewSources' as WizardStep] : []),
     'relationships',
     'outputFormat',
     'transformations',
@@ -623,9 +648,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const currentStepIndex = steps.indexOf(currentStep);
 
   const saveAllNewDataSources = async (): Promise<boolean> => {
-    const unsavedDataSources = newDataSources.filter((ds: any) => !ds.id && ds.name && ds.type);
+    // Process both new (without ID) and existing (with isExisting flag) sources
+    const sourcesToSave = newDataSources.filter((ds: any) => ds.name && ds.type);
 
-    if (unsavedDataSources.length === 0) {
+    if (sourcesToSave.length === 0) {
       return true; // Nothing to save
     }
 
@@ -643,12 +669,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         userId = user.id;
       }
 
-      // Save all unsaved data sources
+      // Save all data sources (insert new, update existing)
       for (let i = 0; i < newDataSources.length; i++) {
         const source = newDataSources[i];
 
-        // Skip if already saved or incomplete
-        if (source.id || !source.name || !source.type) {
+        // Skip if incomplete
+        if (!source.name || !source.type) {
+          continue;
+        }
+
+        // Skip if already saved AND not marked for update
+        if (source.id && !source.isExisting) {
           continue;
         }
 
@@ -683,11 +714,29 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           user_id: userId
         };
 
-        const { data, error } = await supabase
-          .from('data_sources')
-          .insert(dataSourceData)
-          .select()
-          .single();
+        let data, error;
+
+        // Check if this is an existing source (has isExisting flag or already has an id)
+        if (source.isExisting && source.id) {
+          // UPDATE existing source
+          const updateResult = await supabase
+            .from('data_sources')
+            .update(dataSourceData)
+            .eq('id', source.id)
+            .select()
+            .single();
+          data = updateResult.data;
+          error = updateResult.error;
+        } else {
+          // INSERT new source
+          const insertResult = await supabase
+            .from('data_sources')
+            .insert(dataSourceData)
+            .select()
+            .single();
+          data = insertResult.data;
+          error = insertResult.error;
+        }
 
         if (error) {
           throw new Error(`Failed to save ${source.name}: ${error.message}`);
@@ -695,11 +744,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Update the data source with the saved ID
         setNewDataSources((prev: any) => prev.map((ds: any, idx: number) =>
-          idx === i ? { ...ds, id: data.id, isNew: false } : ds
+          idx === i ? { ...ds, id: data.id, isNew: false, isExisting: false } : ds
         ));
 
-        // Also add to formData.dataSources so it's available for testing in Output Format step
-        const newAgentSource: AgentDataSource = {
+        // Update formData.dataSources
+        const updatedAgentSource: AgentDataSource = {
           id: data.id,
           name: source.name,
           feedId: data.id,
@@ -711,13 +760,24 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           file_config: source.file_config
         };
 
-        setFormData((prev: Partial<Agent>) => ({
-          ...prev,
-          dataSources: [...(prev.dataSources || []), newAgentSource]
-        }));
+        if (source.isExisting) {
+          // Update existing source in formData
+          setFormData((prev: Partial<Agent>) => ({
+            ...prev,
+            dataSources: (prev.dataSources || []).map(ds =>
+              ds.id === source.id ? updatedAgentSource : ds
+            )
+          }));
+        } else {
+          // Add new source to formData
+          setFormData((prev: Partial<Agent>) => ({
+            ...prev,
+            dataSources: [...(prev.dataSources || []), updatedAgentSource]
+          }));
+        }
       }
 
-      console.log(`Successfully saved ${unsavedDataSources.length} data source(s)`);
+      console.log(`Successfully saved ${sourcesToSave.length} data source(s)`);
       setIsSavingDataSources(false);
       return true;
 
@@ -1069,9 +1129,10 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const handleClose = async (agentSavedSuccessfully: boolean = false) => {
     // Clean up any Nova Weather data sources that were saved but not associated with an agent
     // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
-    if (!agentSavedSuccessfully) {
+    // AND only in create mode, not edit mode (in edit mode, sources already belong to an agent)
+    if (!agentSavedSuccessfully && !editAgent) {
       const novaWeatherSources = newDataSources.filter(
-        ds => ds.category === 'Nova Weather' && ds.id
+        ds => ds.category === 'Nova Weather' && ds.id && !ds.isExisting
       );
 
       if (novaWeatherSources.length > 0) {
@@ -3072,9 +3133,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       case 'dataSources':
         return 'Data Sources';
       case 'configureNewSources':
-        // Check if Nova Weather is selected
+        // Check if Nova Weather is selected and if in edit mode
         const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
-        return selectedDataTypes.includes('Nova Weather') ? 'Configure New Sources' : 'Configure New Sources';
+        if (selectedDataTypes.includes('Nova Weather')) {
+          return editAgent ? 'Configure Data Source' : 'Configure New Sources';
+        }
+        return 'Configure New Sources';
       case 'relationships':
         return 'Data Relationships';
       case 'outputFormat':

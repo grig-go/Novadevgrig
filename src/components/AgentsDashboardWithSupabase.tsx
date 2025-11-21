@@ -233,7 +233,7 @@ export function AgentsDashboardWithSupabase({
       // Get all Nova Weather data sources
       const { data: novaWeatherSources, error: sourcesError } = await supabase
         .from('data_sources')
-        .select('id')
+        .select('id, name')
         .eq('category', 'Nova Weather');
 
       if (sourcesError) {
