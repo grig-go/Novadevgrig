@@ -85,6 +85,11 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   );
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
 
+  // Refs for scroll restoration
+  const savedScrollPosition = useRef<number>(0);
+  const outputFieldsContainerRef = useRef<HTMLDivElement | null>(null);
+  const hasRestoredScrollForCurrentDrag = useRef<boolean>(false);
+
   // Persist UI preferences in localStorage to match nova-old behavior
   const [viewMode, setViewMode] = useState<'side-by-side' | 'floating'>(() => {
     const saved = localStorage.getItem('jsonMapper.viewMode');
@@ -116,6 +121,38 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   useEffect(() => {
     localStorage.setItem('jsonMapper.debugMode', JSON.stringify(debugMode));
   }, [debugMode]);
+
+  // Restore scroll position immediately when draggedField changes (when drag starts)
+  useEffect(() => {
+    if (draggedField && outputFieldsContainerRef.current) {
+      console.log('[RESTORE DRAG START] Restoring scroll to:', savedScrollPosition.current);
+
+      // Use requestAnimationFrame to restore scroll immediately after render
+      requestAnimationFrame(() => {
+        if (outputFieldsContainerRef.current) {
+          console.log('[RESTORE RAF DRAG START] Setting scrollTop to:', savedScrollPosition.current);
+          outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
+          console.log('[RESTORE RAF DRAG START] Current scrollTop after set:', outputFieldsContainerRef.current.scrollTop);
+        }
+      });
+    }
+  }, [draggedField]);
+
+  // Also restore scroll when dragOverTarget changes (when reaching Output Fields)
+  useEffect(() => {
+    if (dragOverTarget && outputFieldsContainerRef.current) {
+      console.log('[RESTORE DRAG OVER] Restoring scroll to:', savedScrollPosition.current);
+
+      // Use requestAnimationFrame to restore scroll immediately after render
+      requestAnimationFrame(() => {
+        if (outputFieldsContainerRef.current) {
+          console.log('[RESTORE RAF DRAG OVER] Setting scrollTop to:', savedScrollPosition.current);
+          outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
+          console.log('[RESTORE RAF DRAG OVER] Current scrollTop after set:', outputFieldsContainerRef.current.scrollTop);
+        }
+      });
+    }
+  }, [dragOverTarget]);
 
   const mappingsWithIds = React.useMemo(() => {
     return mappings.map((m, index) => {
@@ -320,6 +357,16 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       e.dataTransfer.effectAllowed = 'copy';
       e.dataTransfer.setData('application/json', JSON.stringify(field));
     }
+
+    // Save current scroll position when drag starts
+    if (outputFieldsContainerRef.current) {
+      savedScrollPosition.current = outputFieldsContainerRef.current.scrollTop;
+      console.log('[DRAG START] Saved scroll position:', savedScrollPosition.current);
+    }
+
+    // Reset the restoration flag for this new drag operation
+    hasRestoredScrollForCurrentDrag.current = false;
+
     setDraggedField(field);
   };
 
@@ -327,6 +374,9 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     e.preventDefault();
     setDraggedField(null);
     setDragOverTarget(null);
+
+    // Reset the restoration flag for the next drag operation
+    hasRestoredScrollForCurrentDrag.current = false;
   };
 
   const handleDragOver = (e: React.DragEvent, targetPath: string) => {
@@ -761,7 +811,11 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent style={{ maxHeight: isFloating ? 'calc(80vh - 80px)' : 'auto', overflowY: 'auto' }}>
+      <CardContent style={{ padding: 0 }}>
+        <div
+          ref={outputFieldsContainerRef}
+          style={{ maxHeight: isFloating ? 'calc(80vh - 80px)' : 'auto', overflowY: 'auto', padding: '1rem' }}
+        >
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
           const hasMappings = targetMappings.length > 0;
@@ -938,6 +992,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
             </div>
           );
         })}
+        </div>
       </CardContent>
     </Card>
   );
