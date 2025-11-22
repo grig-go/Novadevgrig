@@ -368,8 +368,6 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       console.log(`[DROP] Target: ${targetPath}, Source: ${field.path}`);
     }
 
-    // Save the original field path to check if it has wildcards
-    const originalFieldPath = field.path;
     let sourcePath = field.path;
     let arrayConfig: any = null;
 
@@ -405,17 +403,14 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
           }
         });
 
-        // When dropping array fields, default to 'index' mode (specific index)
-        // Users can change to 'array' mode if they want the entire array
-        const hasWildcards = originalFieldPath.includes('[*]');
-        // Always default to index mode for better UX
-        const mappingModeToSet = 'index';
+        // Check if we have wildcards (like [*]) - if not, we're in index mode
+        const hasWildcards = sourcePath.includes('[*]');
+        const mappingModeToSet = hasWildcards ? 'array' : 'index';
 
         console.log('[DROP] Creating arrayConfig:', {
-          originalFieldPath,
+          sourcePath,
           hasWildcards,
-          mappingMode: mappingModeToSet,
-          note: 'Defaulting to index mode for arrays'
+          mappingMode: mappingModeToSet
         });
 
         arrayConfig = JSON.stringify({
@@ -423,7 +418,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
           indices: indices,
           expanded: false,
           templatePath: sourcePath.replace(/\[\d+\]/g, '[*]'),
-          useWildcard: false,  // Default to index mode (not wildcard)
+          useWildcard: hasWildcards,
           mappingMode: mappingModeToSet
         });
 
