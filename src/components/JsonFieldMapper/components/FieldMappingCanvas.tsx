@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
@@ -125,33 +125,29 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   // Restore scroll position immediately when draggedField changes (when drag starts)
   useEffect(() => {
     if (draggedField && outputFieldsContainerRef.current) {
-      console.log('[RESTORE DRAG START] Restoring scroll to:', savedScrollPosition.current);
-
       // Use requestAnimationFrame to restore scroll immediately after render
       requestAnimationFrame(() => {
         if (outputFieldsContainerRef.current) {
-          console.log('[RESTORE RAF DRAG START] Setting scrollTop to:', savedScrollPosition.current);
           outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
-          console.log('[RESTORE RAF DRAG START] Current scrollTop after set:', outputFieldsContainerRef.current.scrollTop);
         }
       });
     }
   }, [draggedField]);
 
   // Also restore scroll when dragOverTarget changes (when reaching Output Fields)
-  // Restore EVERY time dragOverTarget changes to prevent scroll jumps
-  useEffect(() => {
+  // Only restore if scroll position actually changed (jumped)
+  // Use useLayoutEffect to restore BEFORE browser paints (invisible to user)
+  useLayoutEffect(() => {
     if (dragOverTarget && outputFieldsContainerRef.current) {
-      console.log('[RESTORE DRAG OVER] Restoring scroll to:', savedScrollPosition.current);
+      const scrollAfterRender = outputFieldsContainerRef.current.scrollTop;
 
-      // Use requestAnimationFrame to restore scroll immediately after render
-      requestAnimationFrame(() => {
-        if (outputFieldsContainerRef.current) {
-          console.log('[RESTORE RAF DRAG OVER] Setting scrollTop to:', savedScrollPosition.current);
-          outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
-          console.log('[RESTORE RAF DRAG OVER] Current scrollTop after set:', outputFieldsContainerRef.current.scrollTop);
-        }
-      });
+      // Only restore if scroll actually jumped (changed by more than 5px)
+      if (Math.abs(scrollAfterRender - savedScrollPosition.current) > 5) {
+        outputFieldsContainerRef.current.scrollTop = savedScrollPosition.current;
+      } else {
+        // Update saved position to current position
+        savedScrollPosition.current = scrollAfterRender;
+      }
     }
   }, [dragOverTarget]);
 
@@ -362,7 +358,6 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     // Save current scroll position when drag starts
     if (outputFieldsContainerRef.current) {
       savedScrollPosition.current = outputFieldsContainerRef.current.scrollTop;
-      console.log('[DRAG START] Saved scroll position:', savedScrollPosition.current);
     }
 
     // Reset the restoration flag for this new drag operation
@@ -625,13 +620,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   const ArrayIndexConfig: React.FC<{
     mapping: MappingWithConfig;
     config: any;
-  }> = ({ mapping, config }) => {
-    console.log('[ArrayIndexConfig] Initial render:', {
-      mappingId: mapping.id,
-      targetPath: mapping.targetPath,
-      configMappingMode: config.mappingMode,
-      defaultingTo: config.mappingMode || 'index'
-    });
+  }> = React.memo(({ mapping, config }) => {
 
     if (debugMode) {
       console.log(`[RENDER ArrayIndexConfig] Mapping ID: ${mapping.id}`);
@@ -776,7 +765,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
         </CardContent>
       </Card>
     );
-  };
+  });
 
   const renderSourceField = (field: SourceField) => {
     const isMapped = mappingsWithIds.some(
@@ -819,7 +808,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       zIndex: 1000,
       boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
     } : {}}>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 border-b">
         <div className="flex justify-between items-center">
           <CardTitle className="text-base">Output Fields</CardTitle>
           {isFloating && (
@@ -837,7 +826,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       <CardContent style={{ padding: 0 }}>
         <div
           ref={outputFieldsContainerRef}
-          style={{ maxHeight: isFloating ? 'calc(80vh - 80px)' : 'auto', overflowY: 'auto', padding: '1rem' }}
+          style={{ maxHeight: isFloating ? 'calc(80vh - 120px)' : 'calc(80vh - 120px)', overflowY: 'auto', padding: '0.75rem', paddingBottom: '2rem' }}
         >
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
