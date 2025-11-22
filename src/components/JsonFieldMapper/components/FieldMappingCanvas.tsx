@@ -826,7 +826,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       <CardContent style={{ padding: 0 }}>
         <div
           ref={outputFieldsContainerRef}
-          style={{ maxHeight: isFloating ? 'calc(80vh - 120px)' : 'calc(80vh - 120px)', overflowY: 'auto', padding: '0.75rem', paddingBottom: '2rem' }}
+          style={{ maxHeight: isFloating ? 'calc(80vh - 120px)' : 'calc(83vh - 132px)', overflowY: 'auto', padding: '0.75rem', paddingBottom: '2rem' }}
         >
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
