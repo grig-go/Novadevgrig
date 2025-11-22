@@ -89,6 +89,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   const savedScrollPosition = useRef<number>(0);
   const outputFieldsContainerRef = useRef<HTMLDivElement | null>(null);
   const hasRestoredScrollForCurrentDrag = useRef<boolean>(false);
+  const savedContentHeight = useRef<number | null>(null);
 
   // Persist UI preferences in localStorage to match nova-old behavior
   const [viewMode, setViewMode] = useState<'side-by-side' | 'floating'>(() => {
@@ -133,6 +134,22 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       });
     }
   }, [draggedField]);
+
+  // Listen for scroll events to save content height
+  useEffect(() => {
+    const container = outputFieldsContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      // Save the scrollHeight whenever user scrolls
+      if (container.scrollHeight) {
+        savedContentHeight.current = container.scrollHeight;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
 
   // Also restore scroll when dragOverTarget changes (when reaching Output Fields)
   // Only restore if scroll position actually changed (jumped)
@@ -372,6 +389,9 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
     // Save scroll position before clearing drag state (which will cause re-render)
     const scrollBeforeEnd = outputFieldsContainerRef.current?.scrollTop || 0;
 
+    // Clear the saved content height to allow natural height
+    savedContentHeight.current = null;
+
     setDraggedField(null);
     setDragOverTarget(null);
 
@@ -396,7 +416,18 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
+
+    // Save scroll position before clearing dragOverTarget (which will cause re-render)
+    const scrollBeforeLeave = outputFieldsContainerRef.current?.scrollTop || 0;
+
     setDragOverTarget(null);
+
+    // Restore scroll position after the state change
+    requestAnimationFrame(() => {
+      if (outputFieldsContainerRef.current) {
+        outputFieldsContainerRef.current.scrollTop = scrollBeforeLeave;
+      }
+    });
   };
 
   const handleDrop = (e: React.DragEvent, targetPath: string) => {
@@ -404,6 +435,9 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
     // Save scroll position before clearing dragOverTarget (which will cause re-render)
     const scrollBeforeDrop = outputFieldsContainerRef.current?.scrollTop || 0;
+
+    // Clear the saved content height to allow natural height
+    savedContentHeight.current = null;
 
     setDragOverTarget(null);
 
@@ -826,7 +860,13 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
       <CardContent style={{ padding: 0 }}>
         <div
           ref={outputFieldsContainerRef}
-          style={{ maxHeight: isFloating ? 'calc(80vh - 120px)' : 'calc(83vh - 132px)', overflowY: 'auto', padding: '0.75rem', paddingBottom: '2rem' }}
+          style={{
+            maxHeight: isFloating ? 'calc(80vh - 120px)' : 'calc(80vh - 120px)',
+            overflowY: 'auto',
+            padding: '0.75rem',
+            paddingBottom: '2rem',
+            ...(savedContentHeight.current !== null && { height: savedContentHeight.current + 'px', minHeight: savedContentHeight.current + 'px' })
+          }}
         >
         {outputTemplate.fields.map((field: any, fieldIndex: number) => {
           const targetMappings = getMappingsForTarget(field.path);
