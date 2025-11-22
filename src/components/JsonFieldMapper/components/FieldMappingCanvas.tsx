@@ -139,6 +139,7 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   }, [draggedField]);
 
   // Also restore scroll when dragOverTarget changes (when reaching Output Fields)
+  // Restore EVERY time dragOverTarget changes to prevent scroll jumps
   useEffect(() => {
     if (dragOverTarget && outputFieldsContainerRef.current) {
       console.log('[RESTORE DRAG OVER] Restoring scroll to:', savedScrollPosition.current);
@@ -372,8 +373,19 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
   const handleDragEnd = (e: React.DragEvent) => {
     e.preventDefault();
+
+    // Save scroll position before clearing drag state (which will cause re-render)
+    const scrollBeforeEnd = outputFieldsContainerRef.current?.scrollTop || 0;
+
     setDraggedField(null);
     setDragOverTarget(null);
+
+    // Restore scroll position after the state change
+    requestAnimationFrame(() => {
+      if (outputFieldsContainerRef.current) {
+        outputFieldsContainerRef.current.scrollTop = scrollBeforeEnd;
+      }
+    });
 
     // Reset the restoration flag for the next drag operation
     hasRestoredScrollForCurrentDrag.current = false;
@@ -394,7 +406,18 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
 
   const handleDrop = (e: React.DragEvent, targetPath: string) => {
     e.preventDefault();
+
+    // Save scroll position before clearing dragOverTarget (which will cause re-render)
+    const scrollBeforeDrop = outputFieldsContainerRef.current?.scrollTop || 0;
+
     setDragOverTarget(null);
+
+    // Restore scroll position after the state change
+    requestAnimationFrame(() => {
+      if (outputFieldsContainerRef.current) {
+        outputFieldsContainerRef.current.scrollTop = scrollBeforeDrop;
+      }
+    });
 
     // Try to get field from state first, then from dataTransfer
     let field = draggedField;
