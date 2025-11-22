@@ -919,7 +919,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       Testing...
                     </>
-                  ) : formData.dataSources.every((source: any) => source.fields && source.fields.length > 0) ? (
+                  ) : formData.dataSources.every((source: any) => {
+                      // Check both discoveredFieldsRef and source.fields
+                      const fields = discoveredFieldsRef.current[source.id] || source.fields;
+                      return fields && fields.length > 0;
+                    }) ? (
                     <>
                       <RefreshCw className="w-4 h-4 mr-2" />
                       Re-test All
