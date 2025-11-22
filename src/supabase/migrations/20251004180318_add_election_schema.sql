@@ -1715,7 +1715,8 @@ COMMENT ON FUNCTION public.fetch_election_data_for_ui(INTEGER) IS
 CREATE OR REPLACE FUNCTION public.fetch_election_data_for_api(
     p_year INTEGER DEFAULT NULL,
     p_race_type VARCHAR DEFAULT NULL,
-    p_level VARCHAR DEFAULT NULL
+    p_level VARCHAR DEFAULT NULL,
+    p_state VARCHAR DEFAULT NULL
 )
 RETURNS TABLE (
     -- Election source info
@@ -1903,6 +1904,18 @@ BEGIN
       AND (p_year IS NULL OR e.year = p_year)
       AND (p_race_type IS NULL OR r.type = p_race_type)
       AND (p_level IS NULL OR d.type = p_level)
+      AND (
+        p_state IS NULL
+        OR p_state = 'all'
+        OR (
+          -- For state-level divisions, match the state code directly
+          (d.type = 'state' AND d.code = p_state)
+          -- For district-level divisions (House races), match the first 2 characters of the code
+          OR (d.type = 'district' AND LEFT(d.code, 2) = p_state)
+          -- For county-level divisions, match the state code portion
+          OR (d.type = 'county' AND LEFT(d.code, 2) = p_state)
+        )
+      )
     ORDER BY
       e.year DESC,
       r.type,
@@ -1920,11 +1933,11 @@ END;
 $$;
 
 -- Grant execute permission to anon and authenticated roles
-GRANT EXECUTE ON FUNCTION public.fetch_election_data_for_api(INTEGER, VARCHAR, VARCHAR) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fetch_election_data_for_api(INTEGER, VARCHAR, VARCHAR, VARCHAR) TO anon, authenticated;
 
 -- Add comment for documentation
-COMMENT ON FUNCTION public.fetch_election_data_for_api(INTEGER, VARCHAR, VARCHAR) IS
-'Fetches election data for API consumers with optional filters for year, race_type (presidential, senate, house), and level (national, state, district, county). Returns data with all overrides already applied.';
+COMMENT ON FUNCTION public.fetch_election_data_for_api(INTEGER, VARCHAR, VARCHAR, VARCHAR) IS
+'Fetches election data for API consumers with optional filters for year, race_type (presidential, senate, house), level (national, state, district, county), and state (two-letter state code or "all"). Returns data with all overrides already applied.';
 
 -- =====================================================
 -- RPC FUNCTION FOR BALANCE OF POWER DATA

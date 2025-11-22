@@ -394,17 +394,20 @@ serve(async (req) => {
     const yearParam = url.searchParams.get('year');
     const raceTypeParam = url.searchParams.get('raceType');
     const levelParam = url.searchParams.get('level');
+    const stateParam = url.searchParams.get('state');
 
-    console.log('Election API Request:', { year: yearParam, raceType: raceTypeParam, level: levelParam });
+    console.log('Election API Request:', { year: yearParam, raceType: raceTypeParam, level: levelParam, state: stateParam });
 
     const year = yearParam ? parseInt(yearParam, 10) : null;
     const raceType = raceTypeParam || null;
     const level = levelParam || null;
+    const state = stateParam || null;
 
     const { data, error } = await supabase.rpc('fetch_election_data_for_api', {
       p_year: year,
       p_race_type: raceType,
-      p_level: level
+      p_level: level,
+      p_state: state
     });
 
     if (error) {

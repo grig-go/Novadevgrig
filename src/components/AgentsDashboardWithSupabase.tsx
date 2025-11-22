@@ -228,53 +228,53 @@ export function AgentsDashboardWithSupabase({
   }));
 
   // Cleanup unused Nova Weather data sources
-  const cleanupUnusedNovaWeatherSources = async () => {
+  const cleanupUnusedNovaSources = async () => {
     try {
-      // Get all Nova Weather data sources
-      const { data: novaWeatherSources, error: sourcesError } = await supabase
+      // Get all Nova Weather and Nova Election data sources
+      const { data: novaSources, error: sourcesError } = await supabase
         .from('data_sources')
-        .select('id, name')
-        .eq('category', 'Nova Weather');
+        .select('id, name, category')
+        .in('category', ['Nova Weather', 'Nova Election']);
 
       if (sourcesError) {
-        console.error('Failed to fetch Nova Weather sources:', sourcesError);
+        console.error('Failed to fetch Nova sources:', sourcesError);
         return;
       }
 
-      if (!novaWeatherSources || novaWeatherSources.length === 0) {
-        return; // No Nova Weather sources to clean up
+      if (!novaSources || novaSources.length === 0) {
+        return; // No Nova sources to clean up
       }
 
       // Get all data source IDs that are referenced by api_endpoint_sources
       const { data: usedSources, error: usedError } = await supabase
         .from('api_endpoint_sources')
         .select('data_source_id')
-        .in('data_source_id', novaWeatherSources.map(s => s.id));
+        .in('data_source_id', novaSources.map(s => s.id));
 
       if (usedError) {
         console.error('Failed to fetch used sources:', usedError);
         return;
       }
 
-      // Find unused Nova Weather sources
+      // Find unused Nova sources
       const usedSourceIds = new Set(usedSources?.map(s => s.data_source_id) || []);
-      const unusedSources = novaWeatherSources.filter(s => !usedSourceIds.has(s.id));
+      const unusedSources = novaSources.filter(s => !usedSourceIds.has(s.id));
 
       if (unusedSources.length > 0) {
-        // Delete unused Nova Weather sources
+        // Delete unused Nova sources
         const { error: deleteError } = await supabase
           .from('data_sources')
           .delete()
           .in('id', unusedSources.map(s => s.id));
 
         if (deleteError) {
-          console.error('Failed to delete unused Nova Weather sources:', deleteError);
+          console.error('Failed to delete unused Nova sources:', deleteError);
         } else {
-          console.log(`Cleaned up ${unusedSources.length} unused Nova Weather data source(s)`);
+          console.log(`Cleaned up ${unusedSources.length} unused Nova data source(s)`);
         }
       }
     } catch (error) {
-      console.error('Error during Nova Weather cleanup:', error);
+      console.error('Error during Nova sources cleanup:', error);
     }
   };
 
@@ -308,7 +308,7 @@ export function AgentsDashboardWithSupabase({
       setAgents(convertedAgents);
 
       // Clean up unused Nova Weather sources after loading agents
-      await cleanupUnusedNovaWeatherSources();
+      await cleanupUnusedNovaSources();
     } catch (error) {
       console.error('Failed to load agents:', error);
       toast({

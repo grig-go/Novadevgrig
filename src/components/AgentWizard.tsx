@@ -26,7 +26,7 @@ import TransformationStep from "./TransformationStep";
 import SecurityStep, { SecurityStepRef } from "./SecurityStep";
 import TestStep from "./TestStep";
 import { useFetchProxy } from "../hooks/useFetchProxy";
-import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from '../utils/constants';
+import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID, currentElectionYear } from '../utils/constants';
 
 interface AgentWizardProps {
   open: boolean;
@@ -38,7 +38,7 @@ interface AgentWizardProps {
 
 type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
-const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather'];
+const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather'/*, 'Nova Election'*/];
 
 const dataTypeIcons: Record<AgentDataType, any> = {
   'Elections': Vote,
@@ -46,7 +46,8 @@ const dataTypeIcons: Record<AgentDataType, any> = {
   'Sports': Trophy,
   'Weather': Cloud,
   'News': Newspaper,
-  'Nova Weather': Cloud
+  'Nova Weather': Cloud,
+  'Nova Election': Vote
 };
 
 export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds = [] }: AgentWizardProps) {
@@ -119,6 +120,24 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [novaWeatherProviders, setNovaWeatherProviders] = useState<Array<{ id: string; name: string; type: string }>>([]);
   const [novaWeatherChannels, setNovaWeatherChannels] = useState<Array<{ id: string; name: string }>>([]);
   const [novaWeatherStates, setNovaWeatherStates] = useState<string[]>([]);
+
+  // State names mapping for Nova Election
+  const stateNames: Record<string, string> = {
+    'AL': 'Alabama', 'AK': 'Alaska', 'AZ': 'Arizona', 'AR': 'Arkansas',
+    'CA': 'California', 'CO': 'Colorado', 'CT': 'Connecticut', 'DE': 'Delaware',
+    'FL': 'Florida', 'GA': 'Georgia', 'HI': 'Hawaii', 'ID': 'Idaho',
+    'IL': 'Illinois', 'IN': 'Indiana', 'IA': 'Iowa', 'KS': 'Kansas',
+    'KY': 'Kentucky', 'LA': 'Louisiana', 'ME': 'Maine', 'MD': 'Maryland',
+    'MA': 'Massachusetts', 'MI': 'Michigan', 'MN': 'Minnesota', 'MS': 'Mississippi',
+    'MO': 'Missouri', 'MT': 'Montana', 'NE': 'Nebraska', 'NV': 'Nevada',
+    'NH': 'New Hampshire', 'NJ': 'New Jersey', 'NM': 'New Mexico', 'NY': 'New York',
+    'NC': 'North Carolina', 'ND': 'North Dakota', 'OH': 'Ohio', 'OK': 'Oklahoma',
+    'OR': 'Oregon', 'PA': 'Pennsylvania', 'RI': 'Rhode Island', 'SC': 'South Carolina',
+    'SD': 'South Dakota', 'TN': 'Tennessee', 'TX': 'Texas', 'UT': 'Utah',
+    'VT': 'Vermont', 'VA': 'Virginia', 'WA': 'Washington', 'WV': 'West Virginia',
+    'WI': 'Wisconsin', 'WY': 'Wyoming', 'DC': 'District of Columbia'
+  };
+  const electionStateCodes = Object.keys(stateNames);
 
   // Load Nova Weather options when needed
   useEffect(() => {
@@ -574,15 +593,15 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         'relationships', 'outputFormat', 'transformations', 'security', 'review'
       ]));
 
-      // Load existing Nova Weather data sources into newDataSources for editing
-      const novaWeatherSources = (editAgent.dataSources || []).filter(
-        (ds: AgentDataSource) => ds.category === 'Nova Weather'
+      // Load existing Nova Weather or Nova Election data sources into newDataSources for editing
+      const novaSources = (editAgent.dataSources || []).filter(
+        (ds: AgentDataSource) => ds.category === 'Nova Weather' || ds.category === 'Nova Election'
       );
 
-      if (novaWeatherSources.length > 0) {
+      if (novaSources.length > 0) {
         // Convert AgentDataSource to the format expected by newDataSources
-        const convertedSources = novaWeatherSources.map((ds: AgentDataSource) => {
-          // Parse Nova Weather filters from URL if not already present
+        const convertedSources = novaSources.map((ds: AgentDataSource) => {
+          // Parse Nova Weather or Nova Election filters from URL if not already present
           let api_config = ds.api_config;
           if (ds.category === 'Nova Weather' && api_config?.url && !api_config.novaWeatherFilters) {
             const url = new URL(api_config.url);
@@ -593,6 +612,18 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 type: params.get('type') || 'current',
                 channel: params.get('channel') || 'all',
                 dataProvider: params.get('dataProvider') || 'all',
+                state: params.get('state') || 'all'
+              }
+            };
+          } else if (ds.category === 'Nova Election' && api_config?.url && !api_config.novaElectionFilters) {
+            const url = new URL(api_config.url);
+            const params = new URLSearchParams(url.search);
+            api_config = {
+              ...api_config,
+              novaElectionFilters: {
+                year: params.get('year') || currentElectionYear.toString(),
+                raceType: params.get('raceType') || 'presidential',
+                level: params.get('level') || 'state',
                 state: params.get('state') || 'all'
               }
             };
@@ -611,7 +642,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
             isExisting: true // Flag to indicate this is an existing source
           };
         });
-        console.log('Loaded Nova Weather sources for editing:', convertedSources);
+        console.log('Loaded Nova sources for editing:', convertedSources);
         setNewDataSources(convertedSources);
       }
     } else if (!editAgent && open) {
@@ -645,18 +676,20 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [editAgent, open]);
 
-  // Check if Nova Weather is selected
+  // Check if Nova Weather or Nova Election is selected
   const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
   const hasNovaWeatherSelected = selectedDataTypes.includes('Nova Weather');
+  const hasNovaElectionSelected = selectedDataTypes.includes('Nova Election');
+  const hasNovaSourceSelected = hasNovaWeatherSelected || hasNovaElectionSelected;
 
-  // Dynamic steps - exclude dataSources when Nova Weather is selected, include configureNewSources for Nova Weather
+  // Dynamic steps - exclude dataSources when Nova Weather/Election is selected, include configureNewSources for Nova sources
   const steps: WizardStep[] = [
     'basic',
     'dataType',
-    // Skip dataSources step if Nova Weather is selected
-    ...(hasNovaWeatherSelected ? [] : ['dataSources' as WizardStep]),
-    // Show configureNewSources if there are new sources OR if editing Nova Weather agent
-    ...((newDataSources.filter(ds => ds.name && ds.type).length > 0 || (hasNovaWeatherSelected && editAgent)) ? ['configureNewSources' as WizardStep] : []),
+    // Skip dataSources step if Nova Weather/Election is selected
+    ...(hasNovaSourceSelected ? [] : ['dataSources' as WizardStep]),
+    // Show configureNewSources if there are new sources OR if editing Nova Weather/Election agent
+    ...((newDataSources.filter(ds => ds.name && ds.type).length > 0 || (hasNovaSourceSelected && editAgent)) ? ['configureNewSources' as WizardStep] : []),
     'relationships',
     'outputFormat',
     'transformations',
@@ -740,7 +773,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Check if this is an existing source (has isExisting flag or already has an id)
         if (source.isExisting && source.id) {
           // UPDATE existing source
-          console.log('Updating existing Nova Weather source:', source.id, dataSourceData);
+          console.log('Updating existing data source:', source.id, dataSourceData);
           const updateResult = await supabase
             .from('data_sources')
             .update(dataSourceData)
@@ -812,7 +845,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleNext = async () => {
-    // Special handling when leaving dataType step with Nova Weather selected
+    // Special handling when leaving dataType step with Nova Weather or Nova Election selected
     if (currentStep === 'dataType') {
       const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
 
@@ -845,6 +878,40 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Set the new data source and skip to configureNewSources
         setNewDataSources([novaWeatherSource]);
+        setCurrentStep('configureNewSources');
+        setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
+        return;
+      }
+
+      if (selectedDataTypes.includes('Nova Election')) {
+        // Generate unique ID for Nova Election
+        const uniqueId = Date.now().toString();
+        const currentDomain = window.location.origin;
+
+        // Create a Nova Election data source with default filters
+        const novaElectionSource = {
+          name: `Nova Election ${uniqueId}`,
+          type: 'api',
+          category: 'Nova Election',
+          api_config: {
+            url: `${currentDomain}/nova/election?year=${currentElectionYear}&raceType=presidential&level=state&state=all`,
+            method: 'GET',
+            headers: {},
+            data_path: 'races',  // Use data_path for the actual field
+            dataPath: 'races',    // Keep both for compatibility
+            dynamicUrlParams: [],
+            // Store Nova Election filter settings
+            novaElectionFilters: {
+              year: currentElectionYear.toString(),
+              raceType: 'presidential',
+              level: 'state',
+              state: 'all'
+            }
+          }
+        };
+
+        // Set the new data source and skip to configureNewSources
+        setNewDataSources([novaElectionSource]);
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
@@ -1031,27 +1098,27 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     // Sync auth settings from SecurityStep before saving and get the auth data synchronously
     const authData = securityStepRef.current?.syncAuthToFormData();
 
-    // First, save/update Nova Weather data sources if needed
-    const hasNovaWeatherSources = newDataSources.some(ds =>
-      ds.category === 'Nova Weather' && ds.name && ds.type && (ds.isExisting || !ds.id)
+    // First, save/update Nova Weather or Nova Election data sources if needed
+    const hasNovaSources = newDataSources.some(ds =>
+      (ds.category === 'Nova Weather' || ds.category === 'Nova Election') && ds.name && ds.type && (ds.isExisting || !ds.id)
     );
 
-    if (hasNovaWeatherSources) {
-      console.log('Saving/updating Nova Weather data sources before final save...');
+    if (hasNovaSources) {
+      console.log('Saving/updating Nova data sources before final save...');
       const saveSuccess = await saveAllNewDataSources();
       if (!saveSuccess) {
-        console.error('Failed to save Nova Weather data sources');
+        console.error('Failed to save Nova data sources');
         return; // Don't proceed if data source save failed
       }
     }
 
-    // Now save any other new data sources (non-Nova Weather)
+    // Now save any other new data sources (non-Nova Weather/Election)
     const savedDataSourceIds: string[] = [];
     const newlySavedSources: AgentDataSource[] = [];
 
-    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather
+    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election
     const unsavedSources = newDataSources.filter(ds =>
-      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather'
+      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election'
     );
     if (unsavedSources.length > 0) {
       console.log('Saving new data sources to database...');
@@ -1167,17 +1234,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleClose = async (agentSavedSuccessfully: boolean = false) => {
-    // Clean up any Nova Weather data sources that were saved but not associated with an agent
+    // Clean up any Nova Weather or Nova Election data sources that were saved but not associated with an agent
     // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
     // AND only in create mode, not edit mode (in edit mode, sources already belong to an agent)
     if (!agentSavedSuccessfully && !editAgent) {
-      const novaWeatherSources = newDataSources.filter(
-        ds => ds.category === 'Nova Weather' && ds.id && !ds.isExisting
+      const novaSources = newDataSources.filter(
+        ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election') && ds.id && !ds.isExisting
       );
 
-      if (novaWeatherSources.length > 0) {
-        console.log('Cleaning up unused Nova Weather data sources...');
-        for (const source of novaWeatherSources) {
+      if (novaSources.length > 0) {
+        console.log('Cleaning up unused Nova data sources...');
+        for (const source of novaSources) {
           try {
             const { error } = await supabase
               .from('data_sources')
@@ -1185,12 +1252,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
               .eq('id', source.id);
 
             if (error) {
-              console.error('Error deleting unused Nova Weather source:', error);
+              console.error('Error deleting unused Nova source:', error);
             } else {
-              console.log('Deleted unused Nova Weather source:', source.id);
+              console.log('Deleted unused Nova source:', source.id);
             }
           } catch (error) {
-            console.error('Failed to delete unused Nova Weather source:', error);
+            console.error('Failed to delete unused Nova source:', error);
           }
         }
       }
@@ -1415,12 +1482,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Remove category
         newCategories = selectedCategories.filter(c => c !== category);
       } else {
-        // Special handling for Nova Weather - it should be exclusive
-        if (category === 'Nova Weather') {
-          // Clear all other selections when Nova Weather is selected
-          newCategories = ['Nova Weather'];
-        } else if (selectedCategories.includes('Nova Weather')) {
-          // If Nova Weather is currently selected, replace it with the new selection
+        // Special handling for Nova Weather and Nova Election - they should be exclusive
+        if (category === 'Nova Weather' || category === 'Nova Election') {
+          // Clear all other selections when Nova source is selected
+          newCategories = [category];
+        } else if (selectedCategories.includes('Nova Weather') || selectedCategories.includes('Nova Election')) {
+          // If a Nova source is currently selected, replace it with the new selection
           newCategories = [category];
         } else {
           // Normal addition for other categories
@@ -1459,7 +1526,14 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                     <IconComponent className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-medium">{category}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium">{category}</h3>
+                      {(category === 'Nova Weather' || category === 'Nova Election') && (
+                        <Badge className="bg-orange-500 text-white hover:bg-orange-600">
+                          Nova
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   {isSelected && <Check className="w-5 h-5 text-blue-600" />}
                 </CardContent>
@@ -1924,7 +1998,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                           };
                           setNewDataSources(updated);
                         }}
-                        placeholder={source.category === 'Nova Weather' ? "locations" : "data.items"}
+                        placeholder={source.category === 'Nova Weather' ? "locations" : source.category === 'Nova Election' ? "races" : "data.items"}
                       />
                       <p className="text-xs text-muted-foreground">
                         JSON path to the array of items (e.g., 'data.items' or 'results')
@@ -2127,8 +2201,203 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       </div>
                     )}
 
-                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather */}
-                    {source.category !== 'Nova Weather' && (
+                    {/* Nova Election Filter Options */}
+                    {source.category === 'Nova Election' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Filter Options</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Configure query parameters for the Nova Election API
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Year</Label>
+                            <Select
+                              value={source.api_config?.novaElectionFilters?.year || currentElectionYear.toString()}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaElectionFilters || {};
+                                filters.year = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  year: filters.year || currentElectionYear.toString(),
+                                  raceType: filters.raceType || 'presidential',
+                                  level: filters.level || 'state',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaElectionFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select year" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="2024">2024</SelectItem>
+                                <SelectItem value="2022">2022</SelectItem>
+                                <SelectItem value="2020">2020</SelectItem>
+                                <SelectItem value="2018">2018</SelectItem>
+                                <SelectItem value="2016">2016</SelectItem>
+                                <SelectItem value="2014">2014</SelectItem>
+                                <SelectItem value="2012">2012</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Race Type</Label>
+                            <Select
+                              value={source.api_config?.novaElectionFilters?.raceType || 'presidential'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaElectionFilters || {};
+                                filters.raceType = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  year: filters.year || currentElectionYear.toString(),
+                                  raceType: filters.raceType || 'presidential',
+                                  level: filters.level || 'state',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaElectionFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select race type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="presidential">Presidential</SelectItem>
+                                <SelectItem value="senate">Senate</SelectItem>
+                                <SelectItem value="house">House</SelectItem>
+                                <SelectItem value="governor">Governor</SelectItem>
+                                <SelectItem value="local">Local</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Level</Label>
+                            <Select
+                              value={source.api_config?.novaElectionFilters?.level || 'state'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaElectionFilters || {};
+                                filters.level = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  year: filters.year || currentElectionYear.toString(),
+                                  raceType: filters.raceType || 'presidential',
+                                  level: filters.level || 'state',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaElectionFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select level" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="national">National</SelectItem>
+                                <SelectItem value="state">State</SelectItem>
+                                <SelectItem value="district">District</SelectItem>
+                                <SelectItem value="county">County</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">State</Label>
+                            <Select
+                              value={source.api_config?.novaElectionFilters?.state || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaElectionFilters || {};
+                                filters.state = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  year: filters.year || currentElectionYear.toString(),
+                                  raceType: filters.raceType || 'presidential',
+                                  level: filters.level || 'state',
+                                  state: filters.state || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaElectionFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select state" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All States</SelectItem>
+                                {electionStateCodes.map((stateCode) => (
+                                  <SelectItem key={stateCode} value={stateCode}>
+                                    {stateNames[stateCode]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Show current URL preview */}
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <p className="text-xs text-blue-700 dark:text-blue-300 font-mono break-all">
+                            {source.api_config?.url || ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather and Nova Election */}
+                    {source.category !== 'Nova Weather' && source.category !== 'Nova Election' && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
