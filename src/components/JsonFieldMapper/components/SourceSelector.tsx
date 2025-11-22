@@ -98,15 +98,15 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   const testAndDiscoverSelected = async () => {
     if (!onTestDataSource) return;
 
-    // Filter to only test selected sources that don't have sample data yet
+    // Test all selected sources (allow re-testing)
     const sourcesToTest = Array.from(selectedSources)
       .map(sourceId => dataSources.find(ds => ds.id === sourceId))
-      .filter((source): source is any => source !== undefined && !sampleData[source.id]);
+      .filter((source): source is any => source !== undefined);
 
     if (sourcesToTest.length === 0) {
       toast({
-        title: 'All selected sources tested',
-        description: 'All selected data sources already have sample data',
+        title: 'No sources selected',
+        description: 'Please select data sources to test',
       });
       return;
     }
@@ -299,6 +299,11 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                         <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                         Testing...
                       </>
+                    ) : sampleData[sourceId] ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Re-test
+                      </>
                     ) : (
                       <>
                         <Search className="w-4 h-4 mr-2" />
@@ -416,7 +421,7 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
           <div className="flex justify-between items-center">
             <CardTitle className="text-base">Select Data Sources</CardTitle>
             <div className="flex gap-2">
-              {selectedSources.size > 0 && (Array.from(selectedSources) as string[]).some((sourceId: string) => !sampleData[sourceId]) && (
+              {selectedSources.size > 0 && (
                 <Button
                   variant="default"
                   size="sm"
@@ -427,6 +432,11 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
                     <>
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       Testing...
+                    </>
+                  ) : (Array.from(selectedSources) as string[]).every((sourceId: string) => sampleData[sourceId]) ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Re-test Selected
                     </>
                   ) : (
                     <>

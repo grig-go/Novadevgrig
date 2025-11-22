@@ -674,15 +674,13 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
   const testAndDiscoverAll = async () => {
     if (!onTestDataSource || !formData.dataSources) return;
 
-    const sourcesToTest = formData.dataSources.filter((source: any) => {
-      const hasFields = source.fields && source.fields.length > 0;
-      return !hasFields; // Only test sources without fields
-    });
+    // Test all sources (allow re-testing)
+    const sourcesToTest = formData.dataSources;
 
     if (sourcesToTest.length === 0) {
       toast({
-        title: 'All sources tested',
-        description: 'All data sources already have fields discovered',
+        title: 'No sources available',
+        description: 'Please add data sources first',
       });
       return;
     }
@@ -693,7 +691,24 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
 
     for (const source of sourcesToTest) {
       try {
-        await onTestDataSource(source);
+        const result = await onTestDataSource(source) as any;
+
+        // If the test was successful and returned fields, store them
+        if (result && result.fields) {
+          // Store fields in the ref to persist across renders
+          discoveredFieldsRef.current[source.id] = result.fields;
+
+          // Also update formData with the discovered fields
+          setFormData((prev: any) => ({
+            ...prev,
+            dataSources: prev.dataSources?.map((ds: any) =>
+              String(ds.id) === String(source.id)
+                ? { ...ds, fields: result.fields }
+                : ds
+            )
+          }));
+        }
+
         successCount++;
 
         // Trigger auto-selection for RSS format after successful test
@@ -892,7 +907,7 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                 <CardTitle className="text-base">Data Source Fields</CardTitle>
                 <CardDescription>Test your data sources to discover available fields</CardDescription>
               </div>
-              {formData.dataSources.some((source: any) => !source.fields || source.fields.length === 0) && (
+              {formData.dataSources.length > 0 && (
                 <Button
                   variant="default"
                   size="sm"
@@ -903,6 +918,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                     <>
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                       Testing...
+                    </>
+                  ) : formData.dataSources.every((source: any) => source.fields && source.fields.length > 0) ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Re-test All
                     </>
                   ) : (
                     <>
