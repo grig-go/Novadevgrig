@@ -161,6 +161,16 @@ async function fetchElectionDataFromSupabase(year?: number): Promise<any[]> {
     if (data && data.length > 0) {
       allResults.push(...data);
       console.log(`Fetched batch: ${data.length} rows, total so far: ${allResults.length}`);
+      
+      // Debug: Log the first row to see what fields are available
+      if (offset === 0 && data.length > 0) {
+        console.log('🔍 First row from RPC - checking election ID fields:', {
+          election_id: data[0].election_id,
+          election_uuid: data[0].election_uuid,
+          available_election_fields: Object.keys(data[0]).filter(k => k.includes('election')),
+          sample_full_row: data[0]
+        });
+      }
 
       // Check if we got a full batch (might be more data)
       if (data.length === batchSize) {
@@ -234,9 +244,18 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
       const candidateId = row.candidate_id;
 
       if (!candidatesMap.has(candidateId)) {
+        // Debug party_code for specific candidates
+        if (row.full_name && (row.full_name.includes('Obama') || row.full_name.includes('Harris') || row.full_name.includes('Trump'))) {
+          console.log(`Candidate party debug - ${row.full_name}:`, {
+            party_code: row.party_code,
+            party_override: row.party_override,
+            will_use: row.party_override !== null && row.party_override !== undefined ? row.party_override : (row.party_code || 'IND')
+          });
+        }
+
         const candidateObj: Candidate = {
           id: candidateId,
-          ap_candidate_id: `AP-CAND-${candidateId}`,
+          ap_candidate_id: candidateId, // Use the candidate_id as-is (it's already in format ap_candidate_xxx)
           candidate_results_id: row.candidate_results_id,
           race_candidates_id: row.race_candidates_id,
           name: row.candidate_display_name !== null && row.candidate_display_name !== undefined && row.candidate_display_name
@@ -265,7 +284,7 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
             : (row.withdrew || false),
           headshot: row.photo_url || undefined,
           ballot_order: row.ballot_order,
-          electoralVotes: row.electoral_votes_override !== null && row.electoral_votes_override !== undefined
+          ElectoralVotes: row.electoral_votes_override !== null && row.electoral_votes_override !== undefined
             ? createOverride(row.electoral_votes || undefined, row.electoral_votes_override, row.candidate_override_reason || 'Modified via UI')
             : (row.electoral_votes || undefined)
         };
@@ -307,7 +326,9 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
       id: raceKey,
       race_id: firstRow.race_id,
       race_results_id: firstRow.race_results_id,
+      election_id: firstRow.election_uuid || firstRow.election_id, // UUID from e_elections.id (NOT election_id string code!)
       ap_race_id: `AP-${firstRow.race_type.toUpperCase()}-${firstRow.year}-${firstRow.race_race_id}`,
+      synthetic_race_id: firstRow.synthetic_race_id || undefined, // Include synthetic_race_id if available
       office: firstRow.office,
       state,
       district,
@@ -343,8 +364,9 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
         ? createOverride(firstRow.called_timestamp, firstRow.called_override_timestamp, firstRow.race_override_reason || 'Modified via UI')
         : firstRow.called_timestamp,
       num_elect: firstRow.num_elect || 1,
-      electoralVotes: firstRow.state_electoral_votes || firstRow.electoral_votes || undefined,
+      ElectoralVotes: firstRow.state_electoral_votes || firstRow.electoral_votes || undefined,
       uncontested: firstRow.uncontested || false,
+      summary: firstRow.summary || firstRow.race_summary || undefined,
       candidates
     };
 
@@ -405,7 +427,7 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
           lastName: candidate.last_name || '',
           fullName: typeof candidate.name === 'object' ? candidate.name.overriddenValue : candidate.name,
           originalName: candidate.original_name,
-          party: typeof candidate.party === 'string' ? candidate.party : 'IND',
+          party: typeof candidate.party === 'string' ? candidate.party : (candidate.party && typeof candidate.party === 'object' ? (candidate.party.overriddenValue || candidate.party.originalValue) : 'IND'),
           incumbent: candidate.incumbent || false,
           originalIncumbent: candidate.original_incumbent,
           headshot: typeof candidate.headshot === 'string' ? candidate.headshot : undefined,
@@ -535,7 +557,7 @@ function transformToElectionData(rawData: any[], filterYear?: number, filterRace
     race.candidates.forEach(candidate => {
       // Handle FieldOverride type - extract the actual string value
       const partyCode = typeof candidate.party === 'string' ? candidate.party :
-                       (candidate.party && typeof candidate.party === 'object' ? 'IND' : 'IND');
+                       (candidate.party && typeof candidate.party === 'object' ? (candidate.party.overriddenValue || candidate.party.originalValue) : 'IND');
 
       if (partyCode && !partiesMap.has(partyCode)) {
         const defaultParty = defaultParties[partyCode] || {

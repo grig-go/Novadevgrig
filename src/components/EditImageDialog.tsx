@@ -6,7 +6,6 @@ import { Label } from "./ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Badge } from "./ui/badge";
 import { Upload, AlertTriangle } from "lucide-react";
-import uploadIcon from '../assets/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
 import { supabase } from '../utils/supabase/client';
 
 interface EditImageDialogProps {
@@ -127,7 +126,7 @@ export function EditImageDialog({
             <Avatar className="w-12 h-12">
               <AvatarImage src={candidate.imageUrl} alt={candidate.name} />
               <AvatarFallback className="bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                <img src={uploadIcon} alt="Upload" className="w-6 h-6 opacity-60" />
+                <Upload className="w-6 h-6 opacity-60" />
               </AvatarFallback>
             </Avatar>
             <div className="space-y-1">

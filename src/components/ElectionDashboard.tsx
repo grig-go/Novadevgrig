@@ -56,6 +56,11 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   const [filteredElectionData, setFilteredElectionData] = useState<ElectionData | null>(null);
   const [isLoadingFiltered, setIsLoadingFiltered] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // Add trigger to force refresh
+  const [syntheticRaces, setSyntheticRaces] = useState<any[]>([]); // State for synthetic races
+  const [showingSyntheticRaces, setShowingSyntheticRaces] = useState(false); // Toggle for showing synthetic vs real races
+  const [showDebugDialog, setShowDebugDialog] = useState(false); // State for debug dialog
+  const [debugRPCData, setDebugRPCData] = useState<any>(null); // Raw RPC response for debugging
+  const [isLoadingDebugData, setIsLoadingDebugData] = useState(false); // Loading state for debug fetch
 
   // Fetch filtered data when year or race type changes
   useEffect(() => {
@@ -97,9 +102,24 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
   // Use filtered data once loaded, otherwise use props (for initial render)
   console.log('filteredElectionDataaaaaaa')
   console.log(filteredElectionData)
-  const displayRaces = filteredElectionData ? filteredElectionData.races : races;
+  
+  // If showing synthetic races, use those instead of regular races
+  const displayRaces = showingSyntheticRaces 
+    ? syntheticRaces 
+    : (filteredElectionData ? filteredElectionData.races : races);
   const displayCandidates = filteredElectionData ? filteredElectionData.candidates : candidates;
   const displayParties = filteredElectionData ? filteredElectionData.parties : parties;
+
+  console.log('🎯 Display races source:', {
+    showingSyntheticRaces,
+    syntheticRacesCount: syntheticRaces.length,
+    displayRacesCount: displayRaces.length,
+    firstRace: displayRaces[0] ? {
+      title: displayRaces[0].title,
+      office: displayRaces[0].office,
+      state: displayRaces[0].state
+    } : null
+  });
 
   // Get unique states for filter with National at the top
   const states = useMemo(() => {
@@ -324,6 +344,58 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
     setTimeout(() => {
       refreshFilteredData();
     }, 500); // Increased delay to ensure DB write completes
+  };
+
+  // Handler for deleting synthetic races
+  const handleDeleteRace = async (raceId: string) => {
+    try {
+      // Find the race - check both regular races and synthetic races
+      let race = races.find(r => r.id === raceId);
+      
+      // If not in regular races, check synthetic races
+      if (!race && showingSyntheticRaces) {
+        race = syntheticRaces.find(r => r.id === raceId);
+      }
+      
+      console.log('🗑️ Delete race requested:', {
+        raceId,
+        race_found: !!race,
+        synthetic_race_id: race?.synthetic_race_id,
+        race_type: race?.raceType,
+        showingSyntheticRaces,
+        race_object: race
+      });
+      
+      if (!race?.synthetic_race_id) {
+        console.error('Cannot delete race - no synthetic_race_id found');
+        alert('Cannot delete race - missing synthetic race ID. This race may not be a synthetic race.');
+        return;
+      }
+
+      // Call the delete RPC
+      const { error } = await supabase.rpc('e_delete_synthetic_race', {
+        p_synthetic_race_id: race.synthetic_race_id
+      });
+
+      if (error) {
+        console.error('Failed to delete synthetic race:', error);
+        alert('Failed to delete race: ' + error.message);
+        return;
+      }
+
+      console.log('✅ Successfully deleted synthetic race');
+      
+      // If we're showing synthetic races, remove from local state
+      if (showingSyntheticRaces) {
+        setSyntheticRaces(prev => prev.filter(r => r.id !== raceId));
+      } else {
+        // Otherwise refresh the data to remove from regular races
+        refreshFilteredData();
+      }
+    } catch (err) {
+      console.error('Error deleting race:', err);
+      alert('Failed to delete race');
+    }
   };
 
   const handleUpdateCandidate = async (updatedCandidate: CandidateProfile) => {
@@ -1004,6 +1076,141 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
     </div>
   );
 
+  const handleShowSyntheticRaces = (races: any[]) => {
+    console.log('🔍 Displaying synthetic races:', races);
+    
+    // Transform raw synthetic race data to match Race interface
+    const transformedRaces = races.map(rawRace => {
+      console.log('🔍 Raw synthetic race from backend:', JSON.stringify(rawRace, null, 2));
+      
+      // Backend returns nested structure: { race: {...}, candidates: [...], counties: [...] }
+      const raceData = rawRace.race || rawRace;
+      const candidatesData = Array.isArray(rawRace.candidates) ? rawRace.candidates : [];
+      
+      console.log('📌 Extracted race fields:', {
+        name: raceData.name,
+        office: raceData.office,
+        state: raceData.state,
+        district: raceData.district,
+        candidates_count: candidatesData.length,
+        id: raceData.id,
+        synthetic_race_id_source: raceData.id,
+        all_keys: Object.keys(raceData)
+      });
+
+      // Calculate total votes from candidates (metadata.metadata.votes - double nested!)
+      const totalVotes = candidatesData.reduce((sum: number, c: any) => {
+        const votes = c.metadata?.metadata?.votes || c.metadata?.votes || c.votes || 0;
+        return sum + Number(votes);
+      }, 0);
+
+      // Transform the race data to match Race interface
+      const transformedRace = {
+        id: raceData.id,
+        race_id: raceData.base_race_id || raceData.id,
+        race_results_id: raceData.id,
+        election_id: raceData.base_election_id || '',
+        candidate_results_id: '',
+        synthetic_race_id: raceData.id, // Add synthetic_race_id for delete functionality
+        title: raceData.name || `Synthetic Race`,
+        office: raceData.office || 'Unknown Office',
+        state: raceData.state || 'Unknown',
+        district: raceData.district,
+        year: String(raceData.year || '2024'),
+        raceType: 'SYNTHETIC',
+        status: 'CALLED',
+        reportingPercentage: 100,
+        totalVotes: totalVotes,
+        lastUpdated: raceData.created_at || new Date().toISOString(),
+        candidates: candidatesData.map((c: any, idx: number) => {
+          // Extract data from nested structure
+          // c.candidate can be null, so we check c.metadata.candidate_name first
+          const candidateInfo = c.candidate || {};
+          const metadata = c.metadata || {};
+          const nestedMetadata = metadata.metadata || {}; // votes are double nested!
+          
+          console.log('🔍 Candidate mapping:', {
+            raw: c,
+            candidateInfo,
+            metadata,
+            nestedMetadata,
+            name: metadata.candidate_name || candidateInfo.full_name,
+            party: metadata.party || candidateInfo.party_id,
+            votes: nestedMetadata.votes || metadata.votes
+          });
+          
+          return {
+            id: c.candidate_id || `synthetic-candidate-${idx}`,
+            candidate_results_id: c.candidate_results_id,
+            race_candidates_id: c.candidate_id,
+            name: metadata.candidate_name || candidateInfo.full_name || c.name || 'Unknown Candidate',
+            party: (metadata.party || candidateInfo.party_id || c.party || 'IND').toUpperCase(),
+            votes: Number(nestedMetadata.votes || metadata.votes || c.votes || 0),
+            percentage: Number(nestedMetadata.vote_percentage || metadata.vote_percentage || metadata.percentage || c.percentage || 0),
+            incumbent: Boolean(candidateInfo.incumbent || metadata.incumbent || c.incumbent),
+            winner: Boolean(nestedMetadata.winner || metadata.winner || c.winner),
+            withdrew: Boolean(metadata.withdrew || c.withdrew),
+            headshot: metadata.headshot || candidateInfo.photo_url || candidateInfo.headshot || c.headshot,
+            first_name: candidateInfo.first_name || metadata.candidate_name?.split(' ')[0],
+            last_name: candidateInfo.last_name || metadata.candidate_name?.split(' ').slice(1).join(' '),
+            ballot_order: metadata.ballot_order || c.ballot_order || idx + 1,
+          };
+        }),
+        precincts_reporting: 100,
+        precincts_total: 100,
+        called_timestamp: raceData.created_at,
+        uncontested: false,
+        num_elect: 1,
+        summary: raceData.summary, // Include summary from backend
+        scenario_input: raceData.scenario_input, // Include scenario input from backend
+      };
+      
+      console.log('✅ Transformed race:', {
+        id: transformedRace.id,
+        synthetic_race_id: transformedRace.synthetic_race_id,
+        title: transformedRace.title,
+        office: transformedRace.office,
+        state: transformedRace.state,
+        district: transformedRace.district,
+        candidateCount: transformedRace.candidates.length,
+        raceType: transformedRace.raceType
+      });
+      
+      return transformedRace;
+    });
+
+    console.log('✅ All transformed synthetic races:', transformedRaces);
+    setSyntheticRaces(transformedRaces);
+    setShowingSyntheticRaces(true);
+  };
+
+  const handleHideSyntheticRaces = () => {
+    setShowingSyntheticRaces(false);
+  };
+
+  // Debug handler to show raw RPC data
+  const handleDebugPayload = async () => {
+    setIsLoadingDebugData(true);
+    setShowDebugDialog(true);
+    try {
+      console.log('🔍 Fetching synthetic races using e_get_synthetic_races...');
+      const { data, error } = await supabase.rpc('e_get_synthetic_races');
+      
+      if (error) {
+        console.error('❌ RPC Error:', error);
+        setDebugRPCData({ error: error.message });
+      } else {
+        console.log('✅ Raw RPC Response:', data);
+        setDebugRPCData(data);
+      }
+    } catch (err) {
+      console.error('❌ Failed to fetch debug data:', err);
+      setDebugRPCData({ error: String(err) });
+    } finally {
+      setIsLoadingDebugData(false);
+    }
+  };
+
   const renderElectionFilters = () => (
     <ElectionFilters
       searchTerm={searchTerm}
@@ -1021,6 +1228,11 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
       races={displayRaces}
       resultCount={filteredRaces.length}
       lastUpdated={lastUpdated}
+      onShowSyntheticRaces={handleShowSyntheticRaces}
+      showingSyntheticRaces={showingSyntheticRaces}
+      onHideSyntheticRaces={handleHideSyntheticRaces}
+      onDebugPayload={handleDebugPayload}
+      isLoadingDebugData={isLoadingDebugData}
     />
   );
 
@@ -1507,7 +1719,52 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
 
           {/* Race Cards */}
           <div className="grid gap-6">
-            {filteredRaces.length === 0 ? (
+
+            {showingSyntheticRaces ? (
+              syntheticRaces.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No synthetic races found.</p>
+                  <Button variant="outline" onClick={() => setShowingSyntheticRaces(false)} className="mt-4">
+                    Back to Real Races
+                  </Button>
+                </div>
+              ) : (
+                syntheticRaces.map((syntheticRace, index) => {
+                  console.log('🎨 RENDERING SYNTHETIC RACE:', {
+                    index,
+                    id: syntheticRace.id,
+                    title: syntheticRace.title,
+                    office: syntheticRace.office,
+                    state: syntheticRace.state,
+                    'typeof title': typeof syntheticRace.title,
+                    'typeof office': typeof syntheticRace.office,
+                    'typeof state': typeof syntheticRace.state,
+                    fullRace: syntheticRace
+                  });
+                  
+                  return (
+                    <motion.div
+                      key={syntheticRace.id || index}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ 
+                        duration: 0.3, 
+                        delay: index * 0.05, 
+                        type: "spring", 
+                        stiffness: 100 
+                      }}
+                    >
+                      <RaceCard
+                        race={syntheticRace}
+                        onUpdateRace={handleUpdateRace}
+                        onDeleteRace={handleDeleteRace}
+                        parties={displayParties}
+                      />
+                    </motion.div>
+                  );
+                })
+              )
+            ) : filteredRaces.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No races found matching your filters.</p>
                 <Button variant="outline" onClick={clearFilters} className="mt-4">
@@ -1530,6 +1787,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
                   <RaceCard
                     race={race}
                     onUpdateRace={handleUpdateRace}
+                    onDeleteRace={handleDeleteRace}
                     parties={displayParties}
                   />
                 </motion.div>
@@ -1877,6 +2135,101 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
           onSave={handleUpdateParty}
         />
       )}
+
+      {/* Debug Payload Dialog */}
+      <Dialog open={showDebugDialog} onOpenChange={setShowDebugDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>🐛 Synthetic Races Debug Payload</DialogTitle>
+            <DialogDescription>
+              Raw data structure from e_get_synthetic_races RPC
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {isLoadingDebugData ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="ml-3">Fetching RPC data...</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Database className="w-4 h-4" />
+                  <span>
+                    {debugRPCData?.error 
+                      ? 'Error fetching data'
+                      : `${Array.isArray(debugRPCData) ? debugRPCData.length : 0} race${Array.isArray(debugRPCData) && debugRPCData.length !== 1 ? 's' : ''} from RPC`
+                    }
+                  </span>
+                </div>
+                
+                {debugRPCData?.error && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-red-700 dark:text-red-400 mb-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="font-medium">RPC Error</span>
+                    </div>
+                    <p className="text-sm text-red-600 dark:text-red-300">{debugRPCData.error}</p>
+                  </div>
+                )}
+                
+                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-[60vh]">
+                  <pre className="text-xs font-mono whitespace-pre-wrap">
+                    {JSON.stringify(debugRPCData, null, 2)}
+                  </pre>
+                </div>
+                
+                {/* Mapping Hints */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="text-sm space-y-2">
+                    <div className="font-medium text-blue-900 dark:text-blue-100">Expected Structure:</div>
+                    <div className="text-xs font-mono text-blue-800 dark:text-blue-200 space-y-1">
+                      <div>• <strong>candidates[].candidate.full_name</strong> → Card name</div>
+                      <div>• <strong>candidates[].candidate.party_id</strong> → Card party</div>
+                      <div>• <strong>candidates[].metadata.votes</strong> → Vote count</div>
+                      <div>• <strong>candidates[].metadata.vote_percentage</strong> → Percentage</div>
+                      <div>• <strong>name</strong> → Race title</div>
+                      <div>• <strong>office</strong> → Race office</div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(debugRPCData, null, 2));
+                      alert('Payload copied to clipboard!');
+                    }}
+                  >
+                    Copy to Clipboard
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      console.log('=== SYNTHETIC RACES RAW RPC PAYLOAD ===');
+                      console.log('Raw Data:', debugRPCData);
+                      console.log('Stringified:', JSON.stringify(debugRPCData, null, 2));
+                      if (Array.isArray(debugRPCData) && debugRPCData.length > 0) {
+                        console.log('First race structure:', debugRPCData[0]);
+                        console.log('First race candidates:', debugRPCData[0]?.candidates);
+                      }
+                      alert('Payload logged to console. Press F12 to view.');
+                    }}
+                  >
+                    Log to Console
+                  </Button>
+                  <Button onClick={() => setShowDebugDialog(false)}>
+                    Close
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -51,29 +51,33 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
   // Load teams from backend
   useEffect(() => {
     const loadTeams = async () => {
-      try {
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+      // COMMENTED OUT - not using sports_dashboard edge function right now
+      // try {
+      //   const response = await fetch(
+      //     `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
+      //     {
+      //       headers: {
+      //         Authorization: `Bearer ${publicAnonKey}`,
+      //       },
+      //     }
+      //   );
 
-        if (!response.ok) {
-          throw new Error('Failed to load teams');
-        }
+      //   if (!response.ok) {
+      //     throw new Error('Failed to load teams');
+      //   }
 
-        const responseData = await response.json();
-        setTeamsData(responseData.teams || []);
-        console.log(`Loaded ${responseData.teams?.length || 0} teams from KV store`);
-        if (responseData.teams?.length > 0) {
-          console.log('Sample team structure:', responseData.teams[0]);
-        }
-      } catch (error) {
-        console.error('Error loading teams from KV store:', error);
-      }
+      //   const responseData = await response.json();
+      //   setTeamsData(responseData.teams || []);
+      //   console.log(`Loaded ${responseData.teams?.length || 0} teams from KV store`);
+      //   if (responseData.teams?.length > 0) {
+      //     console.log('Sample team structure:', responseData.teams[0]);
+      //   }
+      // } catch (error) {
+      //   console.error('Error loading teams from KV store:', error);
+      // }
+      
+      // Return empty data for now
+      setTeamsData([]);
     };
 
     loadTeams();
@@ -125,30 +129,35 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
   // Load saved insights
   useEffect(() => {
     const loadSavedInsights = async () => {
-      try {
-        setLoadingInsights(true);
-        const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-ai-insights`,
-          {
-            headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
-          }
-        );
+      // COMMENTED OUT - not using sports_dashboard edge function right now
+      // try {
+      //   setLoadingInsights(true);
+      //   const response = await fetch(
+      //     `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights`,
+      //     {
+      //       headers: {
+      //         Authorization: `Bearer ${publicAnonKey}`,
+      //       },
+      //     }
+      //   );
 
-        if (!response.ok) {
-          throw new Error('Failed to load saved insights');
-        }
+      //   if (!response.ok) {
+      //     throw new Error('Failed to load saved insights');
+      //   }
 
-        const responseData = await response.json();
-        setSavedInsights(responseData.insights || []);
-        console.log(`Loaded ${responseData.insights?.length || 0} saved sports AI insights`);
-      } catch (error) {
-        console.error('Error loading saved insights:', error);
-        toast.error('Failed to load saved insights');
-      } finally {
-        setLoadingInsights(false);
-      }
+      //   const responseData = await response.json();
+      //   setSavedInsights(responseData.insights || []);
+      //   console.log(`Loaded ${responseData.insights?.length || 0} saved sports AI insights`);
+      // } catch (error) {
+      //   console.error('Error loading saved insights:', error);
+      //   toast.error('Failed to load saved insights');
+      // } finally {
+      //   setLoadingInsights(false);
+      // }
+      
+      // Return empty data for now
+      setSavedInsights([]);
+      setLoadingInsights(false);
     };
 
     loadSavedInsights();
@@ -359,7 +368,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-ai-insights`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights`,
         {
           method: 'POST',
           headers: {
@@ -402,7 +411,7 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-ai-insights/${insightId}`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights/${insightId}`,
         {
           method: 'DELETE',
           headers: {

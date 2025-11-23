@@ -46,9 +46,9 @@ export function SportsSearch({ view, leagues, onAdd }: SportsSearchProps) {
       
       // Fetch tournaments (leagues)
       const tournamentsResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/tournaments`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`,
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
+          headers: { Authorization: `Bearer ${publicAnonKey}` }
         }
       );
       
@@ -60,9 +60,9 @@ export function SportsSearch({ view, leagues, onAdd }: SportsSearchProps) {
       
       // Fetch all teams
       const teamsResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
+          headers: { Authorization: `Bearer ${publicAnonKey}` }
         }
       );
       

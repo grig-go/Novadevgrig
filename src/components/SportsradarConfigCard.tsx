@@ -86,7 +86,7 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
     try {
       setIsLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-providers`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -112,7 +112,7 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
     try {
       setIsTesting(providerId);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-providers/${providerId}/test`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers/${providerId}/test`,
         {
           method: "POST",
           headers: {
@@ -145,7 +145,7 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
       const provider = providers.find(p => p.id === providerId);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/sync`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/sync`,
         {
           method: "POST",
           headers: {
@@ -193,7 +193,7 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
       }
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-providers`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
         {
           method: "POST",
           headers: {
@@ -201,12 +201,16 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            id: `${newProviderType}_${newProviderSport}_${Date.now()}`,
             name: newProviderName,
             type: newProviderType,
             sport: newProviderSport,
             apiKey: newProviderApiKey,
             baseUrl: baseUrl,
-            setAsActive: true,
+            selectedLeagues: [],
+            isActive: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           }),
         }
       );

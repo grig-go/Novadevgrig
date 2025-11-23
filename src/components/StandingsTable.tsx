@@ -27,7 +27,7 @@ export function StandingsTable({ leagueId, leagueName }: StandingsTableProps) {
     try {
       // Fetch all teams first to build lookup map
       const teamsResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -79,7 +79,7 @@ export function StandingsTable({ leagueId, leagueName }: StandingsTableProps) {
 
       // Fetch standings
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/standings/${leagueId}`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/standings/${leagueId}`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,

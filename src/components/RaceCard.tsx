@@ -1,20 +1,30 @@
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { useState } from "react";
-import { Clock, CheckCircle, AlertCircle, Database, User, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { useState, useEffect } from "react";
+import { Clock, CheckCircle, AlertCircle, Database, User, X, ChevronDown, ChevronUp, Sparkles, Bot, FileText, Settings, MapPin, Trash2 } from "lucide-react";
 import { Race, Candidate, Party, getFieldValue, isFieldOverridden, FieldOverride, revertOverride } from "../types/election";
 import { InlineTextEdit, InlineNumberEdit, InlineSelectEdit, InlineBooleanEdit } from "./InlineEditField";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { updateRacesFieldOverride, updateRaceFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { EditImageDialog } from "./EditImageDialog";
 import { motion } from "motion/react";
+import { GenerateSyntheticScenarioModal } from "./GenerateSyntheticScenarioModal";
+import { useSyntheticRaceWorkflow } from "../utils/useSyntheticRaceWorkflow";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 interface RaceCardProps {
   race: Race;
   onUpdateRace: (race: Race) => void;
+  onDeleteRace?: (raceId: string) => void; // Add delete callback
   parties?: Party[];
 }
 
@@ -46,7 +56,8 @@ const raceTypeOptions = [
   { value: 'SENATE' as const, label: 'Senate' },
   { value: 'HOUSE' as const, label: 'House' },
   { value: 'GOVERNOR' as const, label: 'Governor' },
-  { value: 'LOCAL' as const, label: 'Local' }
+  { value: 'LOCAL' as const, label: 'Local' },
+  { value: 'SYNTHETIC' as const, label: 'Synthetic' }
 ];
 
 // Fallback colors if party data is not available
@@ -61,18 +72,54 @@ const fallbackPartyColors: Record<string, string> = {
 
 // Helper function to get party color from database or fallback
 const getPartyColor = (partyCode: string, parties?: Party[]): string => {
+  const normalizedCode = partyCode.trim().toUpperCase();
+
   if (parties && parties.length > 0) {
-    const party = parties.find(p => p.code === partyCode);
+    const party = parties.find(p => {
+      const pCode = p.code.toUpperCase();
+      if (normalizedCode === 'REP' || normalizedCode === 'GOP') {
+        return pCode === 'REP' || pCode === 'GOP';
+      }
+      if (normalizedCode === 'DEM') {
+        return pCode === 'DEM';
+      }
+      return pCode === normalizedCode;
+    });
     if (party) {
       return party.colors.primary;
     }
   }
+
+  if (normalizedCode === 'REP' || normalizedCode === 'GOP') return fallbackPartyColors['GOP'];
+  if (normalizedCode === 'DEM') return fallbackPartyColors['Dem'];
+  if (normalizedCode === 'IND') return fallbackPartyColors['Ind'];
+  if (normalizedCode === 'GRN') return fallbackPartyColors['Grn'];
+  if (normalizedCode === 'LIB') return fallbackPartyColors['Lib'];
+  
   return fallbackPartyColors[partyCode] || '#808080';
 };
 
-export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
+export function RaceCard({ race, onUpdateRace, onDeleteRace, parties }: RaceCardProps) {
   const [editingImageCandidate, setEditingImageCandidate] = useState<string | null>(null);
   const [showAllCandidates, setShowAllCandidates] = useState(false);
+  const [showSyntheticModal, setShowSyntheticModal] = useState(false);
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Synthetic race workflow
+  const { 
+    isLoading: isSyntheticLoading, 
+    providers, 
+    fetchProviders,
+    runPreview, 
+    confirmSave 
+  } = useSyntheticRaceWorkflow();
+
+  // Fetch providers when component mounts
+  useEffect(() => {
+    fetchProviders();
+  }, []);
   
   const statusValue = getFieldValue(race.status);
   const titleValue = getFieldValue(race.title);
@@ -337,10 +384,10 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
     }
   };
   
-  const statusInfo = statusConfig[statusValue];
+  const statusInfo = statusConfig[statusValue] || statusConfig.NOT_CALLED;
   const StatusIcon = statusInfo.icon;
   
-  const sortedCandidates = [...race.candidates].sort((a, b) => {
+  const sortedCandidates = [...(race.candidates || [])].sort((a, b) => {
     const aVotes = getFieldValue(a.votes);
     const bVotes = getFieldValue(b.votes);
     return bVotes - aVotes;
@@ -359,7 +406,7 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
                       isFieldOverridden(race.precincts_reporting) ||
                       isFieldOverridden(race.called_timestamp) ||
                       isFieldOverridden(race.totalVotes) ||
-                      race.candidates.some(c => 
+                      (race.candidates || []).some(c => 
                         isFieldOverridden(c.name) || 
                         isFieldOverridden(c.party) || 
                         isFieldOverridden(c.votes) ||
@@ -383,6 +430,13 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
               >
                 <CardTitle className="text-lg">{titleValue}</CardTitle>
               </InlineTextEdit>
+              <Badge 
+                variant="outline" 
+                className="text-xs bg-blue-50 border-blue-200 text-blue-800 font-mono"
+                title={`Race ID: ${race.id}`}
+              >
+                {race.id}
+              </Badge>
               {hasOverrides && (
                 <div className="flex items-center gap-1">
                   <Badge variant="outline" className="text-xs bg-amber-50 border-amber-200 text-amber-800">
@@ -423,7 +477,14 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
                 >
                   <span>{raceTypeValue}</span>
                 </InlineSelectEdit>*/}
-                <span>{raceTypeValue}</span>
+                {raceTypeValue === 'SYNTHETIC' ? (
+                  <Badge variant="outline" className="flex items-center gap-1 bg-purple-50 border-purple-300 text-purple-700">
+                    <Bot className="h-3 w-3" />
+                    Synthetic
+                  </Badge>
+                ) : (
+                  <span>{raceTypeValue}</span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>{race.state}</span>
@@ -463,12 +524,41 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
               )}
               {calledTimestampValue && statusValue === 'CALLED' && (
                 <div className="text-sm text-green-600">
-                  • Called: {new Date(calledTimestampValue).toLocaleString()}
+                  • {raceTypeValue === 'SYNTHETIC' ? 'Created' : 'Called'}: {new Date(calledTimestampValue).toLocaleString()}
                 </div>
               )}
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSyntheticModal(true)}
+              className="text-xs px-3 py-1 rounded-md border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 hover:text-purple-800 transition flex items-center gap-1.5"
+              title="Generate synthetic race scenario"
+            >
+              <Bot className="w-3 h-3" />
+              Gen Synthetic
+            </button>
+            {race.summary && (
+              <button
+                onClick={() => setShowSummaryDialog(true)}
+                className="text-xs px-3 py-1 rounded-md border border-gray-300 hover:bg-gray-100 transition flex items-center gap-1.5"
+                title="View race summary"
+              >
+                <FileText className="w-3 h-3" />
+                Summary
+              </button>
+            )}
+            {/* Delete button for synthetic races only */}
+            {raceTypeValue === 'SYNTHETIC' && race.synthetic_race_id && onDeleteRace && (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-xs px-3 py-1 rounded-md border border-red-300 hover:bg-red-50 hover:border-red-400 text-red-600 hover:text-red-700 transition flex items-center gap-1.5"
+                title="Delete synthetic race"
+              >
+                <Trash2 className="w-3 h-3" />
+                Delete
+              </button>
+            )}
             <InlineSelectEdit
               field={race.status}
               fieldName="Status"
@@ -662,7 +752,7 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
               min={0}
               step={1}
             >
-              <span>Total Votes: {totalVotesValue.toLocaleString()}</span>
+              <span>Total Votes: {(totalVotesValue || 0).toLocaleString()}</span>
             </InlineNumberEdit>
             <div className="flex items-center gap-2">
               <span>Updated: {new Date(race.lastUpdated).toLocaleTimeString()}</span>
@@ -700,6 +790,348 @@ export function RaceCard({ race, onUpdateRace, parties }: RaceCardProps) {
           />
         );
       })()}
+
+      {/* Generate Synthetic Scenario Modal */}
+      <GenerateSyntheticScenarioModal
+        isOpen={showSyntheticModal}
+        onClose={() => setShowSyntheticModal(false)}
+        race={race}
+        candidates={race.candidates}
+        providers={providers}
+        onSubmitWorkflow={(scenario, modifiedCandidates) => runPreview(scenario, race, modifiedCandidates)}
+        onConfirmSave={(preview) => confirmSave(preview, race, race.candidates)}
+        isLoading={isSyntheticLoading}
+        parties={parties}
+      />
+
+      {/* Race Summary Dialog */}
+      <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
+        <DialogContent className="!max-w-[1120px] max-h-[90vh] overflow-hidden flex flex-col" style={{ maxWidth: '1120px' }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Race Summary
+            </DialogTitle>
+            <DialogDescription>
+              {titleValue}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="overflow-y-auto flex-1 pr-2">
+            {/* Text Summary - Moved to Top */}
+            <div className="mb-6 p-4 bg-muted/30 rounded-lg border">
+              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                AI Analysis
+              </h4>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                {typeof race.summary === 'string' 
+                  ? race.summary 
+                  : race.summary?.text || 'No summary available'}
+              </p>
+            </div>
+            
+            {/* Scenario Input Display */}
+            {race.scenario_input && (
+              <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Scenario Parameters
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* AI Provider */}
+                  {race.scenario_input.aiProvider && (
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-purple-500" />
+                      <div>
+                        <div className="text-xs text-muted-foreground">AI Provider</div>
+                        <div className="text-sm font-medium">{race.scenario_input.aiProvider}</div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* County Strategy */}
+                  {race.scenario_input.countyStrategy && (
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-blue-500" />
+                      <div>
+                        <div className="text-xs text-muted-foreground">County Strategy</div>
+                        <div className="text-sm font-medium capitalize">{race.scenario_input.countyStrategy}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Shifts Display */}
+                <div className="mt-4 space-y-2">
+                  {/* Democrat Shift */}
+                  {race.scenario_input.democratShift !== undefined && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Democrat Shift</span>
+                        <span className="font-medium text-blue-600">{race.scenario_input.democratShift > 0 ? '+' : ''}{race.scenario_input.democratShift}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 transition-all duration-500"
+                          style={{ width: `${Math.abs(race.scenario_input.democratShift)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Republican Shift */}
+                  {race.scenario_input.republicanShift !== undefined && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Republican Shift</span>
+                        <span className="font-medium text-red-600">{race.scenario_input.republicanShift > 0 ? '+' : ''}{race.scenario_input.republicanShift}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-red-500 transition-all duration-500"
+                          style={{ width: `${Math.abs(race.scenario_input.republicanShift)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Independent Shift */}
+                  {race.scenario_input.independentShift !== undefined && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Independent Shift</span>
+                        <span className="font-medium text-purple-600">{race.scenario_input.independentShift > 0 ? '+' : ''}{race.scenario_input.independentShift}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 transition-all duration-500"
+                          style={{ width: `${Math.abs(race.scenario_input.independentShift)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Turnout Shift */}
+                  {race.scenario_input.turnoutShift !== undefined && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">Turnout Shift</span>
+                        <span className="font-medium text-green-600">{race.scenario_input.turnoutShift > 0 ? '+' : ''}{race.scenario_input.turnoutShift}%</span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500 transition-all duration-500"
+                          style={{ width: `${Math.abs(race.scenario_input.turnoutShift)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Custom Instructions */}
+                {race.scenario_input.customInstructions && race.scenario_input.customInstructions.trim() && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="text-xs text-muted-foreground mb-1">Custom Instructions</div>
+                    <div className="text-sm italic text-foreground/80">"{race.scenario_input.customInstructions}"</div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Visual Results Summary */}
+            <div className="space-y-4">
+              {/* Top Candidates Visual */}
+              <div className="grid grid-cols-1 gap-3">
+                {sortedCandidates.slice(0, 3).map((candidate, index) => {
+                  const candidateName = getFieldValue(candidate.name);
+                  const candidateParty = getFieldValue(candidate.party);
+                  const candidateVotes = getFieldValue(candidate.votes);
+                  const candidatePercentage = getFieldValue(candidate.percentage);
+                  const candidateWinner = getFieldValue(candidate.winner);
+                  
+                  return (
+                    <motion.div 
+                      key={candidate.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg border"
+                    >
+                      <div className="flex-shrink-0">
+                        <Avatar className="h-12 w-12 border-2" style={{ borderColor: getPartyColor(candidateParty, parties) }}>
+                          <AvatarImage src={getFieldValue(candidate.headshot || '')} alt={candidateName} />
+                          <AvatarFallback>
+                            <User className="h-6 w-6" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold truncate">{candidateName}</span>
+                          <Badge 
+                            variant="secondary" 
+                            className="text-xs px-1.5 py-0"
+                            style={{ 
+                              backgroundColor: `${getPartyColor(candidateParty, parties)}20`,
+                              color: getPartyColor(candidateParty, parties),
+                              borderColor: getPartyColor(candidateParty, parties)
+                            }}
+                          >
+                            {candidateParty}
+                          </Badge>
+                          {candidateWinner && (
+                            <Badge variant="default" className="text-xs px-1.5 py-0 bg-green-500">
+                              WINNER
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <div className="h-3 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full transition-all duration-500"
+                                style={{ 
+                                  width: `${candidatePercentage}%`,
+                                  backgroundColor: getPartyColor(candidateParty, parties)
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="font-bold text-lg" style={{ color: getPartyColor(candidateParty, parties) }}>
+                              {candidatePercentage}%
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {candidateVotes?.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+              
+              {/* Key Metrics Grid */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">Total Votes</div>
+                  <div className="text-xl font-bold text-blue-900 dark:text-blue-100">
+                    {totalVotesValue?.toLocaleString() || 0}
+                  </div>
+                </div>
+                
+                <div className="p-3 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="text-xs text-green-600 dark:text-green-400 mb-1">Reporting</div>
+                  <div className="text-xl font-bold text-green-900 dark:text-green-100">
+                    {reportingValue}%
+                  </div>
+                </div>
+                
+                <div className="p-3 bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/30 dark:to-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <div className="text-xs text-purple-600 dark:text-purple-400 mb-1">Candidates</div>
+                  <div className="text-xl font-bold text-purple-900 dark:text-purple-100">
+                    {race.candidates.length}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Vote Margin Visualization */}
+              {sortedCandidates.length >= 2 && (
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Vote Margin
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground mb-1">{getFieldValue(sortedCandidates[0].name)}</div>
+                      <div className="font-bold text-lg">{getFieldValue(sortedCandidates[0].percentage)}%</div>
+                    </div>
+                    <div className="flex-1 mx-4">
+                      <div className="text-center mb-1">
+                        <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                          {(getFieldValue(sortedCandidates[0].percentage) - getFieldValue(sortedCandidates[1].percentage)).toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="text-xs text-center text-muted-foreground">
+                        {(getFieldValue(sortedCandidates[0].votes) - getFieldValue(sortedCandidates[1].votes)).toLocaleString()} votes
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground mb-1">{getFieldValue(sortedCandidates[1].name)}</div>
+                      <div className="font-bold text-lg">{getFieldValue(sortedCandidates[1].percentage)}%</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Are you sure?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. This will permanently delete the race.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={async () => {
+                setIsDeleting(true);
+                if (onDeleteRace) {
+                  await onDeleteRace(race.id);
+                }
+                setIsDeleting(false);
+                setShowDeleteConfirm(false);
+              }}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <svg
+                    className="animate-spin h-4 w-4 mr-2"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent } from './ui/card';
-import { LucideIcon } from 'lucide-react';
+import { LucideIcon, Vote, TrendingUp, Trophy, Cloud, Newspaper, Bot, School, ImageIcon, Loader2 } from 'lucide-react';
 
 interface DashboardCardData {
   id: string;
@@ -27,6 +27,184 @@ interface DashboardCardRendererProps {
   dashboards: DashboardConfig[];
   cardDataMap: Record<string, DashboardCardData>;
 }
+
+// Helper function to generate card data map
+export const getDashboardCardsData = ({
+  handleNavigate,
+  electionLoading,
+  electionRacesCount,
+  financeStats,
+  sportsStats,
+  weatherStats,
+  newsStats,
+  agentsCount,
+  activeAgentsCount,
+  mediaStats,
+  schoolClosingsStats
+}: {
+  handleNavigate: (view: string) => void;
+  electionLoading: boolean;
+  electionRacesCount: number;
+  financeStats: { securitiesCount: number; loading: boolean; error: string | null };
+  sportsStats: { teamsCount: number; playersCount: number; gamesCount: number; loading: boolean; error: string | null };
+  weatherStats: { locationsCount: number; loading: boolean; error: string | null };
+  newsStats: { articlesCount: number; providersCount: number; loading: boolean; error: string | null };
+  agentsCount: number;
+  activeAgentsCount: number;
+  mediaStats: { totalAssets: number; loading: boolean; error: string | null };
+  schoolClosingsStats: { activeClosings: number; loading: boolean; error: string | null };
+}): Record<string, DashboardCardData> => {
+  return {
+    election: {
+      id: 'election',
+      title: 'Elections',
+      description: 'Monitor real-time election results, candidate profiles, and party data with advanced override capabilities.',
+      icon: Vote,
+      bgColor: 'bg-blue-500/10',
+      iconColor: 'text-blue-600',
+      stats: [
+        {
+          label: 'races',
+          value: electionLoading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : electionRacesCount,
+          isComponent: electionLoading
+        }
+      ],
+      onClick: () => handleNavigate('election')
+    },
+    finance: {
+      id: 'finance',
+      title: 'Finance',
+      description: 'Track stock prices, cryptocurrency values, and market trends with real-time data from Alpaca Markets.',
+      icon: TrendingUp,
+      bgColor: 'bg-green-500/10',
+      iconColor: 'text-green-600',
+      stats: [
+        {
+          label: 'securities',
+          value: financeStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : financeStats.securitiesCount,
+          isComponent: financeStats.loading
+        }
+      ],
+      onClick: () => handleNavigate('finance')
+    },
+    sports: {
+      id: 'sports',
+      title: 'Sports',
+      description: 'Manage sports teams, players, games, venues, and tournaments with comprehensive tracking.',
+      icon: Trophy,
+      bgColor: 'bg-orange-500/10',
+      iconColor: 'text-orange-600',
+      stats: [
+        {
+          label: 'teams',
+          value: sportsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : sportsStats.teamsCount,
+          isComponent: sportsStats.loading
+        },
+        {
+          label: 'players',
+          value: sportsStats.loading ? '' : sportsStats.playersCount,
+          isComponent: false
+        },
+        {
+          label: 'games',
+          value: sportsStats.loading ? '' : sportsStats.gamesCount,
+          isComponent: false
+        }
+      ],
+      onClick: () => handleNavigate('sports')
+    },
+    weather: {
+      id: 'weather',
+      title: 'Weather',
+      description: 'Track weather conditions, forecasts, and alerts for multiple locations with real-time updates.',
+      icon: Cloud,
+      bgColor: 'bg-sky-500/10',
+      iconColor: 'text-sky-600',
+      stats: [
+        {
+          label: 'locations',
+          value: weatherStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : weatherStats.locationsCount,
+          isComponent: weatherStats.loading
+        }
+      ],
+      onClick: () => handleNavigate('weather')
+    },
+    news: {
+      id: 'news',
+      title: 'News',
+      description: 'Aggregate and manage news articles from multiple sources with category filtering and search.',
+      icon: Newspaper,
+      bgColor: 'bg-purple-500/10',
+      iconColor: 'text-purple-600',
+      stats: [
+        {
+          label: 'articles',
+          value: newsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : newsStats.articlesCount,
+          isComponent: newsStats.loading
+        },
+        {
+          label: 'providers',
+          value: newsStats.loading ? '' : newsStats.providersCount,
+          isComponent: false
+        }
+      ],
+      onClick: () => handleNavigate('news')
+    },
+    agents: {
+      id: 'agents',
+      title: 'Agents',
+      description: 'Configure and manage AI agents for data collection, transformation, and automation tasks.',
+      icon: Bot,
+      bgColor: 'bg-indigo-500/10',
+      iconColor: 'text-indigo-600',
+      stats: [
+        {
+          label: 'total agents',
+          value: agentsCount,
+          isComponent: false
+        },
+        {
+          label: 'active',
+          value: activeAgentsCount,
+          isComponent: false
+        }
+      ],
+      onClick: () => handleNavigate('agents')
+    },
+    school_closings: {
+      id: 'school-closings',
+      title: 'School Closings',
+      description: 'Monitor school closures and delays due to weather, emergencies, or other events.',
+      icon: School,
+      bgColor: 'bg-amber-500/10',
+      iconColor: 'text-amber-600',
+      stats: [
+        {
+          label: 'active closings',
+          value: schoolClosingsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : schoolClosingsStats.activeClosings,
+          isComponent: schoolClosingsStats.loading
+        }
+      ],
+      onClick: () => handleNavigate('school-closings')
+    },
+    media_library: {
+      id: 'media',
+      title: 'Media Library',
+      description: 'Upload, organize, and manage images, videos, and audio files with tagging and search.',
+      icon: ImageIcon,
+      bgColor: 'bg-pink-500/10',
+      iconColor: 'text-pink-600',
+      stats: [
+        {
+          label: 'assets',
+          value: mediaStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : mediaStats.totalAssets,
+          isComponent: mediaStats.loading
+        }
+      ],
+      onClick: () => handleNavigate('media')
+    }
+  };
+};
 
 export const DashboardCardRenderer: React.FC<DashboardCardRendererProps> = ({
   dashboards,

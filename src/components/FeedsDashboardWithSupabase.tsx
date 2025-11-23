@@ -60,12 +60,14 @@ import {
   School,
   Trophy,
   Plus,
-  Trash2
+  Trash2,
+  Search
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { copyToClipboard as copyTextToClipboard } from "../utils/clipboard";
+import { DashboardNavigation, type DashboardView } from "./DashboardNavigation";
 
 // Categories for display
 type ProviderCategory = "weather" | "sports" | "news" | "finance" | "school_closings";
@@ -108,16 +110,25 @@ interface ProviderFullData {
 
 interface FeedsDashboardProps {
   initialCategory?: ProviderCategory | "All";
+  onNavigate?: (view: DashboardView) => void;
+  dashboardConfig?: Array<{
+    dashboard_id: string;
+    visible: boolean;
+    order_index: number;
+  }>;
 }
 
 export function FeedsDashboardWithSupabase({
   initialCategory,
+  onNavigate,
+  dashboardConfig,
 }: FeedsDashboardProps) {
   const [providers, setProviders] = useState<DataProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<ProviderCategory | "All">(
     initialCategory || "All"
   );
+  const [searchText, setSearchText] = useState("");
   
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -353,7 +364,7 @@ export function FeedsDashboardWithSupabase({
       console.log('[Edit] Fetching leagues from backend endpoint');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/sportmonks/soccer/leagues`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`,
         {
           method: 'GET',
           headers: {
@@ -762,8 +773,19 @@ export function FeedsDashboardWithSupabase({
     }
   };
 
-  // No client-side filtering needed - RPC already filters by category
-  const filteredProviders = providers;
+  // Apply client-side search filtering on top of category-filtered providers from RPC
+  const filteredProviders = providers.filter((provider) => {
+    if (!searchText) return true;
+    
+    const searchLower = searchText.toLowerCase();
+    return (
+      provider.name.toLowerCase().includes(searchLower) ||
+      provider.type.toLowerCase().includes(searchLower) ||
+      provider.category.toLowerCase().includes(searchLower) ||
+      (provider.source_url && provider.source_url.toLowerCase().includes(searchLower)) ||
+      (provider.storage_path && provider.storage_path.toLowerCase().includes(searchLower))
+    );
+  });
 
   const getCategoryIcon = (category: ProviderCategory) => {
     switch (category) {
@@ -787,11 +809,11 @@ export function FeedsDashboardWithSupabase({
       case "weather":
         return "text-blue-600 dark:text-blue-400";
       case "sports":
-        return "text-green-600 dark:text-green-400";
-      case "news":
         return "text-purple-600 dark:text-purple-400";
+      case "news":
+        return "text-orange-600 dark:text-orange-400";
       case "finance":
-        return "text-amber-600 dark:text-amber-400";
+        return "text-green-600 dark:text-green-400";
       case "school_closings":
         return "text-red-600 dark:text-red-400";
       default:
@@ -827,6 +849,14 @@ export function FeedsDashboardWithSupabase({
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Navigation */}
+      {onNavigate && (
+        <DashboardNavigation
+          onNavigate={onNavigate}
+          dashboardConfig={dashboardConfig}
+        />
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -853,55 +883,62 @@ export function FeedsDashboardWithSupabase({
         </div>
       </div>
 
-      {/* Category Filter */}
-      <div className="flex gap-2">
-        <Button
-          variant={selectedCategory === "All" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("All")}
+      {/* Search and Category Filter */}
+      <div className="flex gap-2 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search providers..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        
+        <Select
+          value={selectedCategory}
+          onValueChange={(value) => setSelectedCategory(value as ProviderCategory | "All")}
         >
-          All Providers
-        </Button>
-        <Button
-          variant={selectedCategory === "weather" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("weather")}
-        >
-          <CloudSun className="w-4 h-4 mr-2" />
-          Weather
-        </Button>
-        <Button
-          variant={selectedCategory === "sports" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("sports")}
-        >
-          <Trophy className="w-4 h-4 mr-2" />
-          Sports
-        </Button>
-        <Button
-          variant={selectedCategory === "news" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("news")}
-        >
-          <Newspaper className="w-4 h-4 mr-2" />
-          News
-        </Button>
-        <Button
-          variant={selectedCategory === "finance" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("finance")}
-        >
-          <TrendingUp className="w-4 h-4 mr-2" />
-          Finance
-        </Button>
-        <Button
-          variant={selectedCategory === "school_closings" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCategory("school_closings")}
-        >
-          <School className="w-4 h-4 mr-2" />
-          School Closings
-        </Button>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Filter by category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">
+              All Providers
+            </SelectItem>
+            <SelectItem value="weather">
+              <div className="flex items-center gap-2">
+                <CloudSun className="w-4 h-4" />
+                Weather
+              </div>
+            </SelectItem>
+            <SelectItem value="sports">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Sports
+              </div>
+            </SelectItem>
+            <SelectItem value="news">
+              <div className="flex items-center gap-2">
+                <Newspaper className="w-4 h-4" />
+                News
+              </div>
+            </SelectItem>
+            <SelectItem value="finance">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Finance
+              </div>
+            </SelectItem>
+            <SelectItem value="school_closings">
+              <div className="flex items-center gap-2">
+                <School className="w-4 h-4" />
+                School Closings
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Providers Table */}
@@ -1274,7 +1311,7 @@ export function FeedsDashboardWithSupabase({
                         try {
                           console.log('[FetchLeagues] Fetching leagues from SportMonks...');
                           
-                          const endpoint = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/sportmonks/soccer/leagues`;
+                          const endpoint = `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`;
                           const response = await fetch(endpoint, {
                             headers: {
                               'Authorization': `Bearer ${publicAnonKey}`,

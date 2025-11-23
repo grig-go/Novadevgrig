@@ -122,7 +122,7 @@ export function SportsLeagueTestPanel() {
     try {
       // Use backend endpoint that internally uses RPC for provider details
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/providers/active`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/providers/active`,
         {
           headers: {
             Authorization: `Bearer ${publicAnonKey}`,
@@ -208,7 +208,7 @@ export function SportsLeagueTestPanel() {
       }
       
       // Use backend endpoint to avoid CORS issues
-      const endpoint = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/sportmonks/soccer/leagues`;
+      const endpoint = `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`;
       console.log('[SportMonks] Fetching from backend:', endpoint);
       
       const response = await fetch(endpoint, {
@@ -317,7 +317,7 @@ export function SportsLeagueTestPanel() {
       console.log('[SaveLeagues] Saving', selectedItems.length, 'league-season combinations');
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/save-leagues`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/save-leagues`,
         {
           method: 'POST',
           headers: {
@@ -385,7 +385,7 @@ export function SportsLeagueTestPanel() {
   const fetchCurrentTeams = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
         {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }
@@ -424,7 +424,7 @@ export function SportsLeagueTestPanel() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports/add-league`,
+        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/add-league`,
         {
           method: 'POST',
           headers: { 

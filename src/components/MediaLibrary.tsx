@@ -71,6 +71,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
+  const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null);
+  const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
   
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -549,6 +551,57 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     }
   };
 
+  // Helper function to generate video thumbnail
+  const generateVideoThumbnail = async (videoFile: File): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement('video');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        
+        video.onloadedmetadata = () => {
+          // Seek to 1 second or 10% of video duration, whichever is smaller
+          video.currentTime = Math.min(1, video.duration * 0.1);
+        };
+        
+        video.onseeked = () => {
+          // Set canvas dimensions to match video
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          // Draw video frame to canvas
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert canvas to blob
+          canvas.toBlob((blob) => {
+            URL.revokeObjectURL(video.src);
+            resolve(blob);
+          }, 'image/jpeg', 0.85);
+        };
+        
+        video.onerror = () => {
+          URL.revokeObjectURL(video.src);
+          resolve(null);
+        };
+        
+        // Load video
+        video.src = URL.createObjectURL(videoFile);
+      } catch (error) {
+        console.error('Error generating video thumbnail:', error);
+        resolve(null);
+      }
+    });
+  };
+
   const handleUpload = async () => {
     if (!uploadForm.name) {
       toast.error("Please enter a file name");
@@ -591,6 +644,19 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     
     formData.append("media_type", mediaType);
     formData.append("created_by", "user@emergent.tv");
+    
+    // Generate and attach thumbnail for video files
+    if (mediaType === 'video') {
+      toast.info('Generating video thumbnail...');
+      const thumbnailBlob = await generateVideoThumbnail(selectedFile);
+      
+      if (thumbnailBlob) {
+        formData.append("thumbnail", thumbnailBlob, 'thumbnail.jpg');
+        console.log('✅ Video thumbnail generated and attached to upload');
+      } else {
+        console.warn('⚠️ Failed to generate video thumbnail, continuing without it');
+      }
+    }
 
     const result = await uploadAsset(formData);
     
@@ -604,6 +670,79 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       setPreviewUrl(null);
     } else {
       toast.error(result.error || "Failed to upload media");
+    }
+  };
+
+  // Generate thumbnail from current video frame
+  const handleGenerateThumbnailFromVideo = async () => {
+    if (!selectedAsset || !videoRef) {
+      toast.error("No video available");
+      return;
+    }
+
+    setGeneratingThumbnail(true);
+    
+    try {
+      // Create canvas to capture current frame
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.videoWidth;
+      canvas.height = videoRef.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+      
+      // Draw current video frame to canvas
+      ctx.drawImage(videoRef, 0, 0, canvas.width, canvas.height);
+      
+      // Convert canvas to blob
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error('Failed to create thumbnail blob'));
+        }, 'image/jpeg', 0.85);
+      });
+      
+      // Upload thumbnail to storage
+      const formData = new FormData();
+      formData.append('thumbnail', blob, 'thumbnail.jpg');
+      formData.append('video_asset_id', selectedAsset.id);
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/media-library/generate-thumbnail`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`,
+            apikey: publicAnonKey,
+          },
+          body: formData,
+        }
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to upload thumbnail');
+      }
+      
+      const result = await response.json();
+      
+      // Update the selectedAsset with new thumbnail
+      setSelectedAsset({
+        ...selectedAsset,
+        thumbnail_url: result.thumbnail_url,
+      });
+      
+      // Refresh the assets list
+      await refresh();
+      
+      toast.success('Thumbnail generated successfully!');
+    } catch (error) {
+      console.error('Error generating thumbnail:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to generate thumbnail');
+    } finally {
+      setGeneratingThumbnail(false);
     }
   };
 
@@ -1255,7 +1394,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     try {
       setAssigningSystem(true);
-      console.log("📌 Assigning system:", systemId, "to media:", selectedAsset.id);
+      console.log("��� Assigning system:", systemId, "to media:", selectedAsset.id);
       
       const system = availableSystems.find(s => s.id === systemId);
 
@@ -1500,9 +1639,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 repeatDelay: 3,
                 ease: "easeInOut"
               }}
-              className="p-2 bg-purple-100 dark:bg-purple-900/20 rounded-lg"
             >
-              <ImageIcon className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              <ImageIcon className="w-6 h-6 text-pink-600 dark:text-pink-400" />
             </motion.div>
             Media Library
           </h1>
@@ -1958,11 +2096,20 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                 onClick={() => setSelectedAsset(asset)}
               >
                 {asset.file_type === 'video' ? (
-                  <VideoThumbnail 
-                    videoUrl={asset.file_url}
-                    alt={asset.name}
-                    className="w-full h-full"
-                  />
+                  // Use thumbnail_url if available, otherwise use VideoThumbnail component
+                  asset.thumbnail_url ? (
+                    <img 
+                      src={asset.thumbnail_url} 
+                      alt={asset.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <VideoThumbnail 
+                      videoUrl={asset.file_url}
+                      alt={asset.name}
+                      className="w-full h-full"
+                    />
+                  )
                 ) : asset.file_type === 'audio' ? (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900">
                     <Music className="w-20 h-20 text-purple-600 dark:text-purple-300" />
@@ -2047,16 +2194,26 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                     />
                   </div>
                   {asset.file_type === 'video' ? (
-                    <div 
-                      className="w-16 h-16 rounded cursor-pointer overflow-hidden"
-                      onClick={() => setSelectedAsset(asset)}
-                    >
-                      <VideoThumbnail 
-                        videoUrl={asset.file_url}
+                    // Use thumbnail_url if available, otherwise use VideoThumbnail component
+                    asset.thumbnail_url ? (
+                      <img 
+                        src={asset.thumbnail_url} 
                         alt={asset.name}
-                        className="w-full h-full"
+                        className="w-16 h-16 object-cover rounded cursor-pointer"
+                        onClick={() => setSelectedAsset(asset)}
                       />
-                    </div>
+                    ) : (
+                      <div 
+                        className="w-16 h-16 rounded cursor-pointer overflow-hidden"
+                        onClick={() => setSelectedAsset(asset)}
+                      >
+                        <VideoThumbnail 
+                          videoUrl={asset.file_url}
+                          alt={asset.name}
+                          className="w-full h-full"
+                        />
+                      </div>
+                    )
                   ) : (
                     <img 
                       src={asset.thumbnail_url || asset.file_url} 
@@ -2088,7 +2245,10 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
       {/* Media Detail Dialog */}
       {selectedAsset && (
-        <Dialog open={!!selectedAsset} onOpenChange={() => setSelectedAsset(null)}>
+        <Dialog open={!!selectedAsset} onOpenChange={() => {
+          setSelectedAsset(null);
+          setVideoRef(null);
+        }}>
           <DialogContent 
             className="max-h-[90vh] overflow-hidden flex flex-col"
             style={{ width: '60vw', maxWidth: '60vw' }}
@@ -2104,13 +2264,31 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
               <div className="space-y-6 pb-4 pr-4">
                 {/* Preview Section */}
                 <div className="space-y-4">
+                  {/* Generate Thumbnail Button (Video Only) */}
+                  {selectedAsset.file_type === 'video' && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateThumbnailFromVideo}
+                        disabled={generatingThumbnail || !videoRef}
+                        className="gap-2"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                        {generatingThumbnail ? 'Generating...' : 'Generate Thumbnail from Current Frame'}
+                      </Button>
+                    </div>
+                  )}
+                  
                   <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                     {selectedAsset.file_type === 'video' ? (
                       <video 
+                        ref={(el) => setVideoRef(el)}
                         src={selectedAsset.file_url} 
                         controls
                         className="w-full h-full"
                         preload="metadata"
+                        crossOrigin="anonymous"
                       />
                     ) : selectedAsset.file_type === 'audio' ? (
                       <div className="w-full h-full flex flex-col items-center justify-center p-8">

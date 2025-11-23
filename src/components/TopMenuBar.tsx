@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
-import emergentLogo from "figma:asset/14eb232dfd8c5b46f028102fb55aac1720da01bb.png";
 import { User, Role, Permission } from "../types/users";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
 import { supabase } from "../utils/supabase/client";
@@ -102,8 +101,6 @@ export function TopMenuBar({
 
   // Branding Configuration
   const branding: BrandingConfig = {
-    logoLight: emergentLogo,
-    logoDark: emergentLogo,
     logoAlt: "EMERGENT",
     appIcon: (
       <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
@@ -112,6 +109,7 @@ export function TopMenuBar({
     ),
     appName: "Nova",
     onLogoClick: () => onNavigate('home'),
+    showTitle: true,
   };
 
   // Apps Menu Configuration

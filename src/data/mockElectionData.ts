@@ -1,5 +1,4 @@
 import { ElectionData, createOverride } from '../types/election';
-import exampleImage from 'figma:asset/f94d518b7dad2762a63b8128f3d6f0ca70a62f8c.png';
 
 export const mockElectionData: ElectionData = {
   lastUpdated: '2024-11-05T22:30:00Z',
@@ -92,7 +91,7 @@ export const mockElectionData: ElectionData = {
           percentage: 66.1,
           incumbent: false,
           winner: true,
-          headshot: exampleImage
+          headshot: 'https://images.unsplash.com/photo-1601114174531-4d95d279713e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxlZGRlcmx5JTIwd29tYW4lMjBwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwxfHx8fDE3NTk4ODEyNTB8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral'
         },
         {
           id: 'cand-5',
@@ -279,7 +278,7 @@ export const mockElectionData: ElectionData = {
           percentage: 100,
           incumbent: true,
           winner: true,
-          headshot: 'https://images.unsplash.com/photo-1601114174531-4d95d279713e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHhlbGRlcmx5JTIwd29tYW4lMjBwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwxfHx8fDE3NTk4ODEyNTB8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+          headshot: 'https://images.unsplash.com/photo-1601114174531-4d95d279713e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxlZGRlcmx5JTIwd29tYW4lMjBwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdHxlbnwxfHx8fDE3NTk4ODEyNTB8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
           ballot_order: 1
         }
       ]

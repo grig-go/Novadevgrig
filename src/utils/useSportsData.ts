@@ -76,16 +76,16 @@ export function useSportsData() {
 
         // Fetch all sports data in parallel only if provider is active
       const [teamsRes, gamesRes, venuesRes, tournamentsRes] = await Promise.all([
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/teams`, {
+        fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`, {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/games`, {
+        fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/games`, {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/venues`, {
+        fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/venues`, {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }),
-        fetch(`https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/sports-data/tournaments`, {
+        fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`, {
           headers: { Authorization: `Bearer ${publicAnonKey}` },
         }),
       ]);

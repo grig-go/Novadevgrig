@@ -5,8 +5,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { EditImageDialog } from "./EditImageDialog";
 import { Race, getFieldValue, isFieldOverridden, Candidate } from "../types/election";
 import { Crown, Building, Home, BarChart3, Camera, User } from "lucide-react";
-import uploadIcon from '../assets/68d53c13c3ad8229e8063692f187aaceaea0559d.png';
-import newImageExample from '../assets/d44c4f8fd84167f69792e0ecbe2c26b82fcb83f4.png';
 import { fetchBOPData, getBOPSummary, BOPData } from "../data/bopData";
 import * as d3 from "d3";
 
@@ -165,7 +163,7 @@ export function ElectionSummary({ races, onUpdateRace }: ElectionSummaryProps) {
           // Check if any candidate has won electoral votes
           let electoralVotesAssigned = false;
           race.candidates.forEach(candidate => {
-            const candidateElectoralVotes = candidate.electoralVotes || 0;
+            const candidateElectoralVotes = candidate.ElectoralVotes || 0;
             if (candidateElectoralVotes > 0) {
               electoralVotesAssigned = true;
               const party = getFieldValue(candidate.party);
@@ -248,7 +246,7 @@ export function ElectionSummary({ races, onUpdateRace }: ElectionSummaryProps) {
           <Avatar className="w-12 h-12 cursor-pointer transition-opacity group-hover:opacity-80" onClick={handleImageClick}>
             <AvatarImage src={candidateHeadshot} alt={candidateName} />
             <AvatarFallback className="bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-              <img src={uploadIcon} alt="Upload" className="w-6 h-6 opacity-60" />
+              <User className="w-6 h-6 opacity-60" />
             </AvatarFallback>
           </Avatar>
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black bg-opacity-50 rounded-full">
@@ -456,7 +454,7 @@ function PresidentialElectoralChart({
   }, [demVotes, repVotes, uncalledVotes]);
 
   return (
-    <Card>
+    <Card className="max-w-7xl mx-auto">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2">
           <Crown className="w-5 h-5" />
@@ -672,7 +670,7 @@ function CongressionalChart({
   const controlParty = demSeats >= majorityThreshold ? 'Democratic' : repSeats >= majorityThreshold ? 'Republican' : null;
 
   return (
-    <Card>
+    <Card className="max-w-7xl mx-auto">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -870,7 +868,7 @@ function RaceStatusChart({
   }, [raceTypes]);
 
   return (
-    <Card>
+    <Card className="max-w-7xl mx-auto">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5" />
