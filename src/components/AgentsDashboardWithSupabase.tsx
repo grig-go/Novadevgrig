@@ -44,6 +44,7 @@ import { formatDistanceToNow } from "date-fns";
 import { supabase } from "../utils/supabase/client";
 import { useToast } from "./ui/use-toast";
 import { isDevelopment, SKIP_AUTH_IN_DEV, DEV_USER_ID } from "../utils/constants";
+import { refreshAgentsData } from "../data/agentsData";
 
 interface AgentsDashboardWithSupabaseProps {
   feeds?: Feed[];
@@ -466,6 +467,11 @@ export function AgentsDashboardWithSupabase({
       // Reload agents list
       await loadAgents();
 
+      // Refresh agents count in App.tsx
+      refreshAgentsData().catch(err => {
+        console.error('Failed to refresh agents count:', err);
+      });
+
       toast({
         title: "Success",
         description: "Agent duplicated successfully"
@@ -622,6 +628,11 @@ export function AgentsDashboardWithSupabase({
       // Reload agents list
       await loadAgents();
 
+      // Refresh agents count in App.tsx
+      refreshAgentsData().catch(err => {
+        console.error('Failed to refresh agents count:', err);
+      });
+
       // Only close wizard if requested
       if (closeDialog) {
         handleWizardClose();
@@ -651,6 +662,11 @@ export function AgentsDashboardWithSupabase({
 
       // Reload agents list
       await loadAgents();
+
+      // Refresh agents count in App.tsx
+      refreshAgentsData().catch(err => {
+        console.error('Failed to refresh agents count:', err);
+      });
 
       toast({
         title: "Success",
@@ -692,6 +708,11 @@ export function AgentsDashboardWithSupabase({
             : a
         )
       );
+
+      // Refresh agents count in App.tsx
+      refreshAgentsData().catch(err => {
+        console.error('Failed to refresh agents count:', err);
+      });
 
       toast({
         title: "Success",

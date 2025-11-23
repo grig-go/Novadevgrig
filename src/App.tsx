@@ -8,7 +8,6 @@ import { SportsDashboard } from "./components/SportsDashboard";
 import { WeatherDashboard } from "./components/WeatherDashboard";
 import { NewsDashboard } from "./components/NewsDashboard";
 import { FeedsDashboardWithSupabase } from "./components/FeedsDashboardWithSupabase";
-import { AgentsDashboard } from "./components/AgentsDashboard";
 import { AgentsDashboardWithSupabase } from "./components/AgentsDashboardWithSupabase";
 import { MediaLibrary } from "./components/MediaLibrary";
 import { ChannelsPage } from "./components/ChannelsPage";
@@ -23,18 +22,21 @@ import type { SportsEntityWithOverrides, SportsView } from "./types/sports";
 import type { WeatherLocationWithOverrides } from "./types/weather";
 import type { NewsArticleWithOverrides } from "./types/news";
 import type { Feed, FeedCategory } from "./types/feeds";
-import type { Agent } from "./types/agents";
 import {
   electionData as importedElectionData,
   isElectionDataLoading,
   initializeElectionData
 } from "./data/electionData";
+import {
+  agentsData as importedAgentsData,
+  initializeAgentsData,
+  setOnDataChange
+} from "./data/agentsData";
 import { mockFinanceData } from "./data/mockFinanceData";
 import { mockSportsData } from "./data/mockSportsData";
 import { mockWeatherData } from "./data/mockWeatherData";
 import { mockNewsData } from "./data/mockNewsData";
 import { mockFeedsData } from "./data/mockFeedsData";
-import { mockAgentsData } from "./data/mockAgentsData";
 import { mockUsersData } from "./data/mockUsersData";
 import { useWeatherData } from "./utils/useWeatherData";
 import { useFinanceData } from "./utils/useFinanceData";
@@ -54,11 +56,11 @@ export default function App() {
   const [initialProviderCategory, setInitialProviderCategory] = useState<"weather" | "sports" | "news" | "finance" | "school_closings" | undefined>(undefined);
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
+  const [agentsData, setAgentsData] = useState(importedAgentsData);
   const [financeData, setFinanceData] = useState(mockFinanceData);
   const [sportsData, setSportsData] = useState(mockSportsData);
   const [weatherData, setWeatherData] = useState(mockWeatherData);
   const [feedsData, setFeedsData] = useState(mockFeedsData);
-  const [agentsData, setAgentsData] = useState(mockAgentsData);
   const [usersData, setUsersData] = useState(mockUsersData);
   const [showDashboardConfig, setShowDashboardConfig] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
@@ -132,6 +134,31 @@ export default function App() {
 
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  // Load agents data from Supabase
+  useEffect(() => {
+    let mounted = true;
+
+    // Set callback to update state when data changes
+    setOnDataChange((data) => {
+      if (mounted) {
+        setAgentsData(data);
+      }
+    });
+
+    initializeAgentsData().then(data => {
+      if (mounted) {
+        setAgentsData(data);
+      }
+    }).catch(error => {
+      console.error('Failed to load agents data:', error);
+    });
+
+    return () => {
+      mounted = false;
+      setOnDataChange(null as any); // Clear callback on unmount
     };
   }, []);
 
@@ -532,31 +559,7 @@ export default function App() {
     }));
   };
 
-  const handleAddAgent = (newAgent: Agent) => {
-    setAgentsData(prev => ({
-      ...prev,
-      agents: [...prev.agents, newAgent],
-      lastUpdated: new Date().toISOString()
-    }));
-  };
-
-  const handleUpdateAgent = (updatedAgent: Agent) => {
-    setAgentsData(prev => ({
-      ...prev,
-      agents: prev.agents.map(agent => 
-        agent.id === updatedAgent.id ? updatedAgent : agent
-      ),
-      lastUpdated: new Date().toISOString()
-    }));
-  };
-
-  const handleDeleteAgent = (agentId: string) => {
-    setAgentsData(prev => ({
-      ...prev,
-      agents: prev.agents.filter(agent => agent.id !== agentId),
-      lastUpdated: new Date().toISOString()
-    }));
-  };
+  // Agent handlers removed - AgentsDashboardWithSupabase manages its own state
 
   const handleNavigate = (view: AppView) => {
     setCurrentView(view);
@@ -749,8 +752,8 @@ export default function App() {
               sportsStats: transformedSportsStats,
               weatherStats: transformedWeatherStats,
               newsStats,
-              agentsCount: agentsData.agents.length,
-              activeAgentsCount: agentsData.agents.filter(a => a.status === 'ACTIVE').length,
+              agentsCount: agentsData.totalCount,
+              activeAgentsCount: agentsData.activeCount,
               mediaStats,
               schoolClosingsStats
             })}
@@ -767,8 +770,8 @@ export default function App() {
               sportsStats: transformedSportsStats,
               weatherStats: transformedWeatherStats,
               newsStats,
-              agentsCount: agentsData.agents.length,
-              activeAgentsCount: agentsData.agents.filter(a => a.status === 'ACTIVE').length,
+              agentsCount: agentsData.totalCount,
+              activeAgentsCount: agentsData.activeCount,
               mediaStats,
               schoolClosingsStats
             })}
