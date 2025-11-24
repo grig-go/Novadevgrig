@@ -192,23 +192,55 @@ async function createElement(item, supabase) {
   const element = {
     fields: []
   };
-  // Add template if available
+  // Get template info including form schema for custom components
+  let templateName = null;
+  let formSchema = null;
   if (item.template_id) {
-    const { data: template } = await supabase.from('templates').select('name').eq('id', item.template_id).single();
+    // Get template name
+    const { data: template, error: templateError } = await supabase.from('templates').select('name').eq('id', item.template_id).single();
+    console.log(`Template lookup for item ${item.id}: template_id=${item.template_id}, found=${!!template}, error=${templateError?.message || 'none'}`);
     if (template) {
+      templateName = template.name;
       element.template = template.name;
     }
+
+    // Get form schema from template_forms table (separate from templates table)
+    const { data: templateForm, error: formError } = await supabase.from('template_forms').select('schema').eq('template_id', item.template_id).single();
+    console.log(`Template form lookup: found=${!!templateForm}, error=${formError?.message || 'none'}`);
+    if (templateForm?.schema) {
+      formSchema = templateForm.schema;
+      console.log(`Form schema type: ${typeof formSchema}, has components: ${!!formSchema?.components}`);
+      if (formSchema?.components) {
+        console.log(`Form schema components: ${JSON.stringify(formSchema.components.map(c => ({ key: c.key, type: c.type })))}`);
+      }
+    }
+  } else {
+    console.log(`Item ${item.id} has no template_id`);
   }
-  // Add all fields
+  // Add all fields, handling custom components
   for (const field of fields || []) {
     // Skip internal metadata fields
     if (field.name.startsWith('__')) {
       continue;
     }
-    element.fields.push({
-      name: field.name,
-      value: field.value
-    });
+    // Check if this field is a custom component that needs special handling
+    const componentConfig = formSchema ? findComponentInSchema(formSchema, field.name) : null;
+
+    console.log(`Processing field: ${field.name}, componentConfig type: ${componentConfig?.type}, formSchema exists: ${!!formSchema}`);
+
+    if (componentConfig?.type === 'weatherCities' || componentConfig?.type === 'weatherLocations') {
+      // Handle Weather Cities component - fetch fresh data
+      // Support both 'weatherCities' (new) and 'weatherLocations' (legacy) types
+      console.log(`Found ${componentConfig.type} component, processing...`);
+      const weatherFields = await processWeatherCitiesComponent(field, componentConfig, supabase);
+      element.fields.push(...weatherFields);
+    } else {
+      // Regular field
+      element.fields.push({
+        name: field.name,
+        value: field.value
+      });
+    }
   }
   // Only add duration if explicitly set on the item
   if (item.duration && item.duration > 0) {
@@ -222,6 +254,189 @@ async function createElement(item, supabase) {
     };
   }
   return element;
+}
+
+// Find a component in the form schema by its key
+function findComponentInSchema(schema, key) {
+  if (!schema?.components) {
+    console.log('findComponentInSchema: No components in schema');
+    return null;
+  }
+
+  console.log(`findComponentInSchema: Looking for key "${key}" in schema with ${schema.components.length} top-level components`);
+
+  function searchComponents(components) {
+    for (const component of components) {
+      console.log(`  Checking component: key="${component.key}", type="${component.type}"`);
+      if (component.key === key) {
+        console.log(`  Found matching component!`);
+        return component;
+      }
+      if (component.components) {
+        const found = searchComponents(component.components);
+        if (found) return found;
+      }
+      if (component.columns) {
+        for (const col of component.columns) {
+          if (col.components) {
+            const found = searchComponents(col.components);
+            if (found) return found;
+          }
+        }
+      }
+      // Handle tabs structure
+      if (component.type === 'tabs' && Array.isArray(component.components)) {
+        for (const tab of component.components) {
+          if (tab.components) {
+            const found = searchComponents(tab.components);
+            if (found) return found;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  return searchComponents(schema.components);
+}
+
+// Process Weather Cities component - fetch fresh weather data
+async function processWeatherCitiesComponent(field, config, supabase) {
+  const fields = [];
+
+  // Get component settings
+  const templateName = config.templateName || '';
+  const field1 = config.field1 || '01';
+  const field2 = config.field2 || '02';
+  const field3 = config.field3 || '03';
+  const format = config.format || '{{name}} {{temperature}}°F';
+  const fieldNames = [field1, field2, field3];
+
+  // Parse the stored value to get selected city IDs
+  let selectedCityIds = [];
+  try {
+    // The value might be stored as the XML output or as JSON array of IDs
+    const value = field.value;
+    if (value.startsWith('[')) {
+      selectedCityIds = JSON.parse(value);
+    } else {
+      // Try to extract IDs from a different format, or re-query
+      // For now, we'll need to store city IDs separately
+      // Let's check if there's a companion field with IDs
+      console.log('Weather Cities value is not JSON array, checking for city IDs');
+    }
+  } catch (e) {
+    console.error('Error parsing weather cities value:', e);
+  }
+
+  // If we have city IDs, fetch fresh weather data
+  if (selectedCityIds.length > 0) {
+    // Fetch weather locations from database
+    const { data: locations } = await supabase
+      .from('weather_locations')
+      .select('*')
+      .in('id', selectedCityIds);
+
+    // Create a map for quick lookup maintaining order
+    const locationMap = new Map();
+    for (const loc of locations || []) {
+      locationMap.set(loc.id, loc);
+    }
+
+    // Fetch weather for each city and generate output
+    for (let i = 0; i < selectedCityIds.length && i < 3; i++) {
+      const cityId = selectedCityIds[i];
+      const location = locationMap.get(cityId);
+
+      if (location) {
+        // Fetch current weather from Open-Meteo API
+        const weather = await fetchWeatherData(location.lat, location.lon);
+
+        // Build template variables
+        const vars = {
+          name: location.custom_name || location.name || 'Unknown',
+          country: location.country || '',
+          admin1: location.admin1 || '',
+          temperature: weather?.temperature ? Math.round(weather.temperature) : 'N/A',
+          conditions: weather?.conditions || 'N/A'
+        };
+
+        // Replace template variables in format string
+        let formatted = format;
+        for (const [key, value] of Object.entries(vars)) {
+          formatted = formatted.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+        }
+
+        fields.push({
+          name: fieldNames[i],
+          value: formatted
+        });
+      }
+    }
+  }
+
+  // Add template field if specified
+  if (templateName && fields.length > 0) {
+    fields.unshift({
+      name: '_template',
+      value: templateName
+    });
+  }
+
+  return fields;
+}
+
+// Fetch current weather from Open-Meteo API
+async function fetchWeatherData(lat, lon) {
+  try {
+    // Convert lat/lon to numbers if they're strings
+    const latitude = typeof lat === 'string' ? parseFloat(lat) : lat;
+    const longitude = typeof lon === 'string' ? parseFloat(lon) : lon;
+
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
+    );
+    const data = await response.json();
+
+    return {
+      temperature: data.current?.temperature_2m,
+      conditions: getWeatherDescription(data.current?.weather_code)
+    };
+  } catch (error) {
+    console.error('Error fetching weather:', error);
+    return null;
+  }
+}
+
+// Get weather description from WMO code
+function getWeatherDescription(code) {
+  const weatherCodes = {
+    0: 'Clear',
+    1: 'Mainly Clear',
+    2: 'Partly Cloudy',
+    3: 'Overcast',
+    45: 'Foggy',
+    48: 'Foggy',
+    51: 'Light Drizzle',
+    53: 'Drizzle',
+    55: 'Heavy Drizzle',
+    61: 'Light Rain',
+    63: 'Rain',
+    65: 'Heavy Rain',
+    71: 'Light Snow',
+    73: 'Snow',
+    75: 'Heavy Snow',
+    77: 'Snow Grains',
+    80: 'Light Showers',
+    81: 'Showers',
+    82: 'Heavy Showers',
+    85: 'Light Snow Showers',
+    86: 'Snow Showers',
+    95: 'Thunderstorm',
+    96: 'Thunderstorm with Hail',
+    99: 'Thunderstorm with Hail'
+  };
+  return weatherCodes[code] || 'Unknown';
 }
 function buildElementXml(element, indent) {
   const spaces = '  '.repeat(indent);
