@@ -159,8 +159,22 @@ export function ChannelsPage() {
         setShowAddDialog(false);
         resetForm();
       } else {
-        toast.error("Failed to create channel");
-        console.error("Error creating channel:", data.error);
+        const errorMessage = data.error || "Failed to create channel";
+        const errorDetails = data.code ? ` (${data.code})` : "";
+        const fullError = errorMessage + errorDetails;
+        
+        toast.error(fullError);
+        console.error("Error creating channel:", {
+          error: data.error,
+          code: data.code,
+          hint: data.hint,
+          details: data.details
+        });
+        
+        // Log hint if available
+        if (data.hint) {
+          console.log("Hint:", data.hint);
+        }
       }
     } catch (error) {
       toast.error("Failed to connect to server");
@@ -397,13 +411,14 @@ export function ChannelsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Created By</TableHead>
               <TableHead className="w-[100px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredChannels.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No channels found
                 </TableCell>
               </TableRow>
@@ -418,6 +433,11 @@ export function ChannelsPage() {
                   </TableCell>
                   <TableCell className="max-w-md">
                     <div className="truncate">{channel.description}</div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">
+                      {channel.created_by || 'Unknown'}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Button
