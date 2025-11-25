@@ -14,6 +14,7 @@ import { SportsAIInsights } from "./SportsAIInsights";
 import { SportsDebugPanel } from "./SportsDebugPanel";
 import { StandingsTable } from "./StandingsTable";
 import { TournamentsView } from "./TournamentsView";
+import { BettingView } from "./BettingView";
 import { 
   SportsData, 
   SportsFilters as SportsFiltersType, 
@@ -792,6 +793,7 @@ export function SportsDashboard({
       case 'games': return <Calendar className="w-5 h-5" />;
       case 'venues': return <MapPin className="w-5 h-5" />;
       case 'tournaments': return <Trophy className="w-5 h-5" />;
+      case 'betting': return <TrendingUp className="w-5 h-5" />;
       default: return <Activity className="w-5 h-5" />;
     }
   };
@@ -1182,6 +1184,8 @@ export function SportsDashboard({
         })()
       ) : currentView === 'tournaments' ? (
         <TournamentsView />
+      ) : currentView === 'betting' ? (
+        <BettingView leagues={leagues} filters={filters} />
       ) : providers.length > 0 && providers.filter((p: any) => p.status === 'active' || p.isActive).length === 0 ? (
         <Card>
           <CardContent className="text-center py-12 space-y-4">

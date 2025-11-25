@@ -188,31 +188,44 @@ export function GameDetailsWithLineups({ gameId, open, onOpenChange }: GameDetai
     teamColor?: string;
   }) => (
     <motion.div 
-      className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors"
+      className="flex items-center gap-2 py-2 hover:bg-muted/30 transition-colors rounded-md"
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.2 }}
     >
+      {/* Jersey Number */}
       <span 
-        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0"
         style={{ backgroundColor: teamColor || '#000000' }}
       >
         {player.jersey_number}
       </span>
-      <span className="flex-1 font-medium">{player.name}</span>
+      
+      {/* Player Name */}
+      <span className="flex-1 text-sm font-medium truncate">{player.name}</span>
+      
+      {/* Position Badge */}
       {getPositionBadge(player.position)}
-      <div className="flex items-center gap-1">
-        {player.goals && player.goals > 0 && (
-          <span className="text-sm">⚽{player.goals > 1 ? player.goals : ''}</span>
+      
+      {/* Stats */}
+      <div className="flex items-center gap-1.5">
+        {player.goals !== undefined && player.goals > 0 && (
+          <div className="flex items-center gap-0.5">
+            <span className="text-xs">⚽</span>
+            <span className="text-xs font-medium">{player.goals}</span>
+          </div>
         )}
-        {player.assists && player.assists > 0 && (
-          <span className="text-sm">🅰️{player.assists > 1 ? player.assists : ''}</span>
+        {player.assists !== undefined && player.assists > 0 && (
+          <div className="flex items-center gap-0.5">
+            <span className="text-xs">🅰️</span>
+            <span className="text-xs font-medium">{player.assists}</span>
+          </div>
         )}
-        {player.yellow_cards && player.yellow_cards > 0 && (
-          <span className="text-sm">🟨</span>
+        {player.yellow_cards !== undefined && player.yellow_cards > 0 && (
+          <span className="text-xs">🟨</span>
         )}
-        {player.red_cards && player.red_cards > 0 && (
-          <span className="text-sm">🟥</span>
+        {player.red_cards !== undefined && player.red_cards > 0 && (
+          <span className="text-xs">🟥</span>
         )}
       </div>
     </motion.div>
@@ -231,21 +244,21 @@ export function GameDetailsWithLineups({ gameId, open, onOpenChange }: GameDetai
     const substitutes = lineup.filter(p => p.lineup_type === 'substitute');
 
     return (
-      <div className="space-y-4">
-        <h3 className="font-semibold text-lg">{teamName}</h3>
+      <div className="space-y-3">
+        <h3 className="font-semibold">{teamName}</h3>
         
         {/* Starting XI */}
         {startingXI.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
                 Starting XI
-              </h4>
-              <Badge variant="outline" className="text-xs">
+              </span>
+              <Badge variant="secondary" className="text-xs h-5 px-1.5">
                 {startingXI.length}
               </Badge>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {startingXI.map((player) => (
                 <PlayerRow 
                   key={player.player_id} 
@@ -260,15 +273,15 @@ export function GameDetailsWithLineups({ gameId, open, onOpenChange }: GameDetai
         {/* Substitutes */}
         {substitutes.length > 0 && (
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs uppercase tracking-wider text-muted-foreground">
                 Substitutes
-              </h4>
-              <Badge variant="outline" className="text-xs">
+              </span>
+              <Badge variant="secondary" className="text-xs h-5 px-1.5">
                 {substitutes.length}
               </Badge>
             </div>
-            <div className="space-y-1 opacity-75">
+            <div className="space-y-0.5 opacity-80">
               {substitutes.map((player) => (
                 <PlayerRow 
                   key={player.player_id} 

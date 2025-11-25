@@ -45,7 +45,8 @@ export function SportsFilters({
     players: 'Players', 
     games: 'Games',
     venues: 'Venues',
-    tournaments: 'Tournaments'
+    tournaments: 'Tournaments',
+    betting: 'Betting & Probabilities'
   };
 
   const allPositions = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'];

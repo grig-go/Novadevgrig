@@ -59,7 +59,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers`,
+          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
           {
             headers: {
               Authorization: `Bearer ${publicAnonKey}`,
@@ -70,6 +70,8 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
         if (!response.ok) throw new Error('Failed to load AI providers');
 
         const data = await response.json();
+        
+        // Find provider assigned to weather dashboard
         const weatherProvider = data.providers?.find((p: any) =>
           p.dashboardAssignments?.some((d: any) => 
             d.dashboard === 'weather' && d.textProvider
@@ -78,6 +80,9 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
 
         if (weatherProvider) {
           setAiProvider(weatherProvider);
+          console.log('Weather AI Provider loaded:', weatherProvider.name);
+        } else {
+          console.warn('No AI provider assigned to weather dashboard');
         }
       } catch (error) {
         console.error('Error loading AI provider:', error);
@@ -199,7 +204,7 @@ export function WeatherAIInsightsVisual({ locations }: WeatherAIInsightsVisualPr
       context += `User Question: ${chatMessage}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/ai-providers/chat`,
+        `https://${projectId}.supabase.co/functions/v1/ai_provider/ai-providers/chat`,
         {
           method: 'POST',
           headers: {

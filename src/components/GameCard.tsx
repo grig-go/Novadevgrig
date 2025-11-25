@@ -1,10 +1,13 @@
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { Calendar, MapPin, Users, Clock } from "lucide-react";
-import { motion } from "framer-motion";
-import { useState } from "react";
+import { Calendar, MapPin, Users, Clock, TrendingUp, TrendingDown, Minus, MoreVertical, User, Users as UsersIcon, Newspaper } from "lucide-react";
+import { motion } from "motion/react";
+import { useState, useEffect } from "react";
 import { GameDetailsWithLineups } from "./GameDetailsWithLineups";
 import { TeamStatsModal } from "./TeamStatsModal";
+import { supabase } from "../utils/supabase/client";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Button } from "./ui/button";
 
 interface GameCardProps {
   game: {
@@ -44,6 +47,7 @@ interface GameCardProps {
     };
   };
   onClick?: () => void;
+  showOdds?: boolean;
 }
 
 // Helper function to format date/time
@@ -125,13 +129,94 @@ const isGameEnded = (status: string): boolean => {
   return statusLower === 'ended' || statusLower === 'closed' || statusLower === 'complete';
 };
 
-export function GameCard({ game, onClick }: GameCardProps) {
+export function GameCard({ game, onClick, showOdds = true }: GameCardProps) {
   const ended = isGameEnded(game.status);
   const borderColor = getBorderColor(game.status);
   
   const [showDetails, setShowDetails] = useState(false);
   const [showTeamStats, setShowTeamStats] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [hasLineup, setHasLineup] = useState(false);
+  const [checkingLineup, setCheckingLineup] = useState(false);
+  const [odds, setOdds] = useState<{
+    home_win_odds?: number;
+    draw_odds?: number;
+    away_win_odds?: number;
+    home_win_prob?: number;
+    draw_prob?: number;
+    away_win_prob?: number;
+  } | null>(null);
+  const [loadingOdds, setLoadingOdds] = useState(false);
+
+  // Fetch odds when component mounts if showOdds is true
+  useEffect(() => {
+    if (showOdds && game.id) {
+      fetchOdds();
+    }
+  }, [showOdds, game.id]);
+
+  // Check if lineup exists
+  useEffect(() => {
+    if (game.id) {
+      checkLineupExists();
+    }
+  }, [game.id]);
+
+  const checkLineupExists = async () => {
+    try {
+      setCheckingLineup(true);
+      const { data, error } = await supabase
+        .from('sports_lineups')
+        .select('id', { count: 'exact', head: true })
+        .eq('event_id', game.id)
+        .limit(1);
+
+      if (error) {
+        console.error('[GameCard] Error checking lineup:', error);
+        return;
+      }
+
+      setHasLineup(data !== null);
+    } catch (err) {
+      console.error('[GameCard] Exception checking lineup:', err);
+    } finally {
+      setCheckingLineup(false);
+    }
+  };
+
+  const fetchOdds = async () => {
+    try {
+      setLoadingOdds(true);
+      const { data, error } = await supabase
+        .from('sports_match_odds')
+        .select('home_win_odds, draw_odds, away_win_odds, home_win_prob, draw_prob, away_win_prob')
+        .eq('event_id', game.id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('[GameCard] Error fetching odds:', error);
+        return;
+      }
+
+      if (data) {
+        setOdds(data);
+      }
+    } catch (err) {
+      console.error('[GameCard] Exception fetching odds:', err);
+    } finally {
+      setLoadingOdds(false);
+    }
+  };
+
+  const getProbabilityColor = (probability?: number): string => {
+    if (!probability) return 'bg-muted/50';
+    
+    if (probability >= 50) return 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300';
+    if (probability >= 35) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300';
+    return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300';
+  };
 
   const handleTeamClick = (e: React.MouseEvent, teamId: string) => {
     e.stopPropagation(); // Prevent card click
@@ -186,6 +271,63 @@ export function GameCard({ game, onClick }: GameCardProps) {
                   </Badge>
                 )}
                 {getStatusBadge(game.status)}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-8 w-8 p-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem 
+                      disabled={!hasLineup}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (hasLineup) {
+                          setShowDetails(true);
+                        }
+                      }}
+                      className={!hasLineup ? 'opacity-50 cursor-not-allowed' : ''}
+                    >
+                      <UsersIcon className="mr-2 h-4 w-4" />
+                      Lineup {!hasLineup && <span className="ml-1 text-xs">Not Available</span>}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTeamId(game.home_team.id);
+                        setShowTeamStats(true);
+                      }}
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      Home Team
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTeamId(game.away_team.id);
+                        setShowTeamStats(true);
+                      }}
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      Away Team
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // TODO: Implement news functionality
+                        console.log('News clicked for game:', game.id);
+                      }}
+                    >
+                      <Newspaper className="mr-2 h-4 w-4" />
+                      News
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -193,30 +335,22 @@ export function GameCard({ game, onClick }: GameCardProps) {
             <div className="space-y-3">
               {/* Home Team */}
               <div className="flex items-center justify-between">
-                <button 
-                  type="button"
-                  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:bg-muted/50 rounded-lg p-2 -m-2 transition-all hover:scale-[1.02] relative z-10 border-0 bg-transparent text-left"
-                  onClick={(e) => handleTeamClick(e, game.home_team.id)}
-                  onMouseDown={(e) => {
-                    console.log('Home team mouse down');
-                  }}
-                  title="Click to view team stats"
-                >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   {game.home_team.logo_url ? (
                     <img
                       src={game.home_team.logo_url}
                       alt={game.home_team.name}
-                      className="w-10 h-10 object-contain flex-shrink-0 pointer-events-none"
+                      className="w-10 h-10 object-contain flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0 pointer-events-none">
+                    <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
                       <span className="text-xs">{game.home_team.short_name?.[0] || 'H'}</span>
                     </div>
                   )}
-                  <span className="font-medium truncate pointer-events-none">
+                  <span className="font-medium truncate">
                     {game.home_team.short_name || game.home_team.name}
                   </span>
-                </button>
+                </div>
                 {ended && (
                   <span className="text-2xl font-bold ml-3">
                     {game.home_score ?? 0}
@@ -235,30 +369,22 @@ export function GameCard({ game, onClick }: GameCardProps) {
 
               {/* Away Team */}
               <div className="flex items-center justify-between">
-                <button 
-                  type="button"
-                  className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:bg-muted/50 rounded-lg p-2 -m-2 transition-all hover:scale-[1.02] relative z-10 border-0 bg-transparent text-left"
-                  onClick={(e) => handleTeamClick(e, game.away_team.id)}
-                  onMouseDown={(e) => {
-                    console.log('Away team mouse down');
-                  }}
-                  title="Click to view team stats"
-                >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
                   {game.away_team.logo_url ? (
                     <img
                       src={game.away_team.logo_url}
                       alt={game.away_team.name}
-                      className="w-10 h-10 object-contain flex-shrink-0 pointer-events-none"
+                      className="w-10 h-10 object-contain flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0 pointer-events-none">
+                    <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
                       <span className="text-xs">{game.away_team.short_name?.[0] || 'A'}</span>
                     </div>
                   )}
-                  <span className="font-medium truncate pointer-events-none">
+                  <span className="font-medium truncate">
                     {game.away_team.short_name || game.away_team.name}
                   </span>
-                </button>
+                </div>
                 {ended && (
                   <span className="text-2xl font-bold ml-3">
                     {game.away_score ?? 0}
@@ -291,6 +417,38 @@ export function GameCard({ game, onClick }: GameCardProps) {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Users className="w-4 h-4" />
                   <span>{game.attendance.toLocaleString()} attendance</span>
+                </div>
+              )}
+
+              {/* Odds */}
+              {showOdds && odds && !ended && (
+                <div className="pt-2 border-t">
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {/* Home Odds */}
+                    <div className={`px-2 py-1.5 rounded text-center ${getProbabilityColor(odds.home_win_prob)}`}>
+                      <div className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">Home</div>
+                      <div className="font-bold">{odds.home_win_odds?.toFixed(2) || '-'}</div>
+                      {odds.home_win_prob && (
+                        <div className="text-[10px] opacity-80">{odds.home_win_prob.toFixed(0)}%</div>
+                      )}
+                    </div>
+                    {/* Draw Odds */}
+                    <div className={`px-2 py-1.5 rounded text-center ${getProbabilityColor(odds.draw_prob)}`}>
+                      <div className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">Draw</div>
+                      <div className="font-bold">{odds.draw_odds?.toFixed(2) || '-'}</div>
+                      {odds.draw_prob && (
+                        <div className="text-[10px] opacity-80">{odds.draw_prob.toFixed(0)}%</div>
+                      )}
+                    </div>
+                    {/* Away Odds */}
+                    <div className={`px-2 py-1.5 rounded text-center ${getProbabilityColor(odds.away_win_prob)}`}>
+                      <div className="text-[10px] uppercase tracking-wide opacity-70 mb-0.5">Away</div>
+                      <div className="font-bold">{odds.away_win_odds?.toFixed(2) || '-'}</div>
+                      {odds.away_win_prob && (
+                        <div className="text-[10px] opacity-80">{odds.away_win_prob.toFixed(0)}%</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
