@@ -272,7 +272,7 @@ export function GameCard({ game, onClick }: GameCardProps) {
               {/* Date/Time */}
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="w-4 h-4" />
-                <span>{formatGameDateTime(game.start_time)}</span>
+                <Badge variant="secondary">{formatGameDateTime(game.start_time)}</Badge>
               </div>
 
               {/* Venue */}

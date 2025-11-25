@@ -691,8 +691,9 @@ export default function App() {
     
     const transformedSportsStats = {
       teamsCount: sportsStats.totalTeams,
-      playersCount: 0, // Sports hook doesn't track players separately yet
+      playersCount: sportsStats.totalPlayers,
       gamesCount: sportsStats.totalGames,
+      venuesCount: sportsStats.totalVenues,
       loading: sportsLoading,
       error: sportsError
     };
