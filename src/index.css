@@ -2631,6 +2631,14 @@
     background-color: var(--color-teal-50);
   }
 
+  .bg-slate-950 {
+    background-color: var(--color-slate-950);
+  }
+
+  .bg-teal-50 {
+    background-color: var(--color-teal-50);
+  }
+
   .bg-white {
     background-color: var(--color-white);
   }
@@ -5904,6 +5912,17 @@
   @supports (color: color-mix(in lab, red, red)) {
     .dark\:from-orange-950\/40:is(.dark *) {
       --tw-gradient-from: color-mix(in oklab, var(--color-orange-950) 40%, transparent);
+    }
+  }
+
+  .dark\:from-green-950\/30:is(.dark *) {
+    --tw-gradient-from: color-mix(in srgb, oklch(.266 .065 152.934) 30%, transparent);
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .dark\:from-green-950\/30:is(.dark *) {
+      --tw-gradient-from: color-mix(in oklab, var(--color-green-950) 30%, transparent);
     }
   }
 

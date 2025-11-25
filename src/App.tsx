@@ -22,6 +22,7 @@ import type { SportsEntityWithOverrides, SportsView } from "./types/sports";
 import type { WeatherLocationWithOverrides } from "./types/weather";
 import type { NewsArticleWithOverrides } from "./types/news";
 import type { Feed, FeedCategory } from "./types/feeds";
+import type { Agent } from "./types/agents";
 import {
   electionData as importedElectionData,
   isElectionDataLoading,
@@ -56,11 +57,11 @@ export default function App() {
   const [initialProviderCategory, setInitialProviderCategory] = useState<"weather" | "sports" | "news" | "finance" | "school_closings" | undefined>(undefined);
   const [electionData, setElectionData] = useState(importedElectionData);
   const [electionLoading, setElectionLoading] = useState(isElectionDataLoading);
-  const [agentsData, setAgentsData] = useState(importedAgentsData);
   const [financeData, setFinanceData] = useState(mockFinanceData);
   const [sportsData, setSportsData] = useState(mockSportsData);
   const [weatherData, setWeatherData] = useState(mockWeatherData);
   const [feedsData, setFeedsData] = useState(mockFeedsData);
+  const [agentsData, setAgentsData] = useState(importedAgentsData);
   const [usersData, setUsersData] = useState(mockUsersData);
   const [showDashboardConfig, setShowDashboardConfig] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<any[]>([]);
