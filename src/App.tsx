@@ -48,6 +48,7 @@ import { useSchoolClosingsData } from "./utils/useSchoolClosingsData";
 import { getEdgeFunctionUrl, getRestUrl, getSupabaseHeaders } from "./utils/supabase/config";
 import SchoolClosingsDashboard from "./components/SchoolClosingsDashboard";
 import { WeatherDataViewer } from "./components/WeatherDataViewer";
+import { Toaster } from "./components/ui/sonner";
 
 type AppView = 'home' | 'election' | 'finance' | 'sports' | 'weather' | 'weather-data' | 'news' | 'feeds' | 'agents' | 'users-groups' | 'ai-connections' | 'media' | 'channels' | 'school-closings';
 
@@ -943,6 +944,7 @@ export default function App() {
         open={showDashboardConfig}
         onOpenChange={setShowDashboardConfig}
       />
+      <Toaster />
     </div>
   );
 }
