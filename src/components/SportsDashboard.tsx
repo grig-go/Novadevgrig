@@ -4,10 +4,16 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { SportsFilters } from "./SportsFilters";
 import { SportsCard } from "./SportsCard";
+import { TeamCard } from "./TeamCard";
+import { PlayerCard } from "./PlayerCard";
+import { GameCard } from "./GameCard";
+import { VenueCard } from "./VenueCard";
+import { VenueDetailsModal } from "./VenueDetailsModal";
 import { SportsAddActions } from "./SportsAddActions";
 import { SportsAIInsights } from "./SportsAIInsights";
 import { SportsDebugPanel } from "./SportsDebugPanel";
 import { StandingsTable } from "./StandingsTable";
+import { TournamentsView } from "./TournamentsView";
 import { 
   SportsData, 
   SportsFilters as SportsFiltersType, 
@@ -22,6 +28,7 @@ import {
 } from "../types/sports";
 import { Activity, Users, User, Calendar, MapPin, TrendingUp, Trophy, Rss, RefreshCw } from "lucide-react";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { supabase } from "../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -36,6 +43,14 @@ export function SportsDashboard({
 }: SportsDashboardProps) {
   const [currentView, setCurrentView] = useState<SportsView>('teams');
   const [showAIInsights, setShowAIInsights] = useState(false);
+  const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
+  const [isVenueModalOpen, setIsVenueModalOpen] = useState(false);
+  
+  // Debug view changes
+  useEffect(() => {
+    console.log('[SportsDashboard] currentView changed to:', currentView);
+  }, [currentView]);
+
   const [filters, setFilters] = useState<SportsFiltersType>({
     search: '',
     league: '',
@@ -71,90 +86,362 @@ export function SportsDashboard({
   const fetchAllSportsData = async () => {
     try {
       setLoading(true);
+      console.log('[Sports Dashboard] Fetching sports data from Supabase...');
       
-      // First check if there are any active sports providers
-      const activeSportsProviders = providers.filter((p: any) => p.status === 'active' || p.isActive);
-      
-      // If no active provider, skip API calls and show empty state
-      if (activeSportsProviders.length === 0 && providers.length > 0) {
-        console.log('[Sports Dashboard] No active sports providers - skipping API calls');
+      // Fetch teams from sports_teams table
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('sports_teams')
+        .select(`
+          id,
+          sportradar_id,
+          name,
+          short_name,
+          abbreviation,
+          logo_url,
+          colors,
+          country,
+          country_code,
+          city,
+          venue,
+          api_source,
+          created_at,
+          updated_at
+        `)
+        .order('name');
+
+      if (teamsError) {
+        console.error('[Sports Dashboard] Error fetching teams:', teamsError);
+        toast.error('Failed to load teams data');
         setTeams([]);
-        setGames([]);
-        setVenues([]);
-        setTournaments([]);
-        setLeagues([]);
-        setLoading(false);
-        return;
+      } else {
+        console.log('[Sports Dashboard] Teams fetched:', teamsData?.length || 0);
+        console.log('[Sports Dashboard] Sample team data:', teamsData?.[0]);
+        
+        // Transform database teams to SportsEntityWithOverrides format
+        const transformedTeams: SportsEntityWithOverrides[] = (teamsData || []).map(team => ({
+          entity: {
+            id: team.id,
+            name: team.name,
+            abbrev: team.abbreviation || team.short_name || '',
+            city: team.city || '',
+            logo_url: team.logo_url || '',
+            brand: team.colors ? {
+              primary_color: team.colors.primary || '#000000',
+              secondary_color: team.colors.secondary || '#FFFFFF',
+              text_color: team.colors.text || '#000000'
+            } : {
+              primary_color: '#000000',
+              secondary_color: '#FFFFFF',
+              text_color: '#000000'
+            },
+            // Additional fields from database
+            short_name: team.short_name,
+            country: team.country,
+            country_code: team.country_code,
+            venue: team.venue,
+            sportradar_id: team.sportradar_id,
+          } as Team,
+          overrides: [],
+          lastUpdated: team.updated_at || team.created_at || new Date().toISOString(),
+          primaryProvider: team.api_source || 'unknown',
+        }));
+        
+        setTeams(transformedTeams);
       }
       
-      // COMMENTED OUT - not using sports_dashboard edge function right now
-      // Fetch all sports data in parallel
-      // const [teamsRes, gamesRes, venuesRes, tournamentsRes] = await Promise.all([
-      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`, {
-      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
-      //   }),
-      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/games`, {
-      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
-      //   }),
-      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/venues`, {
-      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
-      //   }),
-      //   fetch(`https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`, {
-      //     headers: { Authorization: `Bearer ${publicAnonKey}` },
-      //   }),
-      // ]);
+      // Fetch leagues from sports_leagues table
+      const { data: leaguesData, error: leaguesError } = await supabase
+        .from('sports_leagues')
+        .select(`
+          id,
+          sportradar_id,
+          name,
+          alternative_name,
+          type,
+          gender,
+          logo_url,
+          active,
+          sport,
+          api_source,
+          created_at,
+          updated_at,
+          sports_categories (
+            name,
+            country_code
+          )
+        `)
+        .order('name');
 
-      // if (teamsRes.ok && gamesRes.ok && venuesRes.ok && tournamentsRes.ok) {
-      //   const [teamsData, gamesData, venuesData, tournamentsData] = await Promise.all([
-      //     teamsRes.json(),
-      //     gamesRes.json(),
-      //     venuesRes.json(),
-      //     tournamentsRes.json(),
-      //   ]);
-
-      // Transform backend data to SportsEntityWithOverrides format
-      // const transformToEntity = (item: any): SportsEntityWithOverrides => ({
-      //   entity: item,
-      //   overrides: [],
-      //   lastUpdated: item.lastUpdated || new Date().toISOString(),
-      //   primaryProvider: item.primaryProvider || 'sportradar',
-      // });
-
-      // setTeams((teamsData.teams || []).map(transformToEntity));
-      // setGames((gamesData.games || []).map(transformToEntity));
-      // setVenues((venuesData.venues || []).map(transformToEntity));
-      // setTournaments((tournamentsData.tournaments || []).map(transformToEntity));
-      // 
-      // // Extract unique leagues from tournaments (tournaments are competitions/leagues)
-      // const tournamentsArray = tournamentsData.tournaments || [];
-      // const seenIds = new Set<string>();
-      // const uniqueLeagues: League[] = [];
-      // 
-      // for (const tournament of tournamentsArray) {
-      //   if (!seenIds.has(tournament.id)) {
-      //     seenIds.add(tournament.id);
-      //     uniqueLeagues.push({
-      //       id: tournament.id,
-      //       name: tournament.name,
-      //       abbrev: tournament.abbrev,
-      //       sport: tournament.sport || 'unknown',
-      //       country: 'INTL',
-      //       brand: tournament.brand || {
-      //         primary_color: '#000000',
-      //         secondary_color: '#FFFFFF',
-      //       },
-      //     });
-      //   }
-      // }
-      // setLeagues(uniqueLeagues);
-      // setLastUpdated(new Date().toISOString());
+      if (leaguesError) {
+        console.error('[Sports Dashboard] Error fetching leagues:', leaguesError);
+        toast.error('Failed to load leagues data');
+        setLeagues([]);
+      } else {
+        console.log('[Sports Dashboard] Leagues fetched:', leaguesData?.length || 0);
+        
+        // Transform database leagues to League format
+        const transformedLeagues: League[] = (leaguesData || []).map(league => ({
+          id: league.id,
+          name: league.name,
+          abbrev: league.alternative_name || league.name, // Use alternative_name or full name
+          sport: league.sport || 'soccer',
+          category: 'professional', // Default value since column doesn't exist
+          logo_url: league.logo_url || '',
+          brand: {
+            primary_color: '#000000',
+            secondary_color: '#FFFFFF',
+            text_color: '#FFFFFF'
+          },
+          country: league.sports_categories?.name || '', // Get country from sports_categories relationship
+          sportradar_id: league.sportradar_id,
+        }));
+        
+        setLeagues(transformedLeagues);
+      }
       
-      // Return empty data for now - not using sports_dashboard edge function
-      setTeams([]);
-      setGames([]);
-      setVenues([]);
+      // Fetch players from sports_players table
+      const { data: playersData, error: playersError } = await supabase
+        .from('sports_players')
+        .select(`
+          id,
+          sportradar_id,
+          name,
+          first_name,
+          last_name,
+          nationality,
+          nationality_code,
+          date_of_birth,
+          jersey_number,
+          position,
+          photo_url,
+          team_id,
+          sports_teams (
+            id,
+            name,
+            short_name,
+            abbreviation,
+            logo_url,
+            colors
+          )
+        `)
+        .order('name');
+
+      if (playersError) {
+        console.error('[Sports Dashboard] Error fetching players:', playersError);
+        toast.error('Failed to load players data');
+        setPlayers([]);
+      } else {
+        console.log('[Sports Dashboard] Players fetched:', playersData?.length || 0);
+        console.log('[Sports Dashboard] Sample player data:', playersData?.[0]);
+        
+        // Transform database players to SportsEntityWithOverrides format
+        const transformedPlayers: SportsEntityWithOverrides[] = (playersData || []).map(player => ({
+          entity: {
+            id: player.id,
+            name: {
+              display: player.name,
+              full: `${player.first_name || ''} ${player.last_name || ''}`.trim() || player.name,
+              first: player.first_name || '',
+              last: player.last_name || ''
+            },
+            bio: {
+              position: player.position || '',
+              nationality: player.nationality || '',
+              nationality_code: player.nationality_code || '',
+              date_of_birth: player.date_of_birth || '',
+              jersey_number: player.jersey_number
+            },
+            photo_url: player.photo_url || '',
+            team_id: player.team_id,
+            team: player.sports_teams ? {
+              id: player.sports_teams.id,
+              name: player.sports_teams.name,
+              short_name: player.sports_teams.short_name,
+              abbreviation: player.sports_teams.abbreviation,
+              logo_url: player.sports_teams.logo_url,
+              colors: player.sports_teams.colors
+            } : undefined,
+            sportradar_id: player.sportradar_id,
+          } as Player,
+          overrides: [],
+          lastUpdated: new Date().toISOString(),
+          primaryProvider: 'sportradar',
+        }));
+        
+        setPlayers(transformedPlayers);
+      }
+      
+      // Fetch games from sports_events table
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('sports_events')
+        .select(`
+          id,
+          sportradar_id,
+          start_time,
+          start_time_confirmed,
+          venue_name,
+          venue_city,
+          venue_capacity,
+          round,
+          round_number,
+          match_day,
+          status,
+          home_score,
+          away_score,
+          attendance,
+          referee,
+          home_team:sports_teams!sports_events_home_team_id_fkey (
+            id,
+            name,
+            short_name,
+            abbreviation,
+            logo_url,
+            colors
+          ),
+          away_team:sports_teams!sports_events_away_team_id_fkey (
+            id,
+            name,
+            short_name,
+            abbreviation,
+            logo_url,
+            colors
+          ),
+          sports_seasons (
+            id,
+            name,
+            sports_leagues (
+              id,
+              name,
+              logo_url
+            )
+          )
+        `)
+        .order('start_time', { ascending: false });
+
+      if (gamesError) {
+        console.error('[Sports Dashboard] Error fetching games:', gamesError);
+        toast.error('Failed to load games data');
+        setGames([]);
+      } else {
+        console.log('[Sports Dashboard] Games fetched:', gamesData?.length || 0);
+        console.log('[Sports Dashboard] Sample game data:', gamesData?.[0]);
+        
+        // Transform database games to SportsEntityWithOverrides format
+        const transformedGames: SportsEntityWithOverrides[] = (gamesData || []).map(game => ({
+          entity: {
+            id: game.id,
+            sportradar_id: game.sportradar_id,
+            date: game.start_time,
+            time: game.start_time,
+            status: game.status || 'scheduled',
+            score: {
+              home: game.home_score || 0,
+              away: game.away_score || 0
+            },
+            teams: {
+              home: game.home_team ? {
+                id: game.home_team.id,
+                name: game.home_team.name,
+                abbrev: game.home_team.abbreviation || game.home_team.short_name || '',
+                logo_url: game.home_team.logo_url || '',
+                short_name: game.home_team.short_name,
+                colors: game.home_team.colors
+              } : {
+                id: '',
+                name: 'TBD',
+                abbrev: 'TBD',
+                logo_url: '',
+                short_name: 'TBD'
+              },
+              away: game.away_team ? {
+                id: game.away_team.id,
+                name: game.away_team.name,
+                abbrev: game.away_team.abbreviation || game.away_team.short_name || '',
+                logo_url: game.away_team.logo_url || '',
+                short_name: game.away_team.short_name,
+                colors: game.away_team.colors
+              } : {
+                id: '',
+                name: 'TBD',
+                abbrev: 'TBD',
+                logo_url: '',
+                short_name: 'TBD'
+              }
+            },
+            venue: game.venue_name || '',
+            venue_city: game.venue_city,
+            venue_capacity: game.venue_capacity,
+            attendance: game.attendance,
+            referee: game.referee,
+            round: game.round,
+            round_number: game.round_number,
+            match_day: game.match_day,
+            start_time_confirmed: game.start_time_confirmed,
+            competition_stage: game.round || '',
+            league: game.sports_seasons?.sports_leagues ? {
+              id: game.sports_seasons.sports_leagues.id,
+              name: game.sports_seasons.sports_leagues.name,
+              logo_url: game.sports_seasons.sports_leagues.logo_url
+            } : undefined,
+            season: game.sports_seasons ? {
+              id: game.sports_seasons.id,
+              name: game.sports_seasons.name
+            } : undefined
+          } as Game,
+          overrides: [],
+          lastUpdated: new Date().toISOString(),
+          primaryProvider: 'sportradar',
+        }));
+        
+        setGames(transformedGames);
+      }
+      
+      // Fetch venues using get_venues RPC
+      const { data: venuesData, error: venuesError } = await supabase
+        .rpc('get_venues', { p_country: null, p_limit: 50 });
+
+      if (venuesError) {
+        console.error('[Sports Dashboard] Error fetching venues:', venuesError);
+        toast.error('Failed to load venues data');
+        setVenues([]);
+      } else {
+        console.log('[Sports Dashboard] Venues fetched:', venuesData?.length || 0);
+        console.log('[Sports Dashboard] Sample venue data:', venuesData?.[0]);
+        
+        // Transform RPC venues to SportsEntityWithOverrides format
+        const transformedVenues: SportsEntityWithOverrides[] = (venuesData || []).map((venue: any) => ({
+          entity: {
+            id: venue.id,
+            name: venue.name,
+            address: {
+              city: venue.city,
+              country: venue.country,
+              country_code: venue.country_code
+            },
+            capacity: venue.capacity,
+            surface: venue.surface,
+            media: venue.image_url ? {
+              photos: [{
+                role: 'main',
+                url: venue.image_url
+              }]
+            } : undefined,
+            geo: venue.latitude && venue.longitude ? {
+              lat: venue.latitude,
+              lng: venue.longitude
+            } : undefined,
+            providers: {}
+          } as Venue,
+          overrides: [],
+          lastUpdated: new Date().toISOString(),
+          primaryProvider: 'sportradar',
+        }));
+        
+        setVenues(transformedVenues);
+      }
+      
+      // For now, keep other entities empty
       setTournaments([]);
-      setLeagues([]);
       setLastUpdated(new Date().toISOString());
     } catch (error) {
       console.error('Error fetching sports data:', error);
@@ -426,11 +713,15 @@ export function SportsDashboard({
         if (!matchesSearch) return false;
       }
       
-      // League filter
+      // League filter - DISABLED: teams don't have direct league_id column
+      // Teams are related to leagues through sports_team_seasons table
+      // TODO: Implement proper league filtering through seasons relationship
+      /*
       if (filters.league) {
         const leagueId = 'league_id' in entity ? entity.league_id : null;
         if (leagueId !== filters.league) return false;
       }
+      */
       
       // Status filter (for games)
       if (filters.status && currentView === 'games') {
@@ -541,15 +832,7 @@ export function SportsDashboard({
             whileTap={{ scale: 0.95 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            <Button
-              onClick={handleInitializeAndSync}
-              disabled={refreshing}
-              variant="outline"
-              className="gap-2"
-            >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              {refreshing ? 'Initializing...' : 'Initialize & Sync'}
-            </Button>
+            {/* Button removed */}
           </motion.div>
           <SportsDebugPanel />
           <SportsAddActions
@@ -870,6 +1153,35 @@ export function SportsDashboard({
             <p className="text-muted-foreground">Loading sports data...</p>
           </CardContent>
         </Card>
+      ) : currentView === 'standings' ? (
+        // Standings View - use first league or filtered league
+        (() => {
+          const selectedLeague = filters.league 
+            ? leagues.find(l => l.id === filters.league) 
+            : leagues[0];
+          
+          if (!selectedLeague) {
+            return (
+              <Card>
+                <CardContent className="text-center py-12">
+                  <Trophy className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+                  <p className="text-muted-foreground">
+                    No leagues available. Add a league to view standings.
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          }
+          
+          return (
+            <StandingsTable 
+              leagueId={selectedLeague.id} 
+              leagueName={selectedLeague.name}
+            />
+          );
+        })()
+      ) : currentView === 'tournaments' ? (
+        <TournamentsView />
       ) : providers.length > 0 && providers.filter((p: any) => p.status === 'active' || p.isActive).length === 0 ? (
         <Card>
           <CardContent className="text-center py-12 space-y-4">
@@ -917,7 +1229,13 @@ export function SportsDashboard({
               <div>
                 <h3 className="text-xl font-semibold mb-2">No Sports Data</h3>
                 <p className="text-muted-foreground mb-4">
-                  {providers.length === 0 
+                  {currentView === 'teams' 
+                    ? 'No teams found. Add leagues and run sync to fetch team data.'
+                    : currentView === 'players'
+                    ? 'No players found. Players are added when syncing team data.'
+                    : currentView === 'games'
+                    ? 'No games scheduled. Games are added when syncing season data.'
+                    : providers.length === 0 
                     ? 'Configure a sports provider to start fetching data.'
                     : 'Add leagues and teams to get started.'}
                 </p>
@@ -976,90 +1294,190 @@ export function SportsDashboard({
             </div>
           </CardContent>
         </Card>
-      ) : currentView === 'standings' ? (
-        // Standings View - use first league or filtered league
-        (() => {
-          const selectedLeague = filters.league 
-            ? leagues.find(l => l.id === filters.league) 
-            : leagues[0];
-          
-          if (!selectedLeague) {
-            return (
-              <Card>
-                <CardContent className="text-center py-12">
-                  <Trophy className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    No leagues available. Add a league to view standings.
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          }
-          
-          return (
-            <StandingsTable 
-              leagueId={selectedLeague.id} 
-              leagueName={selectedLeague.name}
-            />
-          );
-        })()
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredEntities.map((entity) => {
-            const teamsData = teams.map(t => t.entity as Team);
-            
-            return (
-              <SportsCard
-                key={entity.entity.id}
-                entity={entity}
-                view={currentView}
-                leagues={leagues}
-                teams={teamsData}
-                onUpdate={(updatedEntity) => {
-                  // Update in appropriate state
-                  const entityData = updatedEntity.entity;
-                  if ('abbrev' in entityData && 'city' in entityData) {
-                    setTeams(prev => prev.map(t => t.entity.id === updatedEntity.entity.id ? updatedEntity : t));
-                  } else if ('name' in entityData && 'bio' in entityData) {
-                    setPlayers(prev => prev.map(p => p.entity.id === updatedEntity.entity.id ? updatedEntity : p));
-                  } else if ('status' in entityData && 'teams' in entityData) {
-                    setGames(prev => prev.map(g => g.entity.id === updatedEntity.entity.id ? updatedEntity : g));
-                  } else if ('capacity' in entityData && 'address' in entityData) {
-                    setVenues(prev => prev.map(v => v.entity.id === updatedEntity.entity.id ? updatedEntity : v));
-                  } else if ('stage' in entityData && 'participating_teams' in entityData) {
-                    setTournaments(prev => prev.map(t => t.entity.id === updatedEntity.entity.id ? updatedEntity : t));
-                  }
-                  setLastUpdated(new Date().toISOString());
-                  toast.success('Entity updated successfully');
-                }}
-                onDelete={(entityId) => {
-                  // Delete from appropriate state
-                  switch (currentView) {
-                    case 'teams':
-                      setTeams(prev => prev.filter(t => t.entity.id !== entityId));
-                      break;
-                    case 'players':
-                      setPlayers(prev => prev.filter(p => p.entity.id !== entityId));
-                      break;
-                    case 'games':
-                      setGames(prev => prev.filter(g => g.entity.id !== entityId));
-                      break;
-                    case 'venues':
-                      setVenues(prev => prev.filter(v => v.entity.id !== entityId));
-                      break;
-                    case 'tournaments':
-                      setTournaments(prev => prev.filter(t => t.entity.id !== entityId));
-                      break;
-                  }
-                  setLastUpdated(new Date().toISOString());
-                  toast.success('Entity deleted successfully');
-                }}
-                showOverrides={filters.showOverrides}
-              />
-            );
-          })}
+          {currentView === 'teams' ? (
+            // Use TeamCard for teams view
+            filteredEntities.map((entityWrapper) => {
+              const team = entityWrapper.entity as Team;
+              return (
+                <TeamCard
+                  key={team.id}
+                  team={{
+                    id: team.id,
+                    name: team.name,
+                    short_name: team.short_name,
+                    abbreviation: team.abbrev,
+                    logo_url: team.logo_url,
+                    city: team.city,
+                    country: team.country,
+                    venue: team.venue,
+                    colors: team.brand ? {
+                      primary: team.brand.primary_color,
+                      secondary: team.brand.secondary_color,
+                      text: team.brand.text_color
+                    } : undefined
+                  }}
+                />
+              );
+            })
+          ) : currentView === 'players' ? (
+            // Use PlayerCard for players view
+            filteredEntities.map((entityWrapper) => {
+              const player = entityWrapper.entity as Player;
+              return (
+                <PlayerCard
+                  key={player.id}
+                  player={{
+                    id: player.id,
+                    name: player.name.display,
+                    first_name: player.name.first,
+                    last_name: player.name.last,
+                    position: player.bio.position,
+                    nationality: player.bio.nationality,
+                    nationality_code: player.bio.nationality_code,
+                    date_of_birth: player.bio.date_of_birth,
+                    jersey_number: player.bio.jersey_number,
+                    photo_url: player.photo_url,
+                    sports_teams: player.team ? {
+                      id: player.team.id,
+                      name: player.team.name,
+                      short_name: player.team.short_name,
+                      abbreviation: player.team.abbreviation,
+                      logo_url: player.team.logo_url,
+                      colors: player.team.colors
+                    } : undefined
+                  }}
+                />
+              );
+            })
+          ) : currentView === 'games' ? (
+            // Use GameCard for games view
+            filteredEntities.map((entityWrapper) => {
+              const game = entityWrapper.entity as Game;
+              return (
+                <GameCard
+                  key={game.id}
+                  game={{
+                    id: game.id,
+                    start_time: game.time || game.date,
+                    status: game.status,
+                    home_score: game.score?.home,
+                    away_score: game.score?.away,
+                    round: game.round,
+                    venue_name: game.venue,
+                    venue_city: game.venue_city,
+                    attendance: game.attendance,
+                    home_team: {
+                      id: game.teams.home.id,
+                      name: game.teams.home.name,
+                      short_name: game.teams.home.short_name,
+                      logo_url: game.teams.home.logo_url,
+                      colors: game.teams.home.colors
+                    },
+                    away_team: {
+                      id: game.teams.away.id,
+                      name: game.teams.away.name,
+                      short_name: game.teams.away.short_name,
+                      logo_url: game.teams.away.logo_url,
+                      colors: game.teams.away.colors
+                    },
+                    league: game.league
+                  }}
+                />
+              );
+            })
+          ) : currentView === 'venues' ? (
+            // Use VenueCard for venues view
+            filteredEntities.map((entityWrapper) => {
+              const venue = entityWrapper.entity as Venue;
+              return (
+                <VenueCard
+                  key={venue.id}
+                  venue={{
+                    id: venue.id,
+                    name: venue.name,
+                    city: venue.address?.city,
+                    country: venue.address?.country,
+                    capacity: venue.capacity,
+                    surface: venue.surface,
+                    image_url: venue.media?.photos?.[0]?.url,
+                    team_count: 0, // TODO: Calculate from relationships
+                    latitude: venue.geo?.lat,
+                    longitude: venue.geo?.lng
+                  }}
+                  onClick={() => {
+                    setSelectedVenueId(venue.id);
+                    setIsVenueModalOpen(true);
+                  }}
+                />
+              );
+            })
+          ) : (
+            // Use SportsCard for other views
+            filteredEntities.map((entity) => {
+              const teamsData = teams.map(t => t.entity as Team);
+              
+              return (
+                <SportsCard
+                  key={entity.entity.id}
+                  entity={entity}
+                  view={currentView}
+                  leagues={leagues}
+                  teams={teamsData}
+                  onUpdate={(updatedEntity) => {
+                    // Update in appropriate state
+                    const entityData = updatedEntity.entity;
+                    if ('abbrev' in entityData && 'city' in entityData) {
+                      setTeams(prev => prev.map(t => t.entity.id === updatedEntity.entity.id ? updatedEntity : t));
+                    } else if ('name' in entityData && 'bio' in entityData) {
+                      setPlayers(prev => prev.map(p => p.entity.id === updatedEntity.entity.id ? updatedEntity : p));
+                    } else if ('status' in entityData && 'teams' in entityData) {
+                      setGames(prev => prev.map(g => g.entity.id === updatedEntity.entity.id ? updatedEntity : g));
+                    } else if ('capacity' in entityData && 'address' in entityData) {
+                      setVenues(prev => prev.map(v => v.entity.id === updatedEntity.entity.id ? updatedEntity : v));
+                    } else if ('stage' in entityData && 'participating_teams' in entityData) {
+                      setTournaments(prev => prev.map(t => t.entity.id === updatedEntity.entity.id ? updatedEntity : t));
+                    }
+                    setLastUpdated(new Date().toISOString());
+                    toast.success('Entity updated successfully');
+                  }}
+                  onDelete={(entityId) => {
+                    // Delete from appropriate state
+                    switch (currentView) {
+                      case 'teams':
+                        setTeams(prev => prev.filter(t => t.entity.id !== entityId));
+                        break;
+                      case 'players':
+                        setPlayers(prev => prev.filter(p => p.entity.id !== entityId));
+                        break;
+                      case 'games':
+                        setGames(prev => prev.filter(g => g.entity.id !== entityId));
+                        break;
+                      case 'venues':
+                        setVenues(prev => prev.filter(v => v.entity.id !== entityId));
+                        break;
+                      case 'tournaments':
+                        setTournaments(prev => prev.filter(t => t.entity.id !== entityId));
+                        break;
+                    }
+                    setLastUpdated(new Date().toISOString());
+                    toast.success('Entity deleted successfully');
+                  }}
+                  showOverrides={filters.showOverrides}
+                />
+              );
+            })
+          )}
         </div>
       )}
+
+      {/* Venue Details Modal */}
+      <VenueDetailsModal
+        venueId={selectedVenueId}
+        open={isVenueModalOpen}
+        onOpenChange={setIsVenueModalOpen}
+      />
     </div>
   );
 }

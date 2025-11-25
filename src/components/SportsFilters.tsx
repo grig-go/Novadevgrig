@@ -63,7 +63,10 @@ export function SportsFilters({
                 return (
                   <button
                     key={view}
-                    onClick={() => onViewChange(view)}
+                    onClick={() => {
+                      console.log('[SportsFilters] Button clicked, changing view to:', view);
+                      onViewChange(view);
+                    }}
                     className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                       currentView === view
                         ? 'bg-primary text-primary-foreground'
