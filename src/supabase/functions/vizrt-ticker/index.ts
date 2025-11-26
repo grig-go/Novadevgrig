@@ -115,8 +115,13 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone) {
     }
   }
   if (activeBuckets.length === 0) return null;
-  const playlistType = determinePlaylistType(playlist);
-  let xml = `  <playlist type="${playlistType}" name="${escapeXml(playlist.name)}" target="carousel">\n`;
+
+  // Use playlist properties for XML attributes
+  const playlistType = playlist.carousel_type || determinePlaylistType(playlist);
+  const carouselName = playlist.carousel_name || playlist.name;
+  const target = playlist.target || 'carousel';
+
+  let xml = `  <playlist type="${playlistType}" name="${escapeXml(carouselName)}" target="${escapeXml(target)}">\n`;
   // Add defaults
   xml += '    <defaults>\n';
   xml += '      <template>default_template</template>\n';
@@ -148,13 +153,63 @@ async function getElementsForBucket(bucket, supabase, includeInactive, timezone)
   const items = await getItemsForBucket(bucket, supabase, includeInactive, timezone);
   const elements = [];
   for (const item of items){
-    const element = await createElement(item, supabase);
-    elements.push(element);
+    const itemElements = await createElement(item, supabase);
+    // createElement can now return either a single element or an array of elements
+    if (Array.isArray(itemElements)) {
+      elements.push(...itemElements);
+    } else {
+      elements.push(itemElements);
+    }
   }
+
+  // Check for generateItem config to prepend a generated element as first child
+  if (bucket.content_id) {
+    const { data: bucketContent } = await supabase
+      .from('content')
+      .select('bucket_config')
+      .eq('id', bucket.content_id)
+      .single();
+
+    const generateItemConfig = bucketContent?.bucket_config?.generateItem;
+    if (generateItemConfig?.enabled && generateItemConfig?.templateId) {
+      // Fetch template name from templates table
+      const { data: template } = await supabase
+        .from('templates')
+        .select('name')
+        .eq('id', generateItemConfig.templateId)
+        .single();
+
+      if (template) {
+        const generatedElement = {
+          template: template.name,
+          fields: []
+        };
+
+        // Add field if configured
+        if (generateItemConfig.fieldName && generateItemConfig.fieldValue) {
+          generatedElement.fields.push({
+            name: generateItemConfig.fieldName,
+            value: generateItemConfig.fieldValue
+          });
+        }
+
+        // Add duration if configured
+        if (generateItemConfig.duration) {
+          generatedElement.duration = generateItemConfig.duration.toString();
+        }
+
+        // Prepend as first element
+        elements.unshift(generatedElement);
+        console.log(`Generated item with template ${template.name} as first child`);
+      }
+    }
+  }
+
   return elements;
 }
 async function getItemsForBucket(bucket, supabase, includeInactive, timezone) {
   if (!bucket.content_id) return [];
+
   // This function recursively gets all items from a container (bucket or itemFolder)
   async function getAllItemsRecursive(containerId) {
     const allItems = [];
@@ -183,8 +238,12 @@ async function getItemsForBucket(bucket, supabase, includeInactive, timezone) {
     }
     return allItems;
   }
-  // Start the recursive search from the bucket's content_id
-  return await getAllItemsRecursive(bucket.content_id);
+
+  // Get regular items from the bucket
+  const items = await getAllItemsRecursive(bucket.content_id);
+
+
+  return items;
 }
 async function createElement(item, supabase) {
   // Get item fields
@@ -217,6 +276,21 @@ async function createElement(item, supabase) {
   } else {
     console.log(`Item ${item.id} has no template_id`);
   }
+
+  // Check if this item contains a school closings component that should generate multiple elements
+  let hasSchoolClosingsComponent = false;
+  for (const field of fields || []) {
+    if (!field.name.startsWith('__')) {
+      const componentConfig = formSchema ? findComponentInSchema(formSchema, field.name) : null;
+      if (componentConfig?.type === 'schoolClosings') {
+        hasSchoolClosingsComponent = true;
+        // Process school closings and return multiple elements
+        console.log(`Found schoolClosings component, processing...`);
+        return await processSchoolClosingsComponent(field, componentConfig, supabase, item);
+      }
+    }
+  }
+
   // Add all fields, handling custom components
   for (const field of fields || []) {
     // Skip internal metadata fields
@@ -232,8 +306,23 @@ async function createElement(item, supabase) {
       // Handle Weather Cities component - fetch fresh data
       // Support both 'weatherCities' (new) and 'weatherLocations' (legacy) types
       console.log(`Found ${componentConfig.type} component, processing...`);
-      const weatherFields = await processWeatherCitiesComponent(field, componentConfig, supabase);
-      element.fields.push(...weatherFields);
+      const weatherResult = await processWeatherCitiesComponent(field, componentConfig, supabase);
+      element.fields.push(...weatherResult.fields);
+
+      // Override template name if specified in component config
+      if (weatherResult.templateName) {
+        element.template = weatherResult.templateName;
+      }
+    } else if (componentConfig?.type === 'weatherForecast') {
+      // Handle Weather Forecast component - fetch multi-day forecast
+      console.log(`Found weatherForecast component, processing...`);
+      const forecastResult = await processWeatherForecastComponent(field, componentConfig, supabase);
+      element.fields.push(...forecastResult.fields);
+
+      // Override template name if specified in component config
+      if (forecastResult.templateName) {
+        element.template = forecastResult.templateName;
+      }
     } else {
       // Regular field
       element.fields.push({
@@ -375,15 +464,166 @@ async function processWeatherCitiesComponent(field, config, supabase) {
     }
   }
 
-  // Add template field if specified
-  if (templateName && fields.length > 0) {
-    fields.unshift({
-      name: '_template',
-      value: templateName
-    });
+  // Don't add _template field - the template is already handled by element.template
+  // Return both fields and templateName for override
+  return {
+    fields,
+    templateName: templateName || null
+  };
+}
+
+// Process Weather Forecast component - fetch multi-day forecast data
+async function processWeatherForecastComponent(field, config, supabase) {
+  const fields = [];
+
+  // Get component settings
+  const templateName = config.templateName || '';
+  const dayPrefix = config.dayPrefix || 'DAY';
+  const highPrefix = config.highPrefix || 'HI';
+  const lowPrefix = config.lowPrefix || 'LO';
+  const conditionPrefix = config.conditionPrefix || 'COND';
+  const numDays = config.numDays || 3;
+
+  // Parse the stored value to get selected location ID
+  let locationId = null;
+  try {
+    const value = field.value;
+    if (value && typeof value === 'string') {
+      // The value should be the location ID
+      locationId = value;
+    }
+  } catch (e) {
+    console.error('Error parsing weather forecast value:', e);
   }
 
-  return fields;
+  // If we have a location ID, fetch fresh forecast data
+  if (locationId) {
+    // Fetch weather location from database
+    const { data: location } = await supabase
+      .from('weather_locations')
+      .select('*')
+      .eq('id', locationId)
+      .single();
+
+    if (location) {
+      // Fetch forecast from Open-Meteo API
+      const response = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&daily=temperature_2m_max,temperature_2m_min,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=${numDays}`
+      );
+      const data = await response.json();
+
+      if (data?.daily) {
+        const dayAbbreviations = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        // Generate fields for each day
+        for (let i = 0; i < numDays && i < data.daily.time.length; i++) {
+          const date = new Date(data.daily.time[i]);
+          const dayAbbr = dayAbbreviations[date.getDay()];
+          const high = Math.round(data.daily.temperature_2m_max[i]);
+          const low = Math.round(data.daily.temperature_2m_min[i]);
+          const condition = getWeatherDescription(data.daily.weather_code[i]);
+
+          // Add fields with numeric suffix (0, 1, 2, etc.)
+          fields.push(
+            { name: `${dayPrefix}${i}`, value: dayAbbr },
+            { name: `${highPrefix}${i}`, value: String(high) },
+            { name: `${lowPrefix}${i}`, value: String(low) },
+            { name: `${conditionPrefix}${i}`, value: condition }
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    fields,
+    templateName: templateName || null
+  };
+}
+
+// Process School Closings component - generates multiple elements, one per closing
+async function processSchoolClosingsComponent(field, config, supabase, item) {
+  const elements = [];
+
+  // Get component settings
+  const templateName = config.templateName || '';
+  const field1 = config.field1 || '01';
+  const field2 = config.field2 || '02';
+  const format1 = config.format1 || '{{organization}}';
+  const format2 = config.format2 || '{{status}}';
+  const regionId = config.defaultRegionId || '';
+  const zoneId = config.defaultZoneId || '';
+
+  try {
+    // Build query with optional filters
+    let query = supabase
+      .from('school_closings')
+      .select('*');
+
+    // Apply filters if provided
+    if (regionId) {
+      query = query.eq('region_id', regionId);
+    }
+
+    if (zoneId) {
+      query = query.eq('zone_id', zoneId);
+    }
+
+    // Execute query with ordering
+    const { data: closings, error } = await query.order('fetched_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching school closings:', error);
+      return [];
+    }
+
+    // Generate one element per closing
+    for (const closing of closings || []) {
+      // Build template variables
+      const vars = {
+        organization: closing.organization_name || 'N/A',
+        region: closing.region_name || closing.region_id || 'N/A',
+        zone: closing.zone_name || closing.zone_id || 'N/A',
+        status: closing.status_description || 'Closed',
+        statusDay: closing.status_day || 'N/A',
+        city: closing.city || '',
+        county: closing.county_name || '',
+        state: closing.state || ''
+      };
+
+      // Replace template variables in format strings
+      let formatted1 = format1;
+      let formatted2 = format2;
+      for (const [key, value] of Object.entries(vars)) {
+        formatted1 = formatted1.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+        formatted2 = formatted2.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value));
+      }
+
+      // Create element for this closing
+      const element = {
+        fields: [
+          { name: field1, value: formatted1 },
+          { name: field2, value: formatted2 }
+        ]
+      };
+
+      // Add template name if specified
+      if (templateName) {
+        element.template = templateName;
+      }
+
+      // Add duration from item if specified
+      if (item.duration && item.duration > 0) {
+        element.duration = item.duration.toString();
+      }
+
+      elements.push(element);
+    }
+  } catch (error) {
+    console.error('Error processing school closings:', error);
+  }
+
+  return elements;
 }
 
 // Fetch current weather from Open-Meteo API
@@ -441,6 +681,10 @@ function getWeatherDescription(code) {
 function buildElementXml(element, indent) {
   const spaces = '  '.repeat(indent);
   let xml = `${spaces}<element>\n`;
+  // Add template first if specified
+  if (element.template) {
+    xml += `${spaces}  <template>${escapeXml(element.template)}</template>\n`;
+  }
   // Add fields
   for (const field of element.fields){
     xml += `${spaces}  <field name="${escapeXml(field.name)}">${escapeXml(field.value)}</field>\n`;
@@ -448,9 +692,6 @@ function buildElementXml(element, indent) {
   // Add optional properties
   if (element.duration) {
     xml += `${spaces}  <duration>${element.duration}</duration>\n`;
-  }
-  if (element.template) {
-    xml += `${spaces}  <template>${escapeXml(element.template)}</template>\n`;
   }
   if (element.ttl) {
     xml += `${spaces}  <ttl action="${element.ttl.action}">${element.ttl.value}</ttl>\n`;
