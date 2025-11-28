@@ -8,7 +8,7 @@ export async function saveCustomName(
   row: any, 
   newName: string
 ): Promise<string> {
-  const url = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf/stocks/custom-name`;
+  const url = `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/custom-name`;
 
   // Optimistic UI update
   const prev = row.custom_name;

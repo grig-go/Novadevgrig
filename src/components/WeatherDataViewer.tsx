@@ -134,7 +134,7 @@ export function WeatherDataViewer() {
     setError(null);
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-cbef71cf`;
+      const baseUrl = `https://${projectId}.supabase.co/functions/v1/weather_dashboard`;
       const headers = {
         'Authorization': `Bearer ${publicAnonKey}`,
         'Content-Type': 'application/json',
