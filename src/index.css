@@ -7353,6 +7353,7 @@
 html {
   font-size: var(--font-size);
 }
+}
 
 @property --tw-translate-x {
   syntax: "*";
