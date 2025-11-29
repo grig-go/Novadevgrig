@@ -228,14 +228,14 @@ export function AgentsDashboardWithSupabase({
     category: feed.category
   }));
 
-  // Cleanup unused Nova Weather data sources
+  // Cleanup unused Nova Weather, Nova Election, and Nova Finance data sources
   const cleanupUnusedNovaSources = async () => {
     try {
-      // Get all Nova Weather and Nova Election data sources
+      // Get all Nova Weather, Nova Election, and Nova Finance data sources
       const { data: novaSources, error: sourcesError } = await supabase
         .from('data_sources')
         .select('id, name, category')
-        .in('category', ['Nova Weather', 'Nova Election']);
+        .in('category', ['Nova Weather', 'Nova Election', 'Nova Finance']);
 
       if (sourcesError) {
         console.error('Failed to fetch Nova sources:', sourcesError);

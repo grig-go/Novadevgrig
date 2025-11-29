@@ -77,6 +77,26 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
     }
   }
 
+  // Transform /nova/finance URLs to actual Supabase Edge Function URLs
+  // This allows users to use any domain (localhost, dev server, etc.) for testing
+  // and it will automatically use the correct Supabase Edge Function URL
+  let isNovaFinanceUrl = false;
+  if (url.includes('/nova/finance')) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    if (supabaseUrl) {
+      // Extract query string if present
+      const urlObj = new URL(url);
+      const queryString = urlObj.search; // includes the '?' if present
+
+      // Replace with Supabase Edge Function URL
+      url = `${supabaseUrl}/functions/v1/nova-finance${queryString}`;
+      isNovaFinanceUrl = true;
+      console.log(`Transformed /nova/finance URL to: ${url}`);
+    } else {
+      console.warn("SUPABASE_URL not found, cannot transform /nova/finance URL");
+    }
+  }
+
   // Check if there are parameter mappings configured
   if (apiConfig.parameter_mappings && Array.isArray(apiConfig.parameter_mappings)) {
     console.log("Processing parameter mappings:", apiConfig.parameter_mappings);
@@ -122,6 +142,14 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
       console.log("Added Supabase authentication headers for nova-weather");
+    }
+  } else if (isNovaFinanceUrl) {
+    // For transformed nova-finance URLs, use Supabase anon key
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (anonKey) {
+      headers["Authorization"] = `Bearer ${anonKey}`;
+      headers["apikey"] = anonKey;
+      console.log("Added Supabase authentication headers for nova-finance");
     }
   } else if (apiConfig.auth_type === "bearer" && apiConfig.auth_token) {
     headers["Authorization"] = `Bearer ${apiConfig.auth_token}`;

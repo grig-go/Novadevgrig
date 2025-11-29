@@ -38,7 +38,7 @@ interface AgentWizardProps {
 
 type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
-const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather', 'Nova Election'];
+const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather', 'Nova Election', 'Nova Finance'];
 
 const dataTypeIcons: Record<AgentDataType, any> = {
   'Elections': Vote,
@@ -47,7 +47,8 @@ const dataTypeIcons: Record<AgentDataType, any> = {
   'Weather': Cloud,
   'News': Newspaper,
   'Nova Weather': Cloud,
-  'Nova Election': Vote
+  'Nova Election': Vote,
+  'Nova Finance': TrendingUp
 };
 
 export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds = [] }: AgentWizardProps) {
@@ -120,6 +121,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   const [novaWeatherProviders, setNovaWeatherProviders] = useState<Array<{ id: string; name: string; type: string }>>([]);
   const [novaWeatherChannels, setNovaWeatherChannels] = useState<Array<{ id: string; name: string }>>([]);
   const [novaWeatherStates, setNovaWeatherStates] = useState<string[]>([]);
+
+  // State for Nova Finance dynamic options
+  const [novaFinanceSymbols, setNovaFinanceSymbols] = useState<Array<{ symbol: string; name: string; custom_name?: string; type: string }>>([]);
 
   // State names mapping for Nova Election
   const stateNames: Record<string, string> = {
@@ -227,6 +231,45 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     };
 
     loadNovaWeatherOptions();
+  }, [newDataSources]);
+
+  // Load Nova Finance options when needed
+  useEffect(() => {
+    const hasNovaFinance = newDataSources.some(ds => ds.category === 'Nova Finance');
+    if (!hasNovaFinance) return;
+
+    const loadNovaFinanceOptions = async () => {
+      try {
+        // Load stocks/crypto from finance dashboard
+        const stocksResponse = await fetch(
+          `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+          }
+        );
+        if (stocksResponse.ok) {
+          const stocksData = await stocksResponse.json();
+          if (stocksData.ok && stocksData.stocks) {
+            // Map to format with display name
+            const symbols = stocksData.stocks.map((stock: any) => ({
+              symbol: stock.symbol,
+              name: stock.name,
+              custom_name: stock.custom_name,
+              type: stock.type
+            }));
+            // Sort by symbol
+            symbols.sort((a: any, b: any) => a.symbol.localeCompare(b.symbol));
+            setNovaFinanceSymbols(symbols);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading Nova Finance options:', error);
+      }
+    };
+
+    loadNovaFinanceOptions();
   }, [newDataSources]);
 
   // Check if slug already exists
@@ -595,7 +638,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
       // Load existing Nova Weather or Nova Election data sources into newDataSources for editing
       const novaSources = (editAgent.dataSources || []).filter(
-        (ds: AgentDataSource) => ds.category === 'Nova Weather' || ds.category === 'Nova Election'
+        (ds: AgentDataSource) => ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance'
       );
 
       if (novaSources.length > 0) {
@@ -625,6 +668,17 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 raceType: params.get('raceType') || 'presidential',
                 level: params.get('level') || 'state',
                 state: params.get('state') || 'all'
+              }
+            };
+          } else if (ds.category === 'Nova Finance' && api_config?.url && !api_config.novaFinanceFilters) {
+            const url = new URL(api_config.url);
+            const params = new URLSearchParams(url.search);
+            api_config = {
+              ...api_config,
+              novaFinanceFilters: {
+                type: params.get('type') || 'all',
+                change: params.get('change') || 'all',
+                symbol: params.get('symbol') || 'all'
               }
             };
           }
@@ -676,11 +730,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [editAgent, open]);
 
-  // Check if Nova Weather or Nova Election is selected
+  // Check if Nova Weather, Nova Election, or Nova Finance is selected
   const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
   const hasNovaWeatherSelected = selectedDataTypes.includes('Nova Weather');
   const hasNovaElectionSelected = selectedDataTypes.includes('Nova Election');
-  const hasNovaSourceSelected = hasNovaWeatherSelected || hasNovaElectionSelected;
+  const hasNovaFinanceSelected = selectedDataTypes.includes('Nova Finance');
+  const hasNovaSourceSelected = hasNovaWeatherSelected || hasNovaElectionSelected || hasNovaFinanceSelected;
 
   // Dynamic steps - exclude dataSources when Nova Weather/Election is selected, include configureNewSources for Nova sources
   const steps: WizardStep[] = [
@@ -916,6 +971,39 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
       }
+
+      if (selectedDataTypes.includes('Nova Finance')) {
+        // Generate unique ID for Nova Finance
+        const uniqueId = Date.now().toString();
+        const currentDomain = window.location.origin;
+
+        // Create a Nova Finance data source with default filters
+        const novaFinanceSource = {
+          name: `Nova Finance ${uniqueId}`,
+          type: 'api',
+          category: 'Nova Finance',
+          api_config: {
+            url: `${currentDomain}/nova/finance?type=all&change=all&symbol=all`,
+            method: 'GET',
+            headers: {},
+            data_path: 'securities',  // Use data_path for the actual field
+            dataPath: 'securities',    // Keep both for compatibility
+            dynamicUrlParams: [],
+            // Store Nova Finance filter settings
+            novaFinanceFilters: {
+              type: 'all',
+              change: 'all',
+              symbol: 'all'
+            }
+          }
+        };
+
+        // Set the new data source and skip to configureNewSources
+        setNewDataSources([novaFinanceSource]);
+        setCurrentStep('configureNewSources');
+        setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
+        return;
+      }
     }
 
     // Check if we're leaving the "configureNewSources" step
@@ -1098,9 +1186,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     // Sync auth settings from SecurityStep before saving and get the auth data synchronously
     const authData = securityStepRef.current?.syncAuthToFormData();
 
-    // First, save/update Nova Weather or Nova Election data sources if needed
+    // First, save/update Nova Weather, Nova Election, or Nova Finance data sources if needed
     const hasNovaSources = newDataSources.some(ds =>
-      (ds.category === 'Nova Weather' || ds.category === 'Nova Election') && ds.name && ds.type && (ds.isExisting || !ds.id)
+      (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance') && ds.name && ds.type && (ds.isExisting || !ds.id)
     );
 
     if (hasNovaSources) {
@@ -1116,9 +1204,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     const savedDataSourceIds: string[] = [];
     const newlySavedSources: AgentDataSource[] = [];
 
-    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election
+    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election/Finance
     const unsavedSources = newDataSources.filter(ds =>
-      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election'
+      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election' && ds.category !== 'Nova Finance'
     );
     if (unsavedSources.length > 0) {
       console.log('Saving new data sources to database...');
@@ -1234,12 +1322,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleClose = async (agentSavedSuccessfully: boolean = false) => {
-    // Clean up any Nova Weather or Nova Election data sources that were saved but not associated with an agent
+    // Clean up any Nova Weather, Nova Election, or Nova Finance data sources that were saved but not associated with an agent
     // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
     // AND only in create mode, not edit mode (in edit mode, sources already belong to an agent)
     if (!agentSavedSuccessfully && !editAgent) {
       const novaSources = newDataSources.filter(
-        ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election') && ds.id && !ds.isExisting
+        ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance') && ds.id && !ds.isExisting
       );
 
       if (novaSources.length > 0) {
@@ -1482,11 +1570,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
         // Remove category
         newCategories = selectedCategories.filter(c => c !== category);
       } else {
-        // Special handling for Nova Weather and Nova Election - they should be exclusive
-        if (category === 'Nova Weather' || category === 'Nova Election') {
+        // Special handling for Nova Weather, Nova Election, and Nova Finance - they should be exclusive
+        if (category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance') {
           // Clear all other selections when Nova source is selected
           newCategories = [category];
-        } else if (selectedCategories.includes('Nova Weather') || selectedCategories.includes('Nova Election')) {
+        } else if (selectedCategories.includes('Nova Weather') || selectedCategories.includes('Nova Election') || selectedCategories.includes('Nova Finance')) {
           // If a Nova source is currently selected, replace it with the new selection
           newCategories = [category];
         } else {
@@ -1528,7 +1616,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{category}</h3>
-                      {(category === 'Nova Weather' || category === 'Nova Election') && (
+                      {(category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance') && (
                         <Badge className="bg-orange-500 text-white hover:bg-orange-600">
                           Nova
                         </Badge>
@@ -1998,7 +2086,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                           };
                           setNewDataSources(updated);
                         }}
-                        placeholder={source.category === 'Nova Weather' ? "locations" : source.category === 'Nova Election' ? "races" : "data.items"}
+                        placeholder={source.category === 'Nova Weather' ? "locations" : source.category === 'Nova Election' ? "races" : source.category === 'Nova Finance' ? "securities" : "data.items"}
                       />
                       <p className="text-xs text-muted-foreground">
                         JSON path to the array of items (e.g., 'data.items' or 'results')
@@ -2396,8 +2484,152 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       </div>
                     )}
 
-                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather and Nova Election */}
-                    {source.category !== 'Nova Weather' && source.category !== 'Nova Election' && (
+                    {/* Nova Finance Filter Options */}
+                    {source.category === 'Nova Finance' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Filter Options</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Configure query parameters for the Nova Finance API
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label className="text-sm">Type</Label>
+                            <Select
+                              value={source.api_config?.novaFinanceFilters?.type || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaFinanceFilters || {};
+                                filters.type = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'all',
+                                  change: filters.change || 'all',
+                                  symbol: filters.symbol || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaFinanceFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All</SelectItem>
+                                <SelectItem value="stocks">Stocks</SelectItem>
+                                <SelectItem value="crypto">Crypto</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Change</Label>
+                            <Select
+                              value={source.api_config?.novaFinanceFilters?.change || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaFinanceFilters || {};
+                                filters.change = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'all',
+                                  change: filters.change || 'all',
+                                  symbol: filters.symbol || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaFinanceFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select change" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All</SelectItem>
+                                <SelectItem value="up">Up</SelectItem>
+                                <SelectItem value="down">Down</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Symbol</Label>
+                            <Select
+                              value={source.api_config?.novaFinanceFilters?.symbol || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaFinanceFilters || {};
+                                filters.symbol = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  type: filters.type || 'all',
+                                  change: filters.change || 'all',
+                                  symbol: filters.symbol || 'all'
+                                });
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting, // Explicitly preserve the flag
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaFinanceFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select symbol" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Symbols</SelectItem>
+                                {novaFinanceSymbols.map((stock) => (
+                                  <SelectItem key={stock.symbol} value={stock.symbol}>
+                                    {stock.custom_name || stock.name} ({stock.symbol})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Show current URL preview */}
+                        <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                          <p className="text-xs text-green-700 dark:text-green-300 font-mono break-all">
+                            {source.api_config?.url || ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather, Nova Election, and Nova Finance */}
+                    {source.category !== 'Nova Weather' && source.category !== 'Nova Election' && source.category !== 'Nova Finance' && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
@@ -3446,9 +3678,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       case 'dataSources':
         return 'Data Sources';
       case 'configureNewSources':
-        // Check if Nova Weather is selected and if in edit mode
+        // Check if Nova Weather, Nova Election, or Nova Finance is selected and if in edit mode
         const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
-        if (selectedDataTypes.includes('Nova Weather')) {
+        if (selectedDataTypes.includes('Nova Weather') || selectedDataTypes.includes('Nova Election') || selectedDataTypes.includes('Nova Finance')) {
           return editAgent ? 'Configure Data Source' : 'Configure New Sources';
         }
         return 'Configure New Sources';
