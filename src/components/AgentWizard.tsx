@@ -38,7 +38,7 @@ interface AgentWizardProps {
 
 type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
-const dataTypeCategories: AgentDataType[] = ['Elections', 'Finance', 'Sports', 'Weather', 'News', 'Nova Weather', 'Nova Election', 'Nova Finance'];
+const dataTypeCategories: AgentDataType[] = ['Nova Election', 'Nova Finance', 'Nova Weather', 'Elections', 'Finance', 'Sports', 'Weather', 'News'];
 
 const dataTypeIcons: Record<AgentDataType, any> = {
   'Elections': Vote,
