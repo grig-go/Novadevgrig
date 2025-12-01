@@ -39,18 +39,42 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   let isNovaElectionUrl = false;
   let isNovaWeatherUrl = false;
 
+  // Helper function to merge query parameters
+  // Agent URL params (queryParams) override configured URL params
+  const mergeNovaQueryParams = (configuredUrl: string, agentQueryParams: Record<string, string>): string => {
+    const urlObj = new URL(configuredUrl);
+    const configuredParams = new URLSearchParams(urlObj.search);
+
+    // Start with configured params, then override with agent query params
+    const mergedParams = new URLSearchParams();
+
+    // Add all configured params first
+    configuredParams.forEach((value, key) => {
+      mergedParams.set(key, value);
+    });
+
+    // Override with agent query params (these take precedence)
+    Object.entries(agentQueryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        mergedParams.set(key, value);
+        console.log(`Query param override: ${key}=${value}`);
+      }
+    });
+
+    return mergedParams.toString() ? `?${mergedParams.toString()}` : '';
+  };
+
   // Transform /nova/election URLs to actual Supabase Edge Function URLs
   // This allows users to use any domain (localhost, dev server, etc.) for testing
   // and it will automatically use the correct Supabase Edge Function URL
   if (url.includes('/nova/election')) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     if (supabaseUrl) {
-      // Extract query string if present
-      const urlObj = new URL(url);
-      const queryString = urlObj.search; // includes the '?' if present
+      // Merge configured params with agent query params (agent params override)
+      const mergedQueryString = mergeNovaQueryParams(url, queryParams);
 
       // Replace with Supabase Edge Function URL
-      url = `${supabaseUrl}/functions/v1/nova-election${queryString}`;
+      url = `${supabaseUrl}/functions/v1/nova-election${mergedQueryString}`;
       isNovaElectionUrl = true;
       console.log(`Transformed /nova/election URL to: ${url}`);
     } else {
@@ -64,12 +88,11 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   if (url.includes('/nova/weather')) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     if (supabaseUrl) {
-      // Extract query string if present
-      const urlObj = new URL(url);
-      const queryString = urlObj.search; // includes the '?' if present
+      // Merge configured params with agent query params (agent params override)
+      const mergedQueryString = mergeNovaQueryParams(url, queryParams);
 
       // Replace with Supabase Edge Function URL
-      url = `${supabaseUrl}/functions/v1/nova-weather${queryString}`;
+      url = `${supabaseUrl}/functions/v1/nova-weather${mergedQueryString}`;
       isNovaWeatherUrl = true;
       console.log(`Transformed /nova/weather URL to: ${url}`);
     } else {
@@ -84,12 +107,11 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   if (url.includes('/nova/finance')) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     if (supabaseUrl) {
-      // Extract query string if present
-      const urlObj = new URL(url);
-      const queryString = urlObj.search; // includes the '?' if present
+      // Merge configured params with agent query params (agent params override)
+      const mergedQueryString = mergeNovaQueryParams(url, queryParams);
 
       // Replace with Supabase Edge Function URL
-      url = `${supabaseUrl}/functions/v1/nova-finance${queryString}`;
+      url = `${supabaseUrl}/functions/v1/nova-finance${mergedQueryString}`;
       isNovaFinanceUrl = true;
       console.log(`Transformed /nova/finance URL to: ${url}`);
     } else {
