@@ -38,7 +38,7 @@ interface AgentWizardProps {
 
 type WizardStep = 'basic' | 'dataType' | 'dataSources' | 'configureNewSources' | 'relationships' | 'outputFormat' | 'transformations' | 'security' | 'test' | 'review';
 
-const dataTypeCategories: AgentDataType[] = ['Nova Election', 'Nova Finance', 'Nova Weather', 'Elections', 'Finance', 'Sports', 'Weather', 'News'];
+const dataTypeCategories: AgentDataType[] = ['Nova Election', 'Nova Finance', 'Nova Weather', 'Nova Sports', 'Elections', 'Finance', 'Sports', 'Weather', 'News'];
 
 const dataTypeIcons: Record<AgentDataType, any> = {
   'Elections': Vote,
@@ -48,7 +48,8 @@ const dataTypeIcons: Record<AgentDataType, any> = {
   'News': Newspaper,
   'Nova Weather': Cloud,
   'Nova Election': Vote,
-  'Nova Finance': TrendingUp
+  'Nova Finance': TrendingUp,
+  'Nova Sports': Trophy
 };
 
 export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds = [] }: AgentWizardProps) {
@@ -124,6 +125,11 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
   // State for Nova Finance dynamic options
   const [novaFinanceSymbols, setNovaFinanceSymbols] = useState<Array<{ symbol: string; name: string; custom_name?: string; type: string }>>([]);
+
+  // State for Nova Sports dynamic options
+  const [novaSportsLeagues, setNovaSportsLeagues] = useState<Array<{ id: string; name: string; abbrev?: string }>>([]);
+  const [novaSportsProviders, setNovaSportsProviders] = useState<Array<{ id: string; name: string; type: string }>>([]);
+  const [novaSportsSeasons, setNovaSportsSeasons] = useState<Array<{ id: string; name: string; year: string; league_id: string }>>([]);
 
   // State names mapping for Nova Election
   const stateNames: Record<string, string> = {
@@ -270,6 +276,64 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     };
 
     loadNovaFinanceOptions();
+  }, [newDataSources]);
+
+  // Load Nova Sports options when needed
+  useEffect(() => {
+    const hasNovaSports = newDataSources.some(ds => ds.category === 'Nova Sports');
+    if (!hasNovaSports) return;
+
+    const loadNovaSportsOptions = async () => {
+      try {
+        // Load leagues from sports_leagues table
+        const { data: leaguesData, error: leaguesError } = await supabase
+          .from('sports_leagues')
+          .select('id, name, alternative_name')
+          .order('name');
+
+        if (!leaguesError && leaguesData) {
+          setNovaSportsLeagues(leaguesData.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            abbrev: l.alternative_name || l.name
+          })));
+        }
+
+        // Load providers from data_providers_public view (category = sports)
+        const providersResponse = await fetch(
+          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
+          {
+            headers: {
+              Authorization: `Bearer ${publicAnonKey}`,
+              apikey: publicAnonKey,
+            },
+          }
+        );
+        if (providersResponse.ok) {
+          const providersList = await providersResponse.json();
+          setNovaSportsProviders(providersList.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            type: p.type
+          })));
+        }
+
+        // Load seasons from sports_seasons table
+        const { data: seasonsData, error: seasonsError } = await supabase
+          .from('sports_seasons')
+          .select('id, name, year, league_id')
+          .eq('is_current', true)
+          .order('name');
+
+        if (!seasonsError && seasonsData) {
+          setNovaSportsSeasons(seasonsData);
+        }
+      } catch (error) {
+        console.error('Error loading Nova Sports options:', error);
+      }
+    };
+
+    loadNovaSportsOptions();
   }, [newDataSources]);
 
   // Check if slug already exists
@@ -638,7 +702,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
       // Load existing Nova Weather or Nova Election data sources into newDataSources for editing
       const novaSources = (editAgent.dataSources || []).filter(
-        (ds: AgentDataSource) => ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance'
+        (ds: AgentDataSource) => ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports'
       );
 
       if (novaSources.length > 0) {
@@ -679,6 +743,20 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                 type: params.get('type') || 'all',
                 change: params.get('change') || 'all',
                 symbol: params.get('symbol') || 'all'
+              }
+            };
+          } else if (ds.category === 'Nova Sports' && api_config?.url && !api_config.novaSportsFilters) {
+            const url = new URL(api_config.url);
+            const params = new URLSearchParams(url.search);
+            api_config = {
+              ...api_config,
+              novaSportsFilters: {
+                view: params.get('view') || 'teams',
+                league: params.get('league') || 'all',
+                provider: params.get('provider') || 'all',
+                position: params.get('position') || 'all',
+                status: params.get('status') || 'all',
+                season: params.get('season') || 'all'
               }
             };
           }
@@ -730,12 +808,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     }
   }, [editAgent, open]);
 
-  // Check if Nova Weather, Nova Election, or Nova Finance is selected
+  // Check if Nova Weather, Nova Election, Nova Finance, or Nova Sports is selected
   const selectedDataTypes = Array.isArray(formData.dataType) ? formData.dataType : (formData.dataType ? [formData.dataType] : []);
   const hasNovaWeatherSelected = selectedDataTypes.includes('Nova Weather');
   const hasNovaElectionSelected = selectedDataTypes.includes('Nova Election');
   const hasNovaFinanceSelected = selectedDataTypes.includes('Nova Finance');
-  const hasNovaSourceSelected = hasNovaWeatherSelected || hasNovaElectionSelected || hasNovaFinanceSelected;
+  const hasNovaSportsSelected = selectedDataTypes.includes('Nova Sports');
+  const hasNovaSourceSelected = hasNovaWeatherSelected || hasNovaElectionSelected || hasNovaFinanceSelected || hasNovaSportsSelected;
 
   // Dynamic steps - exclude dataSources when Nova Weather/Election is selected, include configureNewSources for Nova sources
   const steps: WizardStep[] = [
@@ -1000,6 +1079,42 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
 
         // Set the new data source and skip to configureNewSources
         setNewDataSources([novaFinanceSource]);
+        setCurrentStep('configureNewSources');
+        setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
+        return;
+      }
+
+      if (selectedDataTypes.includes('Nova Sports')) {
+        // Generate unique ID for Nova Sports
+        const uniqueId = Date.now().toString();
+        const currentDomain = window.location.origin;
+
+        // Create a Nova Sports data source with default filters
+        const novaSportsSource = {
+          name: `Nova Sports ${uniqueId}`,
+          type: 'api',
+          category: 'Nova Sports',
+          api_config: {
+            url: `${currentDomain}/nova/sports?view=teams&league=all&provider=all`,
+            method: 'GET',
+            headers: {},
+            data_path: 'data',  // Use data_path for the actual field
+            dataPath: 'data',    // Keep both for compatibility
+            dynamicUrlParams: [],
+            // Store Nova Sports filter settings
+            novaSportsFilters: {
+              view: 'teams',
+              league: 'all',
+              provider: 'all',
+              position: 'all',
+              status: 'all',
+              season: 'all'
+            }
+          }
+        };
+
+        // Set the new data source and skip to configureNewSources
+        setNewDataSources([novaSportsSource]);
         setCurrentStep('configureNewSources');
         setVisitedSteps((prev: Set<WizardStep>) => new Set([...prev, 'dataSources', 'configureNewSources']));
         return;
@@ -2086,7 +2201,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                           };
                           setNewDataSources(updated);
                         }}
-                        placeholder={source.category === 'Nova Weather' ? "locations" : source.category === 'Nova Election' ? "races" : source.category === 'Nova Finance' ? "securities" : "data.items"}
+                        placeholder={source.category === 'Nova Weather' ? "locations" : source.category === 'Nova Election' ? "races" : source.category === 'Nova Finance' ? "securities" : source.category === 'Nova Sports' ? "data" : "data.items"}
                       />
                       <p className="text-xs text-muted-foreground">
                         JSON path to the array of items (e.g., 'data.items' or 'results')
@@ -2628,8 +2743,333 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       </div>
                     )}
 
-                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather, Nova Election, and Nova Finance */}
-                    {source.category !== 'Nova Weather' && source.category !== 'Nova Election' && source.category !== 'Nova Finance' && (
+                    {/* Nova Sports Filter Options */}
+                    {source.category === 'Nova Sports' && (
+                      <div className="space-y-3">
+                        <div>
+                          <Label>Filter Options</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Configure query parameters for the Nova Sports API
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="space-y-2">
+                            <Label className="text-sm">View</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.view || 'teams'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.view = value;
+                                // Reset view-specific filters when view changes
+                                if (value !== 'players') filters.position = 'all';
+                                if (value !== 'games') filters.status = 'all';
+                                if (value !== 'standings') filters.season = 'all';
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                // Add view-specific params
+                                if (filters.view === 'players' && filters.position !== 'all') {
+                                  params.set('position', filters.position);
+                                }
+                                if (filters.view === 'games' && filters.status !== 'all') {
+                                  params.set('status', filters.status);
+                                }
+                                if (filters.view === 'standings' && filters.season !== 'all') {
+                                  params.set('season', filters.season);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select view" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="teams">Teams</SelectItem>
+                                <SelectItem value="standings">Standings</SelectItem>
+                                <SelectItem value="players">Players</SelectItem>
+                                <SelectItem value="games">Games</SelectItem>
+                                <SelectItem value="venues">Venues</SelectItem>
+                                <SelectItem value="tournaments">Tournaments</SelectItem>
+                                <SelectItem value="betting">Betting</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">League</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.league || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.league = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                if (filters.view === 'players' && filters.position !== 'all') {
+                                  params.set('position', filters.position);
+                                }
+                                if (filters.view === 'games' && filters.status !== 'all') {
+                                  params.set('status', filters.status);
+                                }
+                                if (filters.view === 'standings' && filters.season !== 'all') {
+                                  params.set('season', filters.season);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select league" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Leagues</SelectItem>
+                                {novaSportsLeagues.map((league) => (
+                                  <SelectItem key={league.id} value={league.id}>
+                                    {league.abbrev || league.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-sm">Provider</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.provider || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.provider = value;
+
+                                // Update the URL with new query parameters
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                if (filters.view === 'players' && filters.position !== 'all') {
+                                  params.set('position', filters.position);
+                                }
+                                if (filters.view === 'games' && filters.status !== 'all') {
+                                  params.set('status', filters.status);
+                                }
+                                if (filters.view === 'standings' && filters.season !== 'all') {
+                                  params.set('season', filters.season);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select provider" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Providers</SelectItem>
+                                {novaSportsProviders.map((provider) => (
+                                  <SelectItem key={provider.id} value={provider.id}>
+                                    {provider.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+
+                        {/* Conditional filters based on view */}
+                        {source.api_config?.novaSportsFilters?.view === 'players' && (
+                          <div className="space-y-2">
+                            <Label className="text-sm">Position</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.position || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.position = value;
+
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                if (filters.position !== 'all') {
+                                  params.set('position', filters.position);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Positions</SelectItem>
+                                {['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'].map((pos) => (
+                                  <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {source.api_config?.novaSportsFilters?.view === 'games' && (
+                          <div className="space-y-2">
+                            <Label className="text-sm">Status</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.status || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.status = value;
+
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                if (filters.status !== 'all') {
+                                  params.set('status', filters.status);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Statuses</SelectItem>
+                                <SelectItem value="scheduled">Scheduled</SelectItem>
+                                <SelectItem value="in_progress">In Progress</SelectItem>
+                                <SelectItem value="final">Final</SelectItem>
+                                <SelectItem value="postponed">Postponed</SelectItem>
+                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {source.api_config?.novaSportsFilters?.view === 'standings' && (
+                          <div className="space-y-2">
+                            <Label className="text-sm">Season</Label>
+                            <Select
+                              value={source.api_config?.novaSportsFilters?.season || 'all'}
+                              onValueChange={(value: any) => {
+                                const updated = [...newDataSources];
+                                const filters = updated[actualIndex].api_config.novaSportsFilters || {};
+                                filters.season = value;
+
+                                const baseUrl = updated[actualIndex].api_config.url.split('?')[0];
+                                const params = new URLSearchParams({
+                                  view: filters.view || 'teams',
+                                  league: filters.league || 'all',
+                                  provider: filters.provider || 'all'
+                                });
+                                if (filters.season !== 'all') {
+                                  params.set('season', filters.season);
+                                }
+
+                                updated[actualIndex] = {
+                                  ...updated[actualIndex],
+                                  isExisting: updated[actualIndex].isExisting,
+                                  api_config: {
+                                    ...updated[actualIndex].api_config,
+                                    url: `${baseUrl}?${params.toString()}`,
+                                    novaSportsFilters: filters
+                                  }
+                                };
+                                setNewDataSources(updated);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select season" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All Seasons</SelectItem>
+                                {novaSportsSeasons
+                                  .filter(s => source.api_config?.novaSportsFilters?.league === 'all' || s.league_id === source.api_config?.novaSportsFilters?.league)
+                                  .map((season) => (
+                                    <SelectItem key={season.id} value={season.id}>
+                                      {season.name} ({season.year})
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {/* Show current URL preview */}
+                        <div className="p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border border-orange-200 dark:border-orange-800">
+                          <p className="text-xs text-orange-700 dark:text-orange-300 font-mono break-all">
+                            {source.api_config?.url || ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dynamic URL Parameters Section - Hidden for Nova Weather, Nova Election, Nova Finance, and Nova Sports */}
+                    {source.category !== 'Nova Weather' && source.category !== 'Nova Election' && source.category !== 'Nova Finance' && source.category !== 'Nova Sports' && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div>

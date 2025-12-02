@@ -119,6 +119,25 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
     }
   }
 
+  // Transform /nova/sports URLs to actual Supabase Edge Function URLs
+  // This allows users to use any domain (localhost, dev server, etc.) for testing
+  // and it will automatically use the correct Supabase Edge Function URL
+  let isNovaSportsUrl = false;
+  if (url.includes('/nova/sports')) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    if (supabaseUrl) {
+      // Merge configured params with agent query params (agent params override)
+      const mergedQueryString = mergeNovaQueryParams(url, queryParams);
+
+      // Replace with Supabase Edge Function URL
+      url = `${supabaseUrl}/functions/v1/nova-sports${mergedQueryString}`;
+      isNovaSportsUrl = true;
+      console.log(`Transformed /nova/sports URL to: ${url}`);
+    } else {
+      console.warn("SUPABASE_URL not found, cannot transform /nova/sports URL");
+    }
+  }
+
   // Check if there are parameter mappings configured
   if (apiConfig.parameter_mappings && Array.isArray(apiConfig.parameter_mappings)) {
     console.log("Processing parameter mappings:", apiConfig.parameter_mappings);
@@ -172,6 +191,14 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
       console.log("Added Supabase authentication headers for nova-finance");
+    }
+  } else if (isNovaSportsUrl) {
+    // For transformed nova-sports URLs, use Supabase anon key
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    if (anonKey) {
+      headers["Authorization"] = `Bearer ${anonKey}`;
+      headers["apikey"] = anonKey;
+      console.log("Added Supabase authentication headers for nova-sports");
     }
   } else if (apiConfig.auth_type === "bearer" && apiConfig.auth_token) {
     headers["Authorization"] = `Bearer ${apiConfig.auth_token}`;
