@@ -88,9 +88,10 @@ export function getDashboardCardsData(props: {
       bgColor: "bg-purple-100 dark:bg-purple-900",
       iconColor: "text-purple-600 dark:text-purple-400",
       stats: [
-        { label: "teams", value: sportsStats.totalTeams },
-        { label: "tournaments", value: sportsStats.totalTournaments },
-        { label: "", value: sportsStats.hasActiveProvider ? 'Multi-league' : 'No provider' }
+        { label: "teams", value: sportsStats.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : sportsStats.teamsCount, isComponent: sportsStats.loading },
+        { label: "players", value: sportsStats.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : sportsStats.playersCount, isComponent: sportsStats.loading },
+        { label: "games", value: sportsStats.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : sportsStats.gamesCount, isComponent: sportsStats.loading },
+        { label: "venues", value: sportsStats.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : sportsStats.venuesCount, isComponent: sportsStats.loading }
       ],
       onClick: () => handleNavigate('sports')
     },

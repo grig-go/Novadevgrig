@@ -7,6 +7,7 @@ export interface Channel {
   description?: string | null;
   status?: string;
   config?: any;
+  created_by?: string | null;
   created_at?: string;
   updated_at?: string;
 }

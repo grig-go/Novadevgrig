@@ -45,7 +45,8 @@ export function SportsFilters({
     players: 'Players', 
     games: 'Games',
     venues: 'Venues',
-    tournaments: 'Tournaments'
+    tournaments: 'Tournaments',
+    betting: 'Betting & Probabilities'
   };
 
   const allPositions = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'];
@@ -63,7 +64,10 @@ export function SportsFilters({
                 return (
                   <button
                     key={view}
-                    onClick={() => onViewChange(view)}
+                    onClick={() => {
+                      console.log('[SportsFilters] Button clicked, changing view to:', view);
+                      onViewChange(view);
+                    }}
                     className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                       currentView === view
                         ? 'bg-primary text-primary-foreground'

@@ -69,7 +69,7 @@ import {
   Clapperboard,
   Film,
 } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { copyToClipboard } from "../utils/clipboard";
 import {
@@ -89,8 +89,18 @@ import {
   getProvidersWithDynamicModels,
 } from "../types/ai";
 import { motion } from "framer-motion";
+import { DashboardNavigation, type DashboardView } from "./DashboardNavigation";
 
-export function AIConnectionsDashboard() {
+interface AIConnectionsDashboardProps {
+  onNavigate?: (view: DashboardView) => void;
+  dashboardConfig?: Array<{
+    dashboard_id: string;
+    visible: boolean;
+    order_index: number;
+  }>;
+}
+
+export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnectionsDashboardProps = {}) {
   const [providers, setProviders] = useState<AIProviderWithMaskedKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -1010,6 +1020,14 @@ export function AIConnectionsDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Navigation */}
+      {onNavigate && (
+        <DashboardNavigation
+          onNavigate={onNavigate}
+          dashboardConfig={dashboardConfig}
+        />
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

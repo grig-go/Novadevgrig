@@ -29,7 +29,19 @@ interface DashboardCardRendererProps {
 }
 
 // Helper function to generate card data map
-export const getDashboardCardsData = (params: {
+export const getDashboardCardsData = ({
+  handleNavigate,
+  electionLoading,
+  electionRacesCount,
+  financeStats,
+  sportsStats,
+  weatherStats,
+  newsStats,
+  agentsCount,
+  activeAgentsCount,
+  mediaStats,
+  schoolClosingsStats
+}: {
   handleNavigate: (view: string) => void;
   electionLoading: boolean;
   electionRacesCount: number;
@@ -40,20 +52,8 @@ export const getDashboardCardsData = (params: {
   agentsCount: number;
   activeAgentsCount: number;
   mediaStats: { totalAssets: number; loading: boolean; error: string | null };
+  schoolClosingsStats: { activeClosings: number; loading: boolean; error: string | null };
 }): Record<string, DashboardCardData> => {
-  const {
-    handleNavigate,
-    electionLoading,
-    electionRacesCount,
-    financeStats,
-    sportsStats,
-    weatherStats,
-    newsStats,
-    agentsCount,
-    activeAgentsCount,
-    mediaStats
-  } = params;
-
   return {
     election: {
       id: 'election',
@@ -181,8 +181,8 @@ export const getDashboardCardsData = (params: {
       stats: [
         {
           label: 'active closings',
-          value: 0,
-          isComponent: false
+          value: schoolClosingsStats.loading ? <Loader2 className="w-4 h-4 animate-spin inline" /> : schoolClosingsStats.activeClosings,
+          isComponent: schoolClosingsStats.loading
         }
       ],
       onClick: () => handleNavigate('school-closings')

@@ -17,12 +17,14 @@ import {
 
 interface NewsDashboardProps {
   onNavigateToFeeds?: () => void;
+  onNavigateToProviders?: () => void;
 }
 
 type TimeFilter = 'today' | 'yesterday' | 'week' | 'month' | 'all';
 
 export function NewsDashboard({ 
-  onNavigateToFeeds
+  onNavigateToFeeds,
+  onNavigateToProviders
 }: NewsDashboardProps) {
   // Filter states
   const [q, setQ] = useState<string>('');

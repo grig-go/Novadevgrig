@@ -189,7 +189,3 @@
 html {
   font-size: var(--font-size);
 }
-/* Force minimum desktop width */
-body {
-  min-width: 1024px;
-}

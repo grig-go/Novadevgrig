@@ -72,12 +72,30 @@ const fallbackPartyColors: Record<string, string> = {
 
 // Helper function to get party color from database or fallback
 const getPartyColor = (partyCode: string, parties?: Party[]): string => {
+  const normalizedCode = partyCode.trim().toUpperCase();
+
   if (parties && parties.length > 0) {
-    const party = parties.find(p => p.code === partyCode);
+    const party = parties.find(p => {
+      const pCode = p.code.toUpperCase();
+      if (normalizedCode === 'REP' || normalizedCode === 'GOP') {
+        return pCode === 'REP' || pCode === 'GOP';
+      }
+      if (normalizedCode === 'DEM') {
+        return pCode === 'DEM';
+      }
+      return pCode === normalizedCode;
+    });
     if (party) {
       return party.colors.primary;
     }
   }
+
+  if (normalizedCode === 'REP' || normalizedCode === 'GOP') return fallbackPartyColors['GOP'];
+  if (normalizedCode === 'DEM') return fallbackPartyColors['Dem'];
+  if (normalizedCode === 'IND') return fallbackPartyColors['Ind'];
+  if (normalizedCode === 'GRN') return fallbackPartyColors['Grn'];
+  if (normalizedCode === 'LIB') return fallbackPartyColors['Lib'];
+  
   return fallbackPartyColors[partyCode] || '#808080';
 };
 

@@ -77,7 +77,7 @@ const fallbackPartyColors: Record<string, string> = {
 };
 
 // Helper function to get party color from database metadata or fallback
-const getDynamicPartyColor = (partyCode: string): string => {
+const getDynamicPartyColor = (partyCode: string, parties?: Party[]): string => {
   // First, check if we have parties data from backend
   if (parties && parties.length > 0) {
     const party = parties.find(p => p.code === partyCode || p.code === partyCode.toUpperCase());
@@ -678,7 +678,7 @@ export function GenerateSyntheticScenarioModal({
                   const candName = getFieldValue(candidate.name);
                   const candParty = getFieldValue(candidate.party);
                   const candHeadshot = getFieldValue(candidate.headshot);
-                  const partyColor = getDynamicPartyColor(candParty);
+                  const partyColor = getDynamicPartyColor(candParty, parties);
                   return (
                     <div key={candidate.id} className="flex items-center justify-between bg-white p-2 rounded border">
                       <div className="flex items-center gap-2">

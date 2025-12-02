@@ -20,6 +20,7 @@ interface FinanceDashboardProps {
   onDeleteSecurity: (securityId: string) => void;
   lastUpdated: string;
   onNavigateToFeeds?: () => void;
+  onNavigateToProviders?: () => void;
 }
 
 interface DataProvider {

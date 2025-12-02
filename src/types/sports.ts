@@ -265,7 +265,7 @@ export interface SportsData {
 }
 
 // UI Types
-export type SportsView = 'teams' | 'players' | 'games' | 'venues' | 'tournaments' | 'standings';
+export type SportsView = 'teams' | 'players' | 'games' | 'venues' | 'tournaments' | 'standings' | 'betting';
 
 export interface SportsFilters {
   search: string;
@@ -274,6 +274,30 @@ export interface SportsFilters {
   position?: string;
   provider: Provider | 'all';
   showOverrides: boolean;
+}
+
+// Betting & Odds Types
+export interface BettingOdds {
+  id: string;
+  event_id: string;
+  market_type: 'match_winner' | 'over_under' | 'btts' | 'correct_score' | 'asian_handicap';
+  home_odds?: number;
+  draw_odds?: number;
+  away_odds?: number;
+  over_odds?: number;
+  under_odds?: number;
+  line?: number; // For over/under and handicap
+  yes_odds?: number; // For BTTS
+  no_odds?: number; // For BTTS
+  home_probability?: number;
+  draw_probability?: number;
+  away_probability?: number;
+  bookmaker?: string;
+  updated_at: string;
+}
+
+export interface GameWithOdds extends Game {
+  betting_odds?: BettingOdds[];
 }
 
 // Standings Types
