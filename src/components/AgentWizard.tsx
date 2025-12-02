@@ -1946,8 +1946,8 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                       <Input
                         value={source.api_config?.url || ''}
                         onChange={(e) => {
-                          // Don't allow editing Nova Weather URL
-                          if (source.category !== 'Nova Weather') {
+                          // Don't allow editing Nova URL
+                          if (source.category.substr(0, 4) !== 'Nova') {
                             const updated = [...newDataSources];
                             updated[actualIndex] = {
                               ...updated[actualIndex],
@@ -1957,7 +1957,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                           }
                         }}
                         placeholder="https://api.example.com/v1/data"
-                        disabled={source.category === 'Nova Weather'}
+                        disabled={source.category.substr(0, 4) === 'Nova'}
                       />
                     </div>
 
