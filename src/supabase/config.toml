@@ -41,3 +41,12 @@ verify_jwt = false
 
 [functions.school_closing]
 verify_jwt = false
+
+[functions.sponsor-schedule]
+verify_jwt = false
+
+[functions.media-library]
+verify_jwt = false
+
+[functions.banner-schedule]
+verify_jwt = false

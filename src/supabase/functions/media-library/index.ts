@@ -5,6 +5,29 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey"
 };
+
+// Storage bucket name
+const STORAGE_BUCKET = "media";
+
+// Fix internal Docker URLs for local development
+// When running locally, SUPABASE_URL is set to internal Docker address (kong:8000)
+// We need to replace it with the actual host the request came from
+const fixStorageUrl = (url: string, requestUrl: string): string => {
+  if (!url) return url;
+  // Check if URL contains internal Docker network address
+  if (url.includes("kong:8000") || url.includes("supabase_kong") || url.includes("supabase_edge_runtime")) {
+    // Extract the host from the incoming request (e.g., localhost:54321, 192.168.1.100:54321)
+    const reqUrl = new URL(requestUrl);
+    const publicBase = `${reqUrl.protocol}//${reqUrl.host}`;
+    // Replace internal URL with the request's host
+    return url
+      .replace(/http:\/\/kong:8000/g, publicBase)
+      .replace(/http:\/\/supabase_kong_[^/:]+:8000/g, publicBase)
+      .replace(/http:\/\/supabase_edge_runtime[^/:]*:\d+/g, publicBase);
+  }
+  return url;
+};
+
 console.log("[media-library] Edge Function started");
 serve(async (req)=>{
   console.log(`[media-library] Incoming request: ${req.method} ${req.url}`);
@@ -134,8 +157,8 @@ serve(async (req)=>{
           id: asset.id,
           name: asset.name,
           file_name: asset.file_name,
-          file_url: asset.file_url,
-          thumbnail_url: asset.thumbnail_url,
+          file_url: fixStorageUrl(asset.file_url, req.url),
+          thumbnail_url: fixStorageUrl(asset.thumbnail_url, req.url),
           storage_path: asset.storage_path,
           media_type: asset.media_type,
           created_by: asset.created_by,
@@ -238,15 +261,18 @@ serve(async (req)=>{
           "Content-Type": "application/json"
         }
       });
+      // Get the public URL and fix it for local development
       const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
+      const publicUrl = fixStorageUrl(urlData.publicUrl, req.url);
+
       // Insert DB record
       const { data: assetData, error: dbError } = await supabase.from("media_assets").insert({
         name: name || file.name,
         file_name: file.name,
         description,
         storage_path: uploadData.path,
-        file_url: urlData.publicUrl,
-        thumbnail_url: urlData.publicUrl,
+        file_url: publicUrl,
+        thumbnail_url: publicUrl,
         media_type: mediaType,
         created_by: createdBy,
         ai_model_used: aiModelUsed,
