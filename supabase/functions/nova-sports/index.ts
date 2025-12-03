@@ -10,8 +10,18 @@ const corsHeaders = {
 // Valid view types
 type SportsView = 'teams' | 'standings' | 'players' | 'games' | 'venues' | 'tournaments' | 'betting';
 
-// Valid game statuses
-const VALID_STATUSES = ['all', 'scheduled', 'in_progress', 'final', 'postponed', 'cancelled'];
+// Valid game statuses (includes aliases for flexibility)
+const VALID_STATUSES = ['all', 'scheduled', 'in_progress', 'inprogress', 'live', 'final', 'ended', 'closed', 'complete', 'postponed', 'cancelled'];
+
+// Map status aliases to their database values
+const STATUS_ALIASES: Record<string, string> = {
+  'inprogress': 'in_progress',
+  'live': 'in_progress',
+  'ended': 'ended',
+  'closed': 'ended',
+  'complete': 'ended',
+  'final': 'ended'
+};
 
 // Valid player positions
 const ALL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'];
@@ -275,7 +285,6 @@ serve(async (req) => {
             position,
             photo_url,
             team_id,
-            api_source,
             created_at,
             updated_at,
             sports_teams (
@@ -284,15 +293,11 @@ serve(async (req) => {
               short_name,
               abbreviation,
               logo_url,
-              colors
+              colors,
+              api_source
             )
           `)
           .order('name');
-
-        // Filter by provider if specified
-        if (provider !== 'all') {
-          query = query.eq('api_source', provider);
-        }
 
         // Filter by position if specified
         if (position !== 'all') {
@@ -306,30 +311,133 @@ serve(async (req) => {
           throw playersError;
         }
 
-        data = (playersData || []).map(player => ({
-          id: player.id,
-          sportradarId: player.sportradar_id,
-          name: player.name,
-          firstName: player.first_name,
-          lastName: player.last_name,
-          nationality: player.nationality,
-          nationalityCode: player.nationality_code,
-          dateOfBirth: player.date_of_birth,
-          jerseyNumber: player.jersey_number,
-          position: player.position,
-          photoUrl: player.photo_url,
-          provider: player.api_source,
-          team: player.sports_teams ? {
-            id: player.sports_teams.id,
-            name: player.sports_teams.name,
-            shortName: player.sports_teams.short_name,
-            abbreviation: player.sports_teams.abbreviation,
-            logoUrl: player.sports_teams.logo_url,
-            colors: player.sports_teams.colors
-          } : null,
-          createdAt: player.created_at,
-          updatedAt: player.updated_at
-        }));
+        // Filter by provider after fetch (via team's api_source since players table doesn't have it)
+        let filteredPlayers = playersData || [];
+        if (provider !== 'all') {
+          filteredPlayers = filteredPlayers.filter(
+            (player: any) => player.sports_teams?.api_source?.toLowerCase() === provider
+          );
+        }
+
+        // Fetch stats for each player using the RPC function
+        const playerStatsMap = new Map<string, any>();
+        for (const player of filteredPlayers) {
+          try {
+            const { data: rpcStats, error: rpcError } = await supabase.rpc('get_player_stats', {
+              p_player_id: player.id,
+              p_season_id: null // Get current/latest season
+            });
+
+            if (!rpcError && rpcStats?.success && rpcStats?.data) {
+              playerStatsMap.set(player.id, rpcStats.data);
+            }
+          } catch (e) {
+            console.error(`Error fetching stats for player ${player.id}:`, e);
+          }
+        }
+
+        // Helper function to calculate age from date of birth
+        const calculateAge = (dateOfBirth: string | null): number | null => {
+          if (!dateOfBirth) return null;
+          // Parse date parts to avoid timezone issues
+          const [year, month, day] = dateOfBirth.split('-').map(Number);
+          const birthDate = new Date(year, month - 1, day);
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          return age;
+        };
+
+        data = filteredPlayers.map((player: any) => {
+          const dob = player.date_of_birth;
+          const playerStats = playerStatsMap.get(player.id);
+          const seasonStats = playerStats?.season_stats;
+          const careerStats = playerStats?.career_stats;
+
+          // Calculate derived stats for season
+          const appearances = seasonStats?.appearances;
+          const minutesPlayed = seasonStats?.minutes_played;
+          const goals = seasonStats?.goals;
+          const shots = seasonStats?.shots;
+          const shotsOnTarget = seasonStats?.shots_on_target;
+
+          const averageMinutesPlayed = (appearances && appearances > 0 && minutesPlayed != null)
+            ? Math.round(minutesPlayed / appearances)
+            : null;
+          const shotsOnTargetAccuracy = (shots && shots > 0 && shotsOnTarget != null)
+            ? Math.round((shotsOnTarget / shots) * 100)
+            : null;
+          const goalsPerGame = (appearances && appearances > 0 && goals != null)
+            ? parseFloat((goals / appearances).toFixed(2))
+            : null;
+
+          // Calculate derived stats for career
+          const totalAppearances = careerStats?.total_appearances;
+          const totalGoals = careerStats?.total_goals;
+          const careerGoalsPerGame = (totalAppearances && totalAppearances > 0 && totalGoals != null)
+            ? parseFloat((totalGoals / totalAppearances).toFixed(2))
+            : null;
+
+          return {
+            id: player.id,
+            sportradarId: player.sportradar_id,
+            name: player.name,
+            firstName: player.first_name,
+            lastName: player.last_name,
+            nationality: player.nationality,
+            nationalityCode: player.nationality_code,
+            dateOfBirth: dob,
+            age: calculateAge(dob),
+            jerseyNumber: player.jersey_number,
+            position: player.position,
+            photoUrl: player.photo_url,
+            provider: player.sports_teams?.api_source || null,
+            team: player.sports_teams ? {
+              id: player.sports_teams.id,
+              name: player.sports_teams.name,
+              shortName: player.sports_teams.short_name,
+              abbreviation: player.sports_teams.abbreviation,
+              logoUrl: player.sports_teams.logo_url,
+              colors: player.sports_teams.colors
+            } : null,
+            // Season Stats
+            seasonStats: seasonStats ? {
+              appearances: seasonStats.appearances ?? null,
+              starts: seasonStats.starts ?? null,
+              minutesPlayed: seasonStats.minutes_played ?? null,
+              averageMinutesPlayed,
+              goals: seasonStats.goals ?? null,
+              goalsPerGame,
+              assists: seasonStats.assists ?? null,
+              yellowCards: seasonStats.yellow_cards ?? null,
+              redCards: seasonStats.red_cards ?? null,
+              shots: seasonStats.shots ?? null,
+              shotsOnTarget: seasonStats.shots_on_target ?? null,
+              shotsOnTargetAccuracy,
+              passes: seasonStats.passes ?? null,
+              passAccuracy: seasonStats.pass_accuracy ?? null,
+              tackles: seasonStats.tackles ?? null,
+              interceptions: seasonStats.interceptions ?? null,
+              saves: seasonStats.saves ?? null,
+              cleanSheets: seasonStats.clean_sheets ?? null,
+              rating: seasonStats.rating ?? null
+            } : null,
+            // Career Stats
+            careerStats: careerStats ? {
+              totalAppearances: careerStats.total_appearances ?? null,
+              totalGoals: careerStats.total_goals ?? null,
+              goalsPerGame: careerGoalsPerGame,
+              totalAssists: careerStats.total_assists ?? null,
+              totalMinutes: careerStats.total_minutes ?? null,
+              seasonsPlayed: careerStats.seasons_played ?? null
+            } : null,
+            createdAt: player.created_at,
+            updatedAt: player.updated_at
+          };
+        });
         totalCount = data.length;
         break;
       }
@@ -340,12 +448,19 @@ serve(async (req) => {
           .select(`
             id,
             sportradar_id,
-            title,
             start_time,
+            start_time_confirmed,
             status,
             home_score,
             away_score,
-            api_source,
+            round,
+            round_number,
+            match_day,
+            venue_name,
+            venue_city,
+            venue_capacity,
+            attendance,
+            referee,
             created_at,
             updated_at,
             home_team:sports_teams!sports_events_home_team_id_fkey (
@@ -354,7 +469,8 @@ serve(async (req) => {
               short_name,
               abbreviation,
               logo_url,
-              colors
+              colors,
+              api_source
             ),
             away_team:sports_teams!sports_events_away_team_id_fkey (
               id,
@@ -374,30 +490,58 @@ serve(async (req) => {
                 logo_url
               )
             ),
-            venue:sports_venues(id, name, city, country)
+            sports_match_odds (
+              home_win_odds,
+              draw_odds,
+              away_win_odds,
+              home_win_prob,
+              draw_prob,
+              away_win_prob,
+              updated_at
+            ),
+            sports_lineups (
+              id,
+              team_id,
+              lineup_type,
+              sports_players (
+                id,
+                name,
+                jersey_number,
+                position,
+                photo_url
+              )
+            )
           `)
           .order('start_time', { ascending: false });
 
-        // Filter by provider if specified
-        if (provider !== 'all') {
-          query = query.eq('api_source', provider);
-        }
-
         // Filter by status if specified
-        if (status !== 'all' && VALID_STATUSES.includes(status)) {
-          query = query.eq('status', status);
+        if (status !== 'all') {
+          if (!VALID_STATUSES.includes(status)) {
+            // Invalid status, return empty result
+            data = [];
+            totalCount = 0;
+            break;
+          }
+          // Map alias to database value if needed
+          const dbStatus = STATUS_ALIASES[status] || status;
+          query = query.eq('status', dbStatus);
         }
 
         // Filter by league if specified (through season)
         if (league !== 'all') {
           // We need to filter by league_id through the season
-          const { data: seasonsInLeague } = await supabase
+          const { data: seasonsInLeague, error: seasonsError } = await supabase
             .from('sports_seasons')
             .select('id')
-            .eq('league_id', league);
+            .eq('league_id', parseInt(league));
+
+          console.log('Games league filter:', { league, seasonsInLeague, seasonsError });
 
           if (seasonsInLeague && seasonsInLeague.length > 0) {
             query = query.in('season_id', seasonsInLeague.map(s => s.id));
+          } else {
+            // No seasons found for this league, return empty result
+            query = query.eq('season_id', -1); // Force no results
           }
         }
 
@@ -413,50 +557,232 @@ serve(async (req) => {
           throw gamesError;
         }
 
-        data = (gamesData || []).map(game => ({
-          id: game.id,
-          sportradarId: game.sportradar_id,
-          title: game.title,
-          startTime: game.start_time,
-          status: game.status,
-          homeScore: game.home_score,
-          awayScore: game.away_score,
-          provider: game.api_source,
-          homeTeam: game.home_team ? {
-            id: game.home_team.id,
-            name: game.home_team.name,
-            shortName: game.home_team.short_name,
-            abbreviation: game.home_team.abbreviation,
-            logoUrl: game.home_team.logo_url,
-            colors: game.home_team.colors
-          } : null,
-          awayTeam: game.away_team ? {
-            id: game.away_team.id,
-            name: game.away_team.name,
-            shortName: game.away_team.short_name,
-            abbreviation: game.away_team.abbreviation,
-            logoUrl: game.away_team.logo_url,
-            colors: game.away_team.colors
-          } : null,
-          season: game.sports_seasons ? {
-            id: game.sports_seasons.id,
-            name: game.sports_seasons.name,
-            year: game.sports_seasons.year
-          } : null,
-          league: game.sports_seasons?.sports_leagues ? {
-            id: game.sports_seasons.sports_leagues.id,
-            name: game.sports_seasons.sports_leagues.name,
-            logoUrl: game.sports_seasons.sports_leagues.logo_url
-          } : null,
-          venue: game.venue ? {
-            id: game.venue.id,
-            name: game.venue.name,
-            city: game.venue.city,
-            country: game.venue.country
-          } : null,
-          createdAt: game.created_at,
-          updatedAt: game.updated_at
-        }));
+        // Filter by provider after fetch (via home_team's api_source since events table doesn't have it)
+        let filteredGames = gamesData || [];
+        if (provider !== 'all') {
+          filteredGames = filteredGames.filter(
+            (game: any) => game.home_team?.api_source?.toLowerCase() === provider
+          );
+        }
+
+        // Fetch detailed event data and team stats for each game using RPC
+        const gameDetailsMap = new Map<string, any>();
+        const teamStatsMap = new Map<string, any>();
+
+        for (const game of filteredGames) {
+          // Fetch detailed event data (includes full lineup with goals, assists, cards)
+          try {
+            const { data: eventDetails, error: eventError } = await supabase
+              .rpc('get_event_details', { p_event_id: game.id });
+
+            if (!eventError && eventDetails && eventDetails.length > 0) {
+              gameDetailsMap.set(game.id, eventDetails[0]?.event_data);
+            }
+          } catch (e) {
+            console.error(`Error fetching event details for game ${game.id}:`, e);
+          }
+
+          // Fetch team stats for home and away teams
+          if (game.home_team?.id && !teamStatsMap.has(game.home_team.id)) {
+            try {
+              const { data: homeStats, error: homeError } = await supabase.rpc('get_team_stats', {
+                p_team_id: game.home_team.id,
+                p_season_id: null
+              });
+              if (!homeError && homeStats?.success && homeStats?.data) {
+                teamStatsMap.set(game.home_team.id, homeStats.data);
+              }
+            } catch (e) {
+              console.error(`Error fetching stats for home team ${game.home_team.id}:`, e);
+            }
+          }
+
+          if (game.away_team?.id && !teamStatsMap.has(game.away_team.id)) {
+            try {
+              const { data: awayStats, error: awayError } = await supabase.rpc('get_team_stats', {
+                p_team_id: game.away_team.id,
+                p_season_id: null
+              });
+              if (!awayError && awayStats?.success && awayStats?.data) {
+                teamStatsMap.set(game.away_team.id, awayStats.data);
+              }
+            } catch (e) {
+              console.error(`Error fetching stats for away team ${game.away_team.id}:`, e);
+            }
+          }
+        }
+
+        // Helper to format team stats
+        const formatTeamStats = (stats: any) => {
+          if (!stats?.season_stats) return null;
+          const s = stats.season_stats;
+
+          const played = s.played ?? null;
+          const wins = s.wins ?? null;
+          const goalsFor = s.goals_for ?? null;
+          const goalsAgainst = s.goals_against ?? null;
+          const cleanSheets = s.clean_sheets ?? null;
+          const yellowCards = s.yellow_cards ?? null;
+          const redCards = s.red_cards ?? null;
+
+          // Calculate per-game and percentage values (same as view=teams)
+          const winPercentage = (played && played > 0 && wins != null)
+            ? Math.round((wins / played) * 100)
+            : (s.win_percentage ?? null);
+          const goalsForPerGame = (played && played > 0 && goalsFor != null)
+            ? parseFloat((goalsFor / played).toFixed(1))
+            : null;
+          const goalsAgainstPerGame = (played && played > 0 && goalsAgainst != null)
+            ? parseFloat((goalsAgainst / played).toFixed(1))
+            : null;
+          const cleanSheetsPercent = (played && played > 0 && cleanSheets != null)
+            ? Math.round((cleanSheets / played) * 100)
+            : null;
+          const yellowCardsPerGame = (played && played > 0 && yellowCards != null)
+            ? parseFloat((yellowCards / played).toFixed(1))
+            : null;
+          const redCardsPerGame = (played && played > 0 && redCards != null)
+            ? parseFloat((redCards / played).toFixed(2))
+            : null;
+
+          return {
+            played,
+            wins,
+            draws: s.draws ?? null,
+            losses: s.losses ?? null,
+            winPercentage,
+            points: s.points ?? null,
+            goalsFor,
+            goalsAgainst,
+            goalDifference: s.goal_difference ?? null,
+            goalsForPerGame,
+            goalsAgainstPerGame,
+            avgPossession: s.avg_possession ?? null,
+            passAccuracy: s.pass_accuracy ?? null,
+            shotsPerGame: s.shots_per_game ?? null,
+            shotsOnTargetPerGame: s.shots_on_target_per_game ?? null,
+            cleanSheets,
+            cleanSheetsPercent,
+            yellowCards,
+            redCards,
+            yellowCardsPerGame,
+            redCardsPerGame
+          };
+        };
+
+        // Helper to format lineup from RPC data
+        const formatLineup = (lineup: any[]) => {
+          if (!lineup || lineup.length === 0) return null;
+
+          const starting = lineup
+            .filter((p: any) => p.lineup_type === 'starting')
+            .map((p: any) => ({
+              playerId: p.player_id,
+              name: p.name,
+              jerseyNumber: p.jersey_number,
+              position: p.position,
+              goals: p.goals ?? 0,
+              assists: p.assists ?? 0,
+              yellowCards: p.yellow_cards ?? 0,
+              redCards: p.red_cards ?? 0
+            }));
+
+          const substitutes = lineup
+            .filter((p: any) => p.lineup_type === 'substitute')
+            .map((p: any) => ({
+              playerId: p.player_id,
+              name: p.name,
+              jerseyNumber: p.jersey_number,
+              position: p.position,
+              goals: p.goals ?? 0,
+              assists: p.assists ?? 0,
+              yellowCards: p.yellow_cards ?? 0,
+              redCards: p.red_cards ?? 0
+            }));
+
+          return {
+            starting,
+            substitutes
+          };
+        };
+
+        data = filteredGames.map((game: any) => {
+          // Get the most recent odds (sports_match_odds is an array)
+          const oddsArray = game.sports_match_odds || [];
+          const latestOdds = oddsArray.length > 0 ? oddsArray[0] : null;
+
+          // Get detailed event data from RPC
+          const eventData = gameDetailsMap.get(game.id);
+          const homeTeamStats = teamStatsMap.get(game.home_team?.id);
+          const awayTeamStats = teamStatsMap.get(game.away_team?.id);
+
+          // Use RPC lineup data if available, otherwise check if basic lineup exists
+          const hasLineup = eventData?.home_lineup?.length > 0 || eventData?.away_lineup?.length > 0 ||
+                           (game.sports_lineups && game.sports_lineups.length > 0);
+
+          return {
+            id: game.id,
+            sportradarId: game.sportradar_id,
+            startTime: game.start_time,
+            startTimeConfirmed: game.start_time_confirmed,
+            status: game.status,
+            homeScore: game.home_score,
+            awayScore: game.away_score,
+            round: game.round,
+            roundNumber: game.round_number,
+            matchDay: game.match_day,
+            attendance: game.attendance,
+            referee: game.referee,
+            provider: game.home_team?.api_source || null,
+            homeTeam: game.home_team ? {
+              id: game.home_team.id,
+              name: game.home_team.name,
+              shortName: game.home_team.short_name,
+              abbreviation: game.home_team.abbreviation,
+              logoUrl: game.home_team.logo_url,
+              colors: game.home_team.colors,
+              seasonStats: formatTeamStats(homeTeamStats)
+            } : null,
+            awayTeam: game.away_team ? {
+              id: game.away_team.id,
+              name: game.away_team.name,
+              shortName: game.away_team.short_name,
+              abbreviation: game.away_team.abbreviation,
+              logoUrl: game.away_team.logo_url,
+              colors: game.away_team.colors,
+              seasonStats: formatTeamStats(awayTeamStats)
+            } : null,
+            season: game.sports_seasons ? {
+              id: game.sports_seasons.id,
+              name: game.sports_seasons.name,
+              year: game.sports_seasons.year
+            } : null,
+            league: game.sports_seasons?.sports_leagues ? {
+              id: game.sports_seasons.sports_leagues.id,
+              name: game.sports_seasons.sports_leagues.name,
+              logoUrl: game.sports_seasons.sports_leagues.logo_url
+            } : null,
+            venue: {
+              name: game.venue_name || null,
+              city: game.venue_city || null,
+              capacity: game.venue_capacity || null
+            },
+            odds: latestOdds ? {
+              homeWinOdds: latestOdds.home_win_odds,
+              drawOdds: latestOdds.draw_odds,
+              awayWinOdds: latestOdds.away_win_odds,
+              homeWinProb: latestOdds.home_win_prob,
+              drawProb: latestOdds.draw_prob,
+              awayWinProb: latestOdds.away_win_prob,
+              updatedAt: latestOdds.updated_at
+            } : null,
+            hasLineup,
+            homeLineup: formatLineup(eventData?.home_lineup),
+            awayLineup: formatLineup(eventData?.away_lineup),
+            createdAt: game.created_at,
+            updatedAt: game.updated_at
+          };
+        });
         totalCount = data.length;
         break;
       }
