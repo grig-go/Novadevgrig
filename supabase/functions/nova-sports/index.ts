@@ -913,56 +913,61 @@ serve(async (req) => {
       }
 
       case 'venues': {
-        let query = supabase
-          .from('sports_venues')
-          .select(`
-            id,
-            sportradar_id,
-            name,
-            city,
-            country,
-            country_code,
-            capacity,
-            surface,
-            roof_type,
-            timezone,
-            latitude,
-            longitude,
-            api_source,
-            created_at,
-            updated_at
-          `)
-          .order('name');
-
-        // Filter by provider if specified
-        if (provider !== 'all') {
-          query = query.eq('api_source', provider);
-        }
-
-        const { data: venuesData, error: venuesError } = await query;
+        // Use get_venues RPC (same as SportsDashboard) which includes image_url
+        const { data: venuesData, error: venuesError } = await supabase
+          .rpc('get_venues', { p_country: null, p_limit: 100 });
 
         if (venuesError) {
           console.error('Error fetching venues:', venuesError);
           throw venuesError;
         }
 
-        data = (venuesData || []).map(venue => ({
-          id: venue.id,
-          sportradarId: venue.sportradar_id,
-          name: venue.name,
-          city: venue.city,
-          country: venue.country,
-          countryCode: venue.country_code,
-          capacity: venue.capacity,
-          surface: venue.surface,
-          roofType: venue.roof_type,
-          timezone: venue.timezone,
-          latitude: venue.latitude,
-          longitude: venue.longitude,
-          provider: venue.api_source,
-          createdAt: venue.created_at,
-          updatedAt: venue.updated_at
-        }));
+        // Fetch detailed venue data using RPC for each venue (for teams, description, etc.)
+        const venueDetailsMap = new Map<string, any>();
+        for (const venue of (venuesData || [])) {
+          try {
+            const { data: details, error: detailsError } = await supabase.rpc('get_venue_details', {
+              p_venue_id: venue.id
+            });
+            if (!detailsError && details?.success && details?.data) {
+              venueDetailsMap.set(venue.id, details.data);
+            }
+          } catch (e) {
+            console.error(`Error fetching details for venue ${venue.id}:`, e);
+          }
+        }
+
+        data = (venuesData || []).map((venue: any) => {
+          const details = venueDetailsMap.get(venue.id);
+
+          return {
+            id: venue.id,
+            sportradarId: venue.sportradar_id,
+            name: venue.name,
+            city: venue.city,
+            country: venue.country,
+            countryCode: venue.country_code,
+            capacity: venue.capacity,
+            surface: venue.surface,
+            roofType: venue.roof_type,
+            timezone: venue.timezone,
+            latitude: venue.latitude,
+            longitude: venue.longitude,
+            // image_url from get_venues RPC, fallback to details
+            imageUrl: venue.image_url || details?.image_url || null,
+            description: details?.description || null,
+            yearOpened: details?.year_opened || null,
+            architect: details?.architect || null,
+            teams: details?.teams ? details.teams.map((team: any) => ({
+              id: team.id,
+              name: team.name,
+              logoUrl: team.logo_url,
+              colors: team.colors
+            })) : null,
+            createdAt: venue.created_at,
+            updatedAt: venue.updated_at
+          };
+        });
         totalCount = data.length;
         break;
       }
@@ -1003,25 +1008,92 @@ serve(async (req) => {
           throw leaguesError;
         }
 
-        data = (leaguesData || []).map(league => ({
-          id: league.id,
-          sportradarId: league.sportradar_id,
-          name: league.name,
-          alternativeName: league.alternative_name,
-          type: league.type,
-          gender: league.gender,
-          logoUrl: league.logo_url,
-          active: league.active,
-          sport: league.sport,
-          provider: league.api_source,
-          category: league.sports_categories ? {
-            id: league.sports_categories.id,
-            name: league.sports_categories.name,
-            countryCode: league.sports_categories.country_code
-          } : null,
-          createdAt: league.created_at,
-          updatedAt: league.updated_at
-        }));
+        // For each league, get its current season and schedule
+        const leagueScheduleMap = new Map<number, any>();
+        const leagueSeasonMap = new Map<number, any>();
+
+        for (const leagueItem of (leaguesData || [])) {
+          try {
+            // Get the current/latest season for this league
+            const { data: seasonData, error: seasonError } = await supabase
+              .from('sports_seasons')
+              .select('id, name, year, start_date, end_date, is_current')
+              .eq('league_id', leagueItem.id)
+              .order('start_date', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (!seasonError && seasonData) {
+              leagueSeasonMap.set(leagueItem.id, seasonData);
+
+              // Get the schedule for this season
+              const { data: scheduleData, error: scheduleError } = await supabase
+                .rpc('get_season_schedule', { p_season_id: seasonData.id });
+
+              if (!scheduleError && scheduleData) {
+                leagueScheduleMap.set(leagueItem.id, scheduleData);
+              }
+            }
+          } catch (e) {
+            console.error(`Error fetching season/schedule for league ${leagueItem.id}:`, e);
+          }
+        }
+
+        data = (leaguesData || []).map((leagueItem: any) => {
+          const currentSeason = leagueSeasonMap.get(leagueItem.id);
+          const schedule = leagueScheduleMap.get(leagueItem.id) || [];
+
+          // Format matches from schedule
+          const matches = schedule.map((match: any) => ({
+            eventId: match.event_id,
+            gameId: match.game_id,
+            startTime: match.start_time,
+            status: match.status,
+            round: match.round,
+            homeTeam: {
+              name: match.home_team_name,
+              logoUrl: match.home_team_logo,
+              score: match.home_score
+            },
+            awayTeam: {
+              name: match.away_team_name,
+              logoUrl: match.away_team_logo,
+              score: match.away_score
+            },
+            venueName: match.venue_name,
+            attendance: match.attendance
+          }));
+
+          return {
+            id: leagueItem.id,
+            sportradarId: leagueItem.sportradar_id,
+            name: leagueItem.name,
+            alternativeName: leagueItem.alternative_name,
+            type: leagueItem.type,
+            gender: leagueItem.gender,
+            logoUrl: leagueItem.logo_url,
+            active: leagueItem.active,
+            sport: leagueItem.sport,
+            provider: leagueItem.api_source,
+            category: leagueItem.sports_categories ? {
+              id: leagueItem.sports_categories.id,
+              name: leagueItem.sports_categories.name,
+              countryCode: leagueItem.sports_categories.country_code
+            } : null,
+            currentSeason: currentSeason ? {
+              id: currentSeason.id,
+              name: currentSeason.name,
+              year: currentSeason.year,
+              startDate: currentSeason.start_date,
+              endDate: currentSeason.end_date,
+              isCurrent: currentSeason.is_current
+            } : null,
+            matches,
+            matchCount: matches.length,
+            createdAt: leagueItem.created_at,
+            updatedAt: leagueItem.updated_at
+          };
+        });
         totalCount = data.length;
         break;
       }
