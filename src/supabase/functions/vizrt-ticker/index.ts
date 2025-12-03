@@ -33,6 +33,7 @@ serve(async (req)=>{
     }
     // Get query parameters
     const includeInactive = url.searchParams.get('include_inactive') === 'true';
+    const includeIds = url.searchParams.get('includeIds') === 'true';
     // Create Supabase client
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
       auth: {
@@ -65,9 +66,12 @@ serve(async (req)=>{
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<!DOCTYPE tickerfeed SYSTEM "http://www.vizrt.com/ticker/tickerfeed-2.4.dtd">\n';
     xml += '<tickerfeed version="2.4">\n';
+    // Track bucket instance counts across all playlists for unique IDs
+    const bucketInstanceCounts: Map<string, number> = new Map();
+
     // 4. Process each playlist
     for (const playlist of playlists || []){
-      const playlistXml = await buildPlaylistXml(playlist, supabaseClient, includeInactive, timezone);
+      const playlistXml = await buildPlaylistXml(playlist, supabaseClient, includeInactive, timezone, includeIds, bucketInstanceCounts);
       if (playlistXml) {
         xml += playlistXml;
       }
@@ -95,7 +99,7 @@ serve(async (req)=>{
     });
   }
 });
-async function buildPlaylistXml(playlist, supabase, includeInactive, timezone) {
+async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
   // Check if playlist is currently active based on its schedule
   if (!isCurrentlyActive(playlist.schedule, timezone)) {
     return null; // Skip this entire playlist if it's not scheduled to be active
@@ -129,27 +133,27 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone) {
   xml += '    </defaults>\n';
   // Build groups for each active bucket
   for (const bucket of activeBuckets){
-    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone);
+    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds, bucketInstanceCounts);
     if (groupXml) xml += groupXml;
   }
   xml += '  </playlist>\n';
   return xml;
 }
-async function buildGroupXml(bucket, supabase, includeInactive, timezone) {
-  const elements = await getElementsForBucket(bucket, supabase, includeInactive, timezone);
+async function buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
+  const elements = await getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts);
   if (elements.length === 0) return null;
   let xml = `    <group use_existing="${bucket.content_id || ''}">\n`;
   xml += `      <description>${escapeXml(bucket.name)}</description>\n`;
   xml += `      <gui-color>${generateDistinctColorForBucket(bucket)}</gui-color>\n`;
   xml += '      <elements>\n';
   for (const element of elements){
-    xml += buildElementXml(element, 4);
+    xml += buildElementXml(element, 4, includeIds);
   }
   xml += '      </elements>\n';
   xml += '    </group>\n';
   return xml;
 }
-async function getElementsForBucket(bucket, supabase, includeInactive, timezone) {
+async function getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts: Map<string, number> = new Map()) {
   const items = await getItemsForBucket(bucket, supabase, includeInactive, timezone);
   const elements = [];
   for (const item of items){
@@ -180,7 +184,17 @@ async function getElementsForBucket(bucket, supabase, includeInactive, timezone)
         .single();
 
       if (template) {
-        const generatedElement = {
+        // Get and increment the instance count for this bucket
+        const instanceIndex = bucketInstanceCounts.get(bucket.id) || 0;
+        bucketInstanceCounts.set(bucket.id, instanceIndex + 1);
+
+        const generatedElement: {
+          id: string;
+          template: string;
+          fields: { name: string; value: string }[];
+          duration?: string;
+        } = {
+          id: `${bucket.id}_${instanceIndex}`,  // Bucket-based ID with dynamic instance index
           template: template.name,
           fields: []
         };
@@ -200,7 +214,7 @@ async function getElementsForBucket(bucket, supabase, includeInactive, timezone)
 
         // Prepend as first element
         elements.unshift(generatedElement);
-        console.log(`Generated item with template ${template.name} as first child`);
+        console.log(`Generated item with template ${template.name} as first child (instance ${instanceIndex})`);
       }
     }
   }
@@ -248,7 +262,14 @@ async function getItemsForBucket(bucket, supabase, includeInactive, timezone) {
 async function createElement(item, supabase) {
   // Get item fields
   const { data: fields } = await supabase.from('item_tabfields').select('*').eq('item_id', item.id);
-  const element = {
+  const element: {
+    id: string;
+    fields: { name: string; value: string }[];
+    template?: string;
+    duration?: string;
+    ttl?: { action: string; value: string };
+  } = {
+    id: item.id,  // Include item ID for optional XML output
     fields: []
   };
   // Get template info including form schema for custom components
@@ -277,7 +298,7 @@ async function createElement(item, supabase) {
     console.log(`Item ${item.id} has no template_id`);
   }
 
-  // Check if this item contains a school closings component that should generate multiple elements
+  // Check if this item contains a school closings or election component that should generate multiple elements
   let hasSchoolClosingsComponent = false;
   for (const field of fields || []) {
     if (!field.name.startsWith('__')) {
@@ -287,6 +308,11 @@ async function createElement(item, supabase) {
         // Process school closings and return multiple elements
         console.log(`Found schoolClosings component, processing...`);
         return await processSchoolClosingsComponent(field, componentConfig, supabase, item);
+      }
+      if (componentConfig?.type === 'election') {
+        // Process election and return multiple elements
+        console.log(`Found election component, processing...`);
+        return await processElectionComponent(field, componentConfig, supabase, item);
       }
     }
   }
@@ -578,7 +604,8 @@ async function processSchoolClosingsComponent(field, config, supabase, item) {
     }
 
     // Generate one element per closing
-    for (const closing of closings || []) {
+    for (let i = 0; i < (closings || []).length; i++) {
+      const closing = closings[i];
       // Build template variables
       const vars = {
         organization: closing.organization_name || 'N/A',
@@ -600,7 +627,14 @@ async function processSchoolClosingsComponent(field, config, supabase, item) {
       }
 
       // Create element for this closing
-      const element = {
+      // ID format: <item_id>_<index>
+      const element: {
+        id: string;
+        fields: { name: string; value: string }[];
+        template?: string;
+        duration?: string;
+      } = {
+        id: `${item.id}_${i}`,
         fields: [
           { name: field1, value: formatted1 },
           { name: field2, value: formatted2 }
@@ -623,6 +657,491 @@ async function processSchoolClosingsComponent(field, config, supabase, item) {
     console.error('Error processing school closings:', error);
   }
 
+  return elements;
+}
+
+// Process Election component - generates multiple elements (header items, races, proposals, footer items)
+async function processElectionComponent(field, config, supabase, item) {
+  const elements = [];
+
+  try {
+    // Parse the component value to get election configuration
+    let electionConfig;
+    try {
+      console.log('🗳️ Processing election component - field.value:', field.value);
+      electionConfig = JSON.parse(field.value);
+      console.log('🗳️ Parsed electionConfig:', JSON.stringify(electionConfig));
+    } catch (e) {
+      console.error('❌ Error parsing election component value:', e);
+      return [];
+    }
+
+    const {
+      electionId,
+      regionId = '',
+      showParty = false,
+      showIncumbentStar = false,
+      showZeroVotes = false,
+      showEstimatedIn = true,
+      headerItems = [],
+      footerItems = [],
+      raceTemplate = 'VOTE_{numCandidates}HEADS',
+      proposalTemplate = 'VOTE_PUBLIC_QUESTION',
+      partyMaterialPrefix = 'MATERIAL*ONLINE_2019/N12/MASTER_CONTROL/ELECTIONS/'
+    } = electionConfig;
+
+    console.log('🗳️ Election config:', {
+      electionId,
+      regionId,
+      headerItemsCount: headerItems.length,
+      footerItemsCount: footerItems.length,
+      raceTemplate,
+      proposalTemplate
+    });
+
+    if (!electionId) {
+      console.log('⚠️ No electionId in election component config');
+      return [];
+    }
+
+    // Generate header items
+    for (let i = 0; i < headerItems.length; i++) {
+      const headerItem = headerItems[i];
+
+      // Extract template name from object or string
+      let templateName = null;
+      if (headerItem.template) {
+        // Handle object format {label: "...", value: "..."}
+        if (typeof headerItem.template === 'object' && headerItem.template.value) {
+          templateName = headerItem.template.value;
+        } else if (typeof headerItem.template === 'string') {
+          templateName = headerItem.template;
+        }
+      } else if (headerItem.templateName) {
+        templateName = headerItem.templateName;
+      }
+
+      // Skip if no template specified
+      if (!templateName) {
+        continue;
+      }
+
+      const element: {
+        id: string;
+        fields: { name: string; value: string }[];
+        template?: string;
+        duration?: string;
+      } = {
+        id: `${item.id}_header_${i}`,
+        fields: []
+      };
+
+      element.template = templateName;
+
+      // Add fields from headerItem if provided
+      if (headerItem.fields && Array.isArray(headerItem.fields)) {
+        for (const fieldDef of headerItem.fields) {
+          if (fieldDef.name && fieldDef.value !== undefined) {
+            element.fields.push({
+              name: fieldDef.name,
+              value: String(fieldDef.value)
+            });
+          }
+        }
+      }
+
+      if (item.duration && item.duration > 0) {
+        element.duration = item.duration.toString();
+      }
+
+      elements.push(element);
+    }
+
+    // Fetch election race data from e_race_results (which has the actual vote counts)
+    let query = supabase
+      .from('e_race_results')
+      .select(`
+        id,
+        race_id,
+        precincts_reporting,
+        precincts_total,
+        percent_reporting,
+        total_votes,
+        precincts_reporting_override,
+        precincts_total_override,
+        percent_reporting_override,
+        total_votes_override,
+        e_races!inner (
+          id,
+          race_id,
+          name,
+          display_name,
+          type,
+          office,
+          e_elections!inner (
+            id,
+            election_id,
+            name,
+            year
+          ),
+          e_geographic_divisions (
+            code,
+            fips_code,
+            type
+          )
+        ),
+        e_candidate_results (
+          id,
+          candidate_id,
+          votes,
+          vote_percentage,
+          winner,
+          votes_override,
+          vote_percentage_override,
+          winner_override,
+          e_candidates (
+            id,
+            candidate_id,
+            first_name,
+            last_name,
+            full_name,
+            display_name,
+            party_id,
+            incumbent,
+            incumbent_override,
+            e_parties (
+              name,
+              abbreviation
+            )
+          )
+        )
+      `)
+      .eq('e_races.e_elections.id', electionId);
+
+    // Apply state filter if regionId is provided
+    if (regionId) {
+      query = query.eq('e_races.e_geographic_divisions.code', regionId.toUpperCase());
+    }
+
+    const { data: raceResults, error: racesError } = await query;
+
+    if (racesError) {
+      console.error('❌ Error fetching election races:', racesError);
+    }
+
+    console.log(`🗳️ Fetched ${(raceResults || []).length} race results from database`);
+
+    // Also fetch e_race_candidates for withdrew status
+    const raceIds = (raceResults || []).map(rr => rr.race_id).filter(Boolean);
+    let raceCandidatesMap = new Map();
+
+    if (raceIds.length > 0) {
+      const { data: raceCandidatesData } = await supabase
+        .from('e_race_candidates')
+        .select('race_id, candidate_id, withdrew, withdrew_override')
+        .in('race_id', raceIds);
+
+      if (raceCandidatesData) {
+        for (const rc of raceCandidatesData) {
+          const key = `${rc.race_id}-${rc.candidate_id}`;
+          raceCandidatesMap.set(key, rc);
+        }
+      }
+    }
+
+    // Generate race elements
+    for (let raceIndex = 0; raceIndex < (raceResults || []).length; raceIndex++) {
+      const raceResult = raceResults[raceIndex];
+      const race = raceResult.e_races;
+      if (!race) continue;
+
+      const candidateResults = raceResult.e_candidate_results || [];
+
+      // Filter out withdrawn candidates and get actual vote data
+      let candidates = [];
+      for (const candidateResult of candidateResults) {
+        const candidate = candidateResult.e_candidates;
+        if (!candidate) continue;
+
+        // Check if withdrew
+        const raceCandidateKey = `${raceResult.race_id}-${candidateResult.candidate_id}`;
+        const raceCandidate = raceCandidatesMap.get(raceCandidateKey);
+        const withdrew = raceCandidate?.withdrew_override !== null && raceCandidate?.withdrew_override !== undefined
+          ? raceCandidate.withdrew_override
+          : raceCandidate?.withdrew;
+
+        if (withdrew) continue;
+
+        // Use override values if present
+        const votes = candidateResult.votes_override !== null && candidateResult.votes_override !== undefined
+          ? candidateResult.votes_override
+          : candidateResult.votes;
+        const votePercentage = candidateResult.vote_percentage_override !== null && candidateResult.vote_percentage_override !== undefined
+          ? candidateResult.vote_percentage_override
+          : candidateResult.vote_percentage;
+        const winner = candidateResult.winner_override !== null && candidateResult.winner_override !== undefined
+          ? candidateResult.winner_override
+          : candidateResult.winner;
+        const incumbent = candidate.incumbent_override !== null && candidate.incumbent_override !== undefined
+          ? candidate.incumbent_override
+          : candidate.incumbent;
+
+        candidates.push({
+          votes: votes || 0,
+          votePercentage: votePercentage || 0,
+          winner: winner || false,
+          candidate: candidate,
+          incumbent: incumbent || false
+        });
+      }
+
+      // Sort candidates by votes (descending)
+      let sortedCandidates = [...candidates].sort((a, b) => (b.votes || 0) - (a.votes || 0));
+
+      // Filter out candidates with zero votes if showZeroVotes is false
+      if (!showZeroVotes) {
+        sortedCandidates = sortedCandidates.filter(c => (c.votes || 0) > 0);
+      }
+
+      // Calculate total votes for percentages
+      const totalVotes = sortedCandidates.reduce((sum, c) => sum + (c.votes || 0), 0);
+
+      // Use override values for race-level data
+      const percentReporting = raceResult.percent_reporting_override !== null && raceResult.percent_reporting_override !== undefined
+        ? raceResult.percent_reporting_override
+        : raceResult.percent_reporting;
+
+      // Create element for this race
+      const element: {
+        id: string;
+        fields: { name: string; value: string }[];
+        template?: string;
+        duration?: string;
+      } = {
+        id: `${item.id}_race_${raceIndex}`,
+        fields: []
+      };
+
+      // Regular race - determine template based on number of candidates (after filtering)
+      const numCandidates = sortedCandidates.length;
+      const templateName = raceTemplate.replace('{numCandidates}', String(numCandidates));
+      element.template = templateName;
+
+      // Extract district from geographic division
+      const division = race.e_geographic_divisions;
+      const district = division?.fips_code || '';
+
+      // Add race-level fields
+      element.fields.push(
+        { name: 'raceId', value: race.race_id || String(race.id) },
+        { name: 'raceName', value: race.display_name || race.name || '' },
+        { name: 'district', value: district },
+        { name: 'pctRpt', value: String(percentReporting || 0) },
+        { name: 'showParty', value: showParty ? '1' : '0' },
+        { name: 'repOption', value: showEstimatedIn ? '1' : '0' }
+      );
+
+      // Add candidate fields (numbered 1-N)
+      for (let i = 0; i < sortedCandidates.length; i++) {
+        const candidateData = sortedCandidates[i];
+        const candidateInfo = candidateData.candidate;
+        const partyInfo = candidateInfo?.e_parties;
+        const candidateNum = i + 1;
+
+        const votes = candidateData.votes || 0;
+        const percent = candidateData.votePercentage?.toFixed(1) || '0.0';
+        const rank = i + 1;
+        const isWinner = candidateData.winner || false;
+        const isIncumbent = candidateData.incumbent || false;
+
+        // Party color material path
+        let partyColorMaterial = '';
+        if (showParty && partyInfo?.abbreviation) {
+          partyColorMaterial = `${partyMaterialPrefix}${partyInfo.abbreviation.toUpperCase()}`;
+        }
+
+        // Format last name with incumbent star if configured
+        let lastName = candidateInfo?.last_name || '';
+        if (showIncumbentStar && isIncumbent) {
+          lastName += '*';
+        }
+
+        element.fields.push(
+          { name: `partyColor${candidateNum}.material`, value: partyColorMaterial },
+          { name: `partyTxt${candidateNum}`, value: partyInfo?.abbreviation || '' },
+          { name: `firstName${candidateNum}`, value: candidateInfo?.first_name || '' },
+          { name: `lastName${candidateNum}`, value: lastName },
+          { name: `percent${candidateNum}`, value: percent },
+          { name: `votes${candidateNum}`, value: String(votes) },
+          { name: `rank${candidateNum}`, value: String(rank) },
+          { name: `winner${candidateNum}`, value: isWinner ? '1' : '0' }
+        );
+      }
+
+      if (item.duration && item.duration > 0) {
+        element.duration = item.duration.toString();
+      }
+
+      elements.push(element);
+    }
+
+    // Fetch ballot measures for this election
+    console.log(`🗳️ Fetching ballot measures for election ${electionId}`);
+
+    let ballotMeasureQuery = supabase
+      .from('e_ballot_measure_results')
+      .select(`
+        id,
+        measure_id,
+        yes_votes,
+        no_votes,
+        yes_percentage,
+        no_percentage,
+        passed,
+        precincts_reporting,
+        precincts_total,
+        percent_reporting,
+        e_ballot_measures!inner (
+          id,
+          measure_id,
+          number,
+          title,
+          summary,
+          type,
+          election_id,
+          e_elections!inner (
+            id,
+            election_id
+          ),
+          e_geographic_divisions (
+            code,
+            fips_code
+          )
+        )
+      `)
+      .eq('e_ballot_measures.election_id', electionId);
+
+    // Apply state filter if regionId is provided
+    if (regionId) {
+      ballotMeasureQuery = ballotMeasureQuery.eq('e_ballot_measures.e_geographic_divisions.code', regionId.toUpperCase());
+    }
+
+    const { data: ballotMeasureResults, error: ballotMeasuresError } = await ballotMeasureQuery;
+
+    if (ballotMeasuresError) {
+      console.error('❌ Error fetching ballot measures:', ballotMeasuresError);
+    }
+
+    console.log(`🗳️ Fetched ${(ballotMeasureResults || []).length} ballot measure results from database`);
+
+    // Generate ballot measure/proposal elements
+    for (let measureIndex = 0; measureIndex < (ballotMeasureResults || []).length; measureIndex++) {
+      const measureResult = ballotMeasureResults[measureIndex];
+      const measure = measureResult.e_ballot_measures;
+      if (!measure) continue;
+
+      // Create element for this ballot measure
+      const element: {
+        id: string;
+        fields: { name: string; value: string }[];
+        template?: string;
+        duration?: string;
+      } = {
+        id: `${item.id}_ballot_measure_${measureIndex}`,
+        fields: [],
+        template: proposalTemplate
+      };
+
+      // Get vote data
+      const yesVotes = measureResult.yes_votes || 0;
+      const noVotes = measureResult.no_votes || 0;
+      const yesPercent = measureResult.yes_percentage?.toFixed(1) || '0.0';
+      const noPercent = measureResult.no_percentage?.toFixed(1) || '0.0';
+      const percentReporting = measureResult.percent_reporting || 0;
+      const leading = yesVotes > noVotes ? 'YES' : 'NO';
+
+      // Format measure name (e.g., "Prop 1" or just the title)
+      const measureName = measure.number
+        ? `${measure.type || 'Measure'} ${measure.number}: ${measure.title}`
+        : measure.title;
+
+      // Add proposal fields
+      element.fields.push(
+        { name: 'raceId', value: measure.measure_id || String(measure.id) },
+        { name: 'raceName', value: measureName },
+        { name: 'pctRpt', value: String(percentReporting) },
+        { name: 'yesVotes', value: String(yesVotes) },
+        { name: 'yesPercent', value: yesPercent },
+        { name: 'noVotes', value: String(noVotes) },
+        { name: 'noPercent', value: noPercent },
+        { name: 'leading', value: leading }
+      );
+
+      if (item.duration && item.duration > 0) {
+        element.duration = item.duration.toString();
+      }
+
+      elements.push(element);
+    }
+
+    // Generate footer items
+    for (let i = 0; i < footerItems.length; i++) {
+      const footerItem = footerItems[i];
+
+      // Extract template name from object or string
+      let templateName = null;
+      if (footerItem.template) {
+        // Handle object format {label: "...", value: "..."}
+        if (typeof footerItem.template === 'object' && footerItem.template.value) {
+          templateName = footerItem.template.value;
+        } else if (typeof footerItem.template === 'string') {
+          templateName = footerItem.template;
+        }
+      } else if (footerItem.templateName) {
+        templateName = footerItem.templateName;
+      }
+
+      // Skip if no template specified
+      if (!templateName) {
+        continue;
+      }
+
+      const element: {
+        id: string;
+        fields: { name: string; value: string }[];
+        template?: string;
+        duration?: string;
+      } = {
+        id: `${item.id}_footer_${i}`,
+        fields: []
+      };
+
+      element.template = templateName;
+
+      // Add fields from footerItem if provided
+      if (footerItem.fields && Array.isArray(footerItem.fields)) {
+        for (const fieldDef of footerItem.fields) {
+          if (fieldDef.name && fieldDef.value !== undefined) {
+            element.fields.push({
+              name: fieldDef.name,
+              value: String(fieldDef.value)
+            });
+          }
+        }
+      }
+
+      if (item.duration && item.duration > 0) {
+        element.duration = item.duration.toString();
+      }
+
+      elements.push(element);
+    }
+
+  } catch (error) {
+    console.error('❌ Error processing election component:', error);
+  }
+
+  console.log(`🗳️ Returning ${elements.length} total elements (headers + races + footers)`);
   return elements;
 }
 
@@ -678,9 +1197,13 @@ function getWeatherDescription(code) {
   };
   return weatherCodes[code] || 'Unknown';
 }
-function buildElementXml(element, indent) {
+function buildElementXml(element, indent, includeIds = false) {
   const spaces = '  '.repeat(indent);
   let xml = `${spaces}<element>\n`;
+  // Add id if includeIds is enabled and element has an id
+  if (includeIds && element.id) {
+    xml += `${spaces}  <id>${escapeXml(element.id)}</id>\n`;
+  }
   // Add template first if specified
   if (element.template) {
     xml += `${spaces}  <template>${escapeXml(element.template)}</template>\n`;
