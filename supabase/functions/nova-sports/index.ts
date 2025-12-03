@@ -23,8 +23,15 @@ const STATUS_ALIASES: Record<string, string> = {
   'final': 'ended'
 };
 
-// Valid player positions
-const ALL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'];
+// Valid player positions (database stores MF, FW, DF but users may search with MID, FWD, DEF)
+const ALL_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'K', 'DF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MF', 'FW', 'MID', 'FWD', 'DEF'];
+
+// Map old position names to database values (MID->MF, FWD->FW, DEF->DF)
+const POSITION_TO_DB: Record<string, string> = {
+  'MID': 'MF',
+  'FWD': 'FW',
+  'DEF': 'DF'
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -301,7 +308,9 @@ serve(async (req) => {
 
         // Filter by position if specified
         if (position !== 'all') {
-          query = query.eq('position', position);
+          // Map API position to database value if needed (e.g., MF -> MID, FW -> FWD, DF -> DEF)
+          const dbPosition = POSITION_TO_DB[position] || position;
+          query = query.eq('position', dbPosition);
         }
 
         const { data: playersData, error: playersError } = await query;

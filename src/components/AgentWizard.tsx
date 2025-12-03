@@ -1301,9 +1301,9 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
     // Sync auth settings from SecurityStep before saving and get the auth data synchronously
     const authData = securityStepRef.current?.syncAuthToFormData();
 
-    // First, save/update Nova Weather, Nova Election, or Nova Finance data sources if needed
+    // First, save/update Nova Weather, Nova Election, Nova Finance, or Nova Sports data sources if needed
     const hasNovaSources = newDataSources.some(ds =>
-      (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance') && ds.name && ds.type && (ds.isExisting || !ds.id)
+      (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports') && ds.name && ds.type && (ds.isExisting || !ds.id)
     );
 
     if (hasNovaSources) {
@@ -1315,13 +1315,13 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
       }
     }
 
-    // Now save any other new data sources (non-Nova Weather/Election)
+    // Now save any other new data sources (non-Nova Weather/Election/Finance/Sports)
     const savedDataSourceIds: string[] = [];
     const newlySavedSources: AgentDataSource[] = [];
 
-    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election/Finance
+    // Only save data sources that don't have an ID yet (haven't been saved) and aren't Nova Weather/Election/Finance/Sports
     const unsavedSources = newDataSources.filter(ds =>
-      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election' && ds.category !== 'Nova Finance'
+      !ds.id && ds.name && ds.type && ds.category !== 'Nova Weather' && ds.category !== 'Nova Election' && ds.category !== 'Nova Finance' && ds.category !== 'Nova Sports'
     );
     if (unsavedSources.length > 0) {
       console.log('Saving new data sources to database...');
@@ -1437,12 +1437,12 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   };
 
   const handleClose = async (agentSavedSuccessfully: boolean = false) => {
-    // Clean up any Nova Weather, Nova Election, or Nova Finance data sources that were saved but not associated with an agent
+    // Clean up any Nova Weather, Nova Election, Nova Finance, or Nova Sports data sources that were saved but not associated with an agent
     // Only clean up if the agent was NOT successfully saved (i.e., user cancelled without completing)
     // AND only in create mode, not edit mode (in edit mode, sources already belong to an agent)
     if (!agentSavedSuccessfully && !editAgent) {
       const novaSources = newDataSources.filter(
-        ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance') && ds.id && !ds.isExisting
+        ds => (ds.category === 'Nova Weather' || ds.category === 'Nova Election' || ds.category === 'Nova Finance' || ds.category === 'Nova Sports') && ds.id && !ds.isExisting
       );
 
       if (novaSources.length > 0) {
@@ -1731,7 +1731,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="font-medium">{category}</h3>
-                      {(category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance') && (
+                      {(category === 'Nova Weather' || category === 'Nova Election' || category === 'Nova Finance' || category === 'Nova Sports') && (
                         <Badge className="bg-orange-500 text-white hover:bg-orange-600">
                           Nova
                         </Badge>
@@ -2955,8 +2955,35 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="all">All Positions</SelectItem>
-                                {['QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'PG', 'SG', 'SF', 'PF', 'C', 'P', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'LW', 'RW', 'D', 'G', 'GK', 'MID', 'FWD'].map((pos) => (
-                                  <SelectItem key={pos} value={pos}>{pos}</SelectItem>
+                                {[
+                                  { value: 'QB', label: 'QB' },
+                                  { value: 'RB', label: 'RB' },
+                                  { value: 'WR', label: 'WR' },
+                                  { value: 'TE', label: 'TE' },
+                                  { value: 'K', label: 'K' },
+                                  { value: 'DF', label: 'DF (DEF)' },
+                                  { value: 'PG', label: 'PG' },
+                                  { value: 'SG', label: 'SG' },
+                                  { value: 'SF', label: 'SF' },
+                                  { value: 'PF', label: 'PF' },
+                                  { value: 'C', label: 'C' },
+                                  { value: 'P', label: 'P' },
+                                  { value: '1B', label: '1B' },
+                                  { value: '2B', label: '2B' },
+                                  { value: '3B', label: '3B' },
+                                  { value: 'SS', label: 'SS' },
+                                  { value: 'OF', label: 'OF' },
+                                  { value: 'SP', label: 'SP' },
+                                  { value: 'RP', label: 'RP' },
+                                  { value: 'LW', label: 'LW' },
+                                  { value: 'RW', label: 'RW' },
+                                  { value: 'D', label: 'D' },
+                                  { value: 'G', label: 'G' },
+                                  { value: 'GK', label: 'GK' },
+                                  { value: 'MF', label: 'MF (MID)' },
+                                  { value: 'FW', label: 'FW (FWD)' }
+                                ].map((pos) => (
+                                  <SelectItem key={pos.value} value={pos.value}>{pos.label}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
