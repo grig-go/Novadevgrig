@@ -73,6 +73,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
   const [selectedAsset, setSelectedAsset] = useState<MediaAsset | null>(null);
   const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null);
   const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
+  const [videoLoadError, setVideoLoadError] = useState(false);
   
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -173,8 +174,11 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     setCurrentPage(1); // Reset to first page when filters change
   }, [searchQuery, selectedType, selectedSource, selectedAIModel, selectedCreator, selectedSyncStatus, showArchived]);
 
-  // Fetch distributions when selectedAsset changes
+  // Fetch distributions and reset video error when selectedAsset changes
   useEffect(() => {
+    // Reset video error state when a new asset is selected
+    setVideoLoadError(false);
+
     if (selectedAsset) {
       fetchDistributions(selectedAsset.id);
     } else {
@@ -2248,6 +2252,7 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
         <Dialog open={!!selectedAsset} onOpenChange={() => {
           setSelectedAsset(null);
           setVideoRef(null);
+          setVideoLoadError(false);
         }}>
           <DialogContent 
             className="max-h-[90vh] overflow-hidden flex flex-col"
@@ -2282,14 +2287,66 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                   
                   <div className="aspect-video bg-muted rounded-lg overflow-hidden">
                     {selectedAsset.file_type === 'video' ? (
-                      <video 
-                        ref={(el) => setVideoRef(el)}
-                        src={selectedAsset.file_url} 
-                        controls
-                        className="w-full h-full"
-                        preload="metadata"
-                        crossOrigin="anonymous"
-                      />
+                      !selectedAsset.file_url ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+                          <AlertCircle className="w-16 h-16 text-destructive mb-4" />
+                          <p className="text-lg font-medium mb-2">Video URL not found</p>
+                          <p className="text-sm text-muted-foreground">
+                            This video asset does not have a file URL stored. The file may have been deleted or not uploaded correctly.
+                          </p>
+                        </div>
+                      ) : videoLoadError ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-8 text-center">
+                          <AlertCircle className="w-16 h-16 text-destructive mb-4" />
+                          <p className="text-lg font-medium mb-2">Video failed to load</p>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            The video file could not be loaded. This may be due to a missing file or network issue.
+                          </p>
+                          <div className="space-y-2 w-full max-w-md">
+                            <p className="text-xs text-muted-foreground">Direct URL:</p>
+                            <div className="flex gap-2">
+                              <Input
+                                value={selectedAsset.file_url}
+                                readOnly
+                                className="text-xs"
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  window.open(selectedAsset.file_url, '_blank');
+                                }}
+                              >
+                                Open
+                              </Button>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full mt-2"
+                              onClick={() => setVideoLoadError(false)}
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Retry Loading
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <video
+                          ref={(el) => setVideoRef(el)}
+                          src={selectedAsset.file_url}
+                          controls
+                          className="w-full h-full"
+                          preload="metadata"
+                          onError={(e) => {
+                            console.error('Video load error:', e, 'URL:', selectedAsset.file_url);
+                            setVideoLoadError(true);
+                          }}
+                          onLoadedData={() => {
+                            setVideoLoadError(false);
+                          }}
+                        />
+                      )
                     ) : selectedAsset.file_type === 'audio' ? (
                       <div className="w-full h-full flex flex-col items-center justify-center p-8">
                         <Music className="w-24 h-24 text-muted-foreground mb-4" />
