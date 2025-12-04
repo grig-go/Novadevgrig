@@ -1,24 +1,25 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
 // Configuration for image thumbnails
 const THUMBNAIL_MAX_WIDTH = 400;
 const THUMBNAIL_MAX_HEIGHT = 400;
-const THUMBNAIL_QUALITY = 0.8;
+const THUMBNAIL_QUALITY = 80; // 1-100 for JPEG
 
-// Helper function to generate image thumbnail
-async function generateImageThumbnail(imageFile: File): Promise<Blob | null> {
+// Helper function to generate image thumbnail using ImageScript
+async function generateImageThumbnail(imageFile: File): Promise<Uint8Array | null> {
   try {
     // Read the file as ArrayBuffer
     const arrayBuffer = await imageFile.arrayBuffer();
-    const blob = new Blob([arrayBuffer], { type: imageFile.type });
+    const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Create ImageBitmap from the blob
-    const imageBitmap = await createImageBitmap(blob);
+    // Decode the image
+    const image = await Image.decode(uint8Array);
 
     // Calculate new dimensions maintaining aspect ratio
-    let width = imageBitmap.width;
-    let height = imageBitmap.height;
+    let width = image.width;
+    let height = image.height;
 
     if (width > THUMBNAIL_MAX_WIDTH || height > THUMBNAIL_MAX_HEIGHT) {
       const aspectRatio = width / height;
@@ -32,26 +33,15 @@ async function generateImageThumbnail(imageFile: File): Promise<Blob | null> {
       }
     }
 
-    // Create OffscreenCanvas and draw resized image
-    const canvas = new OffscreenCanvas(width, height);
-    const ctx = canvas.getContext('2d');
+    // Resize the image
+    image.resize(width, height);
 
-    if (!ctx) {
-      console.error("Failed to get canvas context");
-      return null;
-    }
+    // Encode as JPEG
+    const thumbnailData = await image.encodeJPEG(THUMBNAIL_QUALITY);
 
-    ctx.drawImage(imageBitmap, 0, 0, width, height);
+    console.log(`📸 Generated thumbnail: ${width}x${height} (${Math.round(thumbnailData.length / 1024)}KB)`);
 
-    // Convert to blob (JPEG for smaller size)
-    const thumbnailBlob = await canvas.convertToBlob({
-      type: 'image/jpeg',
-      quality: THUMBNAIL_QUALITY,
-    });
-
-    console.log(`📸 Generated thumbnail: ${width}x${height} (${Math.round(thumbnailBlob.size / 1024)}KB)`);
-
-    return thumbnailBlob;
+    return thumbnailData;
   } catch (error) {
     console.error("Failed to generate image thumbnail:", error);
     return null;
@@ -410,13 +400,13 @@ serve(async (req)=>{
       if (mediaType === "image") {
         try {
           console.log("📸 Generating image thumbnail...");
-          const thumbnailBlob = await generateImageThumbnail(file);
+          const thumbnailData = await generateImageThumbnail(file);
 
-          if (thumbnailBlob) {
+          if (thumbnailData) {
             const thumbnailPath = `${folder}/thumbnails/${timestamp}_${crypto.randomUUID()}.jpg`;
 
-            // Upload generated thumbnail to storage
-            const { data: thumbnailUploadData, error: thumbnailUploadError } = await supabase.storage.from(bucketName).upload(thumbnailPath, thumbnailBlob, {
+            // Upload generated thumbnail to storage (Uint8Array works directly with Supabase)
+            const { data: thumbnailUploadData, error: thumbnailUploadError } = await supabase.storage.from(bucketName).upload(thumbnailPath, thumbnailData, {
               contentType: 'image/jpeg',
               upsert: false
             });
