@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     }
 
     console.log('🚀 Calling Claude API with:', {
-      model: 'claude-3-sonnet-20240229',
+      model: 'claude-sonnet-4-5-20250929',
       promptLength: finalPrompt.length,
       systemLength: system.length,
       outputFormat: outputFormat || 'text',
@@ -81,9 +81,9 @@ Deno.serve(async (req) => {
       systemPreview: system.substring(0, 100) + '...'
     });
 
-    // Call Claude API with correct model name
+    // Call Claude API with Sonnet 4.5
     const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2000,
       temperature: 0.7,
       system: system,
