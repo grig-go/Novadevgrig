@@ -2338,8 +2338,8 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
                           controls
                           className="w-full h-full"
                           preload="metadata"
-                          onError={(e) => {
-                            console.error('Video load error:', e, 'URL:', selectedAsset.file_url);
+                          onError={() => {
+                            console.error('Video load error for URL:', selectedAsset.file_url);
                             setVideoLoadError(true);
                           }}
                           onLoadedData={() => {
