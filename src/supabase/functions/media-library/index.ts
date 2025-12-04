@@ -1,5 +1,53 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.8";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+
+// Configuration for image thumbnails
+const THUMBNAIL_MAX_WIDTH = 400;
+const THUMBNAIL_MAX_HEIGHT = 400;
+const THUMBNAIL_QUALITY = 80; // 1-100 for JPEG
+
+// Helper function to generate image thumbnail using ImageScript
+async function generateImageThumbnail(imageFile: File): Promise<Uint8Array | null> {
+  try {
+    // Read the file as ArrayBuffer
+    const arrayBuffer = await imageFile.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    // Decode the image
+    const image = await Image.decode(uint8Array);
+
+    // Calculate new dimensions maintaining aspect ratio
+    let width = image.width;
+    let height = image.height;
+
+    if (width > THUMBNAIL_MAX_WIDTH || height > THUMBNAIL_MAX_HEIGHT) {
+      const aspectRatio = width / height;
+
+      if (width > height) {
+        width = THUMBNAIL_MAX_WIDTH;
+        height = Math.round(width / aspectRatio);
+      } else {
+        height = THUMBNAIL_MAX_HEIGHT;
+        width = Math.round(height * aspectRatio);
+      }
+    }
+
+    // Resize the image
+    image.resize(width, height);
+
+    // Encode as JPEG
+    const thumbnailData = await image.encodeJPEG(THUMBNAIL_QUALITY);
+
+    console.log(`📸 Generated thumbnail: ${width}x${height} (${Math.round(thumbnailData.length / 1024)}KB)`);
+
+    return thumbnailData;
+  } catch (error) {
+    console.error("Failed to generate image thumbnail:", error);
+    return null;
+  }
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, PATCH, OPTIONS",
@@ -321,8 +369,11 @@ serve(async (req)=>{
         }
       });
       const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(uploadData.path);
-      // Handle video thumbnail upload
+
+      // Handle thumbnail generation/upload
       let thumbnailUrl = urlData.publicUrl;
+
+      // For videos: use provided thumbnail file
       if (mediaType === "video" && thumbnailFile) {
         try {
           console.log("🎬 Uploading video thumbnail...");
@@ -341,7 +392,36 @@ serve(async (req)=>{
           }
         } catch (thumbnailError) {
           console.error("⚠️ Failed to process video thumbnail:", thumbnailError);
-        // Continue with video URL as fallback
+          // Continue with video URL as fallback
+        }
+      }
+
+      // For images: auto-generate thumbnail
+      if (mediaType === "image") {
+        try {
+          console.log("📸 Generating image thumbnail...");
+          const thumbnailData = await generateImageThumbnail(file);
+
+          if (thumbnailData) {
+            const thumbnailPath = `${folder}/thumbnails/${timestamp}_${crypto.randomUUID()}.jpg`;
+
+            // Upload generated thumbnail to storage (Uint8Array works directly with Supabase)
+            const { data: thumbnailUploadData, error: thumbnailUploadError } = await supabase.storage.from(bucketName).upload(thumbnailPath, thumbnailData, {
+              contentType: 'image/jpeg',
+              upsert: false
+            });
+
+            if (thumbnailUploadError) {
+              console.error("⚠️ Failed to upload image thumbnail:", thumbnailUploadError);
+            } else {
+              const { data: thumbnailUrlData } = supabase.storage.from(bucketName).getPublicUrl(thumbnailUploadData.path);
+              thumbnailUrl = thumbnailUrlData.publicUrl;
+              console.log("✅ Image thumbnail generated and uploaded:", thumbnailUrl);
+            }
+          }
+        } catch (thumbnailError) {
+          console.error("⚠️ Failed to generate image thumbnail:", thumbnailError);
+          // Continue with original image URL as fallback
         }
       }
       // Insert DB record
