@@ -8,6 +8,49 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+
+// Get CACHE_PATH from environment - when set, image URLs will be replaced with local file paths
+const CACHE_PATH = Deno.env.get('CACHE_PATH');
+
+/**
+ * Transforms a Supabase storage URL to a local cache path if CACHE_PATH is set.
+ * Example: https://xxx.supabase.co/storage/v1/object/public/images/uploads/123-abc.jpg
+ * becomes: D:\temp\nova_cache\123-abc.jpg
+ */
+function transformImageUrl(url: string): string {
+  if (!CACHE_PATH || !url) {
+    return url;
+  }
+
+  // Check if this is a Supabase storage URL (or any URL that looks like an image)
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+  const lowerUrl = url.toLowerCase();
+  const isImageUrl = imageExtensions.some(ext => lowerUrl.includes(ext));
+
+  if (!isImageUrl) {
+    return url;
+  }
+
+  // Extract filename from URL
+  try {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/');
+    const filename = pathParts[pathParts.length - 1];
+
+    if (filename) {
+      // Combine CACHE_PATH with filename using backslash for Windows paths
+      const separator = CACHE_PATH.includes('\\') ? '\\' : '/';
+      const cachePath = CACHE_PATH.endsWith(separator) ? CACHE_PATH : CACHE_PATH + separator;
+      return cachePath + filename;
+    }
+  } catch (e) {
+    // If URL parsing fails, return original
+    console.warn('Failed to parse URL for cache path transformation:', url, e);
+  }
+
+  return url;
+}
+
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -19,10 +62,28 @@ serve(async (req)=>{
     // Get timezone from environment variable
     const timezone = Deno.env.get('TICKER_TIMEZONE') || 'UTC';
     console.log('Using timezone:', timezone);
-    // Parse the URL to get channel name
+    if (CACHE_PATH) {
+      console.log('Using CACHE_PATH for images:', CACHE_PATH);
+    }
+    // Parse the URL to get channel name and check for /images endpoint
     const url = new URL(req.url);
-    const pathParts = url.pathname.split('/');
-    const channelName = pathParts[pathParts.length - 1] || '';
+    const pathParts = url.pathname.split('/').filter(p => p);
+
+    // Check if this is an /images request (e.g., /vizrt-ticker/New Jersey/images)
+    const isImagesRequest = pathParts[pathParts.length - 1] === 'images';
+
+    // Get channel name - if /images request, it's the second-to-last segment
+    let channelName = '';
+    if (isImagesRequest) {
+      // Remove 'images' and 'vizrt-ticker' to get channel name
+      const relevantParts = pathParts.filter(p => p !== 'vizrt-ticker' && p !== 'images');
+      channelName = relevantParts.join('/') || '';
+    } else {
+      // Normal request - channel name is the last segment after vizrt-ticker
+      const relevantParts = pathParts.filter(p => p !== 'vizrt-ticker');
+      channelName = relevantParts.join('/') || '';
+    }
+
     if (!channelName) {
       return new Response(JSON.stringify({
         error: 'Channel name is required'
@@ -65,6 +126,21 @@ serve(async (req)=>{
       playlistQuery.eq('active', true);
     }
     const { data: playlists } = await playlistQuery;
+
+    // Handle /images endpoint - return list of image URLs for caching
+    if (isImagesRequest) {
+      console.log(`[VIZRT-TICKER] GET images for channel: ${channelName}`);
+      const imageUrls = await collectImageUrls(playlists || [], supabaseClient, includeInactive, timezone);
+
+      return new Response(JSON.stringify(imageUrls), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      });
+    }
+
     // 3. Build XML structure
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<!DOCTYPE tickerfeed SYSTEM "http://www.vizrt.com/ticker/tickerfeed-2.4.dtd">\n';
@@ -355,11 +431,17 @@ async function createElement(item, supabase) {
       if (forecastResult.templateName) {
         element.template = forecastResult.templateName;
       }
-    } else {
-      // Regular field
+    } else if (componentConfig?.type === 'image') {
+      // Handle Image Upload component - transform URL to cache path if CACHE_PATH is set
       element.fields.push({
         name: field.name,
-        value: field.value
+        value: transformImageUrl(field.value)
+      });
+    } else {
+      // Regular field - also check if the value looks like an image URL
+      element.fields.push({
+        name: field.name,
+        value: transformImageUrl(field.value)
       });
     }
   }
@@ -677,4 +759,95 @@ function hasTimeSensitiveField(fields) {
     'alert'
   ];
   return fields.some((field)=>timeSensitiveKeywords.some((keyword)=>field.name.toLowerCase().includes(keyword) || field.value.toLowerCase().includes(keyword)));
+}
+
+/**
+ * Collects all image URLs from the ticker content for a channel.
+ * Used by the /images endpoint to provide a list of images for caching.
+ */
+async function collectImageUrls(playlists: any[], supabase: any, includeInactive: boolean, timezone: string): Promise<string[]> {
+  const imageUrls = new Set<string>();
+  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+
+  // Helper to check if a value is an image URL
+  const isImageUrl = (value: string): boolean => {
+    if (!value || typeof value !== 'string') return false;
+    const lowerValue = value.toLowerCase();
+    return imageExtensions.some(ext => lowerValue.includes(ext)) &&
+           (value.startsWith('http://') || value.startsWith('https://'));
+  };
+
+  // Process each playlist
+  for (const playlist of playlists) {
+    // Check if playlist is currently active
+    if (!isCurrentlyActive(playlist.schedule, timezone)) {
+      continue;
+    }
+
+    // Get buckets for this playlist
+    const bucketQuery = supabase.from('channel_playlists').select('*').eq('parent_id', playlist.id).eq('type', 'bucket').order('order');
+    if (!includeInactive) {
+      bucketQuery.eq('active', true);
+    }
+    const { data: buckets } = await bucketQuery;
+
+    if (!buckets || buckets.length === 0) continue;
+
+    // Process each bucket
+    for (const bucket of buckets) {
+      // Check if bucket is currently active
+      if (!isCurrentlyActive(bucket.schedule, timezone)) {
+        continue;
+      }
+
+      if (!bucket.content_id) continue;
+
+      // Get all items recursively from the bucket
+      const items = await getItemsForBucketImages(bucket.content_id, supabase, includeInactive, timezone);
+
+      // Get fields for each item and extract image URLs
+      for (const item of items) {
+        const { data: fields } = await supabase.from('item_tabfields').select('*').eq('item_id', item.id);
+
+        for (const field of fields || []) {
+          if (field.name.startsWith('__')) continue;
+
+          if (isImageUrl(field.value)) {
+            imageUrls.add(field.value);
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(imageUrls);
+}
+
+/**
+ * Recursively gets all items from a container for image collection.
+ * Similar to getItemsForBucket but simplified for image URL extraction.
+ */
+async function getItemsForBucketImages(containerId: string, supabase: any, includeInactive: boolean, timezone: string): Promise<any[]> {
+  const allItems: any[] = [];
+
+  const query = supabase.from('content').select('*').eq('parent_id', containerId).order('order');
+  if (!includeInactive) {
+    query.eq('active', true);
+  }
+  const { data: children } = await query;
+
+  for (const child of children || []) {
+    if (child.type === 'item') {
+      if (isCurrentlyActive(child.schedule, timezone)) {
+        allItems.push(child);
+      }
+    } else if (child.type === 'itemFolder') {
+      if (isCurrentlyActive(child.schedule, timezone)) {
+        const itemsFromFolder = await getItemsForBucketImages(child.id, supabase, includeInactive, timezone);
+        allItems.push(...itemsFromFolder);
+      }
+    }
+  }
+
+  return allItems;
 }
