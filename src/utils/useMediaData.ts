@@ -2,6 +2,39 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { projectId, publicAnonKey } from "./supabase/info";
 import { MediaAsset, MediaType, MediaSource, SyncStatus } from "../types/media";
 
+// Helper function to detect media type from file URL/name
+function detectMediaType(url: string | null | undefined, declaredType: string | null | undefined): MediaType {
+  // If declared type is valid, use it
+  if (declaredType === 'video' || declaredType === 'image' || declaredType === 'audio' || declaredType === '3d') {
+    return declaredType as MediaType;
+  }
+
+  // Fallback: detect from file extension
+  if (url) {
+    const lowerUrl = url.toLowerCase();
+    // Extract extension, handling query strings
+    const pathPart = lowerUrl.split('?')[0];
+    const extension = pathPart.split('.').pop();
+
+    const videoExtensions = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'm4v', 'ogv'];
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a', 'wma'];
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'];
+
+    if (extension && videoExtensions.includes(extension)) {
+      return 'video';
+    }
+    if (extension && audioExtensions.includes(extension)) {
+      return 'audio';
+    }
+    if (extension && imageExtensions.includes(extension)) {
+      return 'image';
+    }
+  }
+
+  // Default to image if we can't determine
+  return 'image';
+}
+
 interface MediaFilters {
   limit?: number;
   offset?: number;
@@ -104,7 +137,7 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
         description: asset.description || '',
         file_url: asset.file_url,
         thumbnail_url: asset.thumbnail_url || asset.file_url,
-        file_type: asset.media_type as MediaType,
+        file_type: detectMediaType(asset.file_url, asset.media_type),
         file_size: asset.size || 0,
         dimensions: asset.dimensions,
         source: (asset.created_by?.startsWith('ai:') || asset.created_by === 'AI') ? 'ai-generated' as MediaSource : 'user-uploaded' as MediaSource,
