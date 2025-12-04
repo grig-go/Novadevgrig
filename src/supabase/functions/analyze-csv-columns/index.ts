@@ -1,38 +1,40 @@
 // Edge Function: supabase/functions/analyze-csv-columns/index.ts
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { Anthropic } from 'npm:@anthropic-ai/sdk@0.18.0';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
-serve(async (req)=>{
+
+// Initialize Anthropic client
+const anthropic = new Anthropic({
+  apiKey: Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+});
+
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
       headers: corsHeaders
     });
   }
+
   try {
     const { sample, hasHeaders } = await req.json();
     if (!sample || !Array.isArray(sample) || sample.length === 0) {
       throw new Error('Invalid sample data');
     }
+
+    // Check if API key is configured
+    const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) {
+      throw new Error('ANTHROPIC_API_KEY is not configured in environment variables');
+    }
+
     // Prepare data for Claude
-    const sampleText = sample.slice(0, 10).map((row)=>Array.isArray(row) ? row.join('\t') : Object.values(row).join('\t')).join('\n');
-    // Call Claude API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': Deno.env.get('CLAUDE_API_KEY') || '',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-opus-20240229',
-        max_tokens: 1000,
-        messages: [
-          {
-            role: 'user',
-            content: `Analyze this CSV/TSV data and suggest appropriate column names.
-          
+    const sampleText = sample.slice(0, 10).map((row) => Array.isArray(row) ? row.join('\t') : Object.values(row).join('\t')).join('\n');
+
+    const prompt = `Analyze this CSV/TSV data and suggest appropriate column names.
+
 The data ${hasHeaders ? 'has' : 'does not have'} headers.
 Sample data (tab-separated):
 ${sampleText}
@@ -46,16 +48,23 @@ Return a JSON object with:
 - columnNames: array of suggested names
 - columnTypes: array of detected types (string, number, date, email, url, etc.)
 - confidence: your confidence level (0-1)
-- reasoning: brief explanation of your suggestions`
-          }
-        ]
-      })
+- reasoning: brief explanation of your suggestions`;
+
+    // Call Claude API using SDK
+    const completion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 1000,
+      system: 'You are a helpful AI assistant that analyzes data. Respond with valid JSON only, no explanations or markdown formatting.',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ]
     });
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
-    const claudeResponse = await response.json();
-    const content = claudeResponse.content[0].text;
+
+    const content = completion.content[0]?.text || '';
+
     // Parse Claude's response
     let suggestions;
     try {
@@ -75,6 +84,7 @@ Return a JSON object with:
         reasoning: 'Could not parse AI response'
       };
     }
+
     return new Response(JSON.stringify({
       success: true,
       suggestions
