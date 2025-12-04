@@ -515,7 +515,7 @@ function buildElementXml(element, indent, includeIds = false) {
   }
   // Add fields
   for (const field of element.fields){
-    xml += `${spaces}  <field name="${escapeXml(field.name)}">${escapeXml(field.value)}</field>\n`;
+    xml += `${spaces}  <field name="${escapeXml(field.name)}">${escapeXml(convertBooleanValue(field.value))}</field>\n`;
   }
   // Add optional properties
   if (element.duration) {
@@ -696,6 +696,13 @@ function isTimeWithinRange(currentTime, startTime, endTime) {
 // Helper functions
 function escapeXml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+// Convert boolean values to 0/1 for Vizrt compatibility
+function convertBooleanValue(value: string): string {
+  if (value === 'true') return '1';
+  if (value === 'false') return '0';
+  return value;
 }
 function determinePlaylistType(playlist) {
   if (playlist.name.toLowerCase().includes('breaking') || playlist.name.toLowerCase().includes('urgent')) {
