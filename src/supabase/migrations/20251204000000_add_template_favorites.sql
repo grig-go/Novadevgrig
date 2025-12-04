@@ -45,3 +45,5 @@ EXECUTE FUNCTION ensure_single_default_template();
 
 DROP TRIGGER IF EXISTS update_order_after_delete ON templates;
 DROP TRIGGER IF EXISTS templates_order_update_after_delete ON templates;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE template_settings;
