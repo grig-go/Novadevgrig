@@ -35,6 +35,7 @@ export async function processElectionComponent(
       showEstimatedIn = true,
       headerItems = [],
       footerItems = [],
+      presidentialTemplate = '',
       raceTemplate = 'VOTE_{numCandidates}HEADS',
       proposalTemplate = 'VOTE_PUBLIC_QUESTION',
       partyMaterialPrefix = 'MATERIAL*ONLINE_2019/N12/MASTER_CONTROL/ELECTIONS/'
@@ -45,6 +46,7 @@ export async function processElectionComponent(
       regionId,
       headerItemsCount: headerItems.length,
       footerItemsCount: footerItems.length,
+      presidentialTemplate,
       raceTemplate,
       proposalTemplate
     });
@@ -128,6 +130,7 @@ export async function processElectionComponent(
           display_name,
           type,
           office,
+          priority_level,
           e_elections!inner (
             id,
             election_id,
@@ -181,8 +184,26 @@ export async function processElectionComponent(
 
     console.log(`🗳️ Fetched ${(raceResults || []).length} race results from database`);
 
+    // Sort races by priority_level (descending, so 10 comes first), then alphabetically by name
+    const sortedRaceResults = (raceResults || []).sort((a: any, b: any) => {
+      const priorityA = a.e_races?.priority_level || 0;
+      const priorityB = b.e_races?.priority_level || 0;
+
+      // First sort by priority_level descending (higher priority first)
+      if (priorityB !== priorityA) {
+        return priorityB - priorityA;
+      }
+
+      // Then sort alphabetically by race name
+      const nameA = a.e_races?.display_name || a.e_races?.name || '';
+      const nameB = b.e_races?.display_name || b.e_races?.name || '';
+      return nameA.localeCompare(nameB);
+    });
+
+    console.log(`🗳️ Sorted races by priority_level (desc) then name (asc)`);
+
     // Also fetch e_race_candidates for withdrew status
-    const raceIds = (raceResults || []).map((rr: any) => rr.race_id).filter(Boolean);
+    const raceIds = (sortedRaceResults || []).map((rr: any) => rr.race_id).filter(Boolean);
     let raceCandidatesMap = new Map();
 
     if (raceIds.length > 0) {
@@ -200,8 +221,8 @@ export async function processElectionComponent(
     }
 
     // Generate race elements
-    for (let raceIndex = 0; raceIndex < (raceResults || []).length; raceIndex++) {
-      const raceResult = raceResults[raceIndex];
+    for (let raceIndex = 0; raceIndex < (sortedRaceResults || []).length; raceIndex++) {
+      const raceResult = sortedRaceResults[raceIndex];
       const race = raceResult.e_races;
       if (!race) continue;
 
@@ -248,9 +269,18 @@ export async function processElectionComponent(
       // Sort candidates by votes (descending)
       let sortedCandidates = [...candidates].sort((a, b) => (b.votes || 0) - (a.votes || 0));
 
-      // Filter out candidates with zero votes if showZeroVotes is false
-      if (!showZeroVotes) {
+      // Check if this is a presidential race (priority_level=10)
+      const isPresidential = race.priority_level === 10;
+
+      // For presidential races, don't filter zero votes - we always want DEM and GOP
+      if (!showZeroVotes && !isPresidential) {
         sortedCandidates = sortedCandidates.filter((c: any) => (c.votes || 0) > 0);
+      }
+
+      // For non-presidential races, limit to maximum 9 candidates for ticker display
+      // Presidential races will be filtered to exactly 2 candidates (DEM, GOP) later
+      if (!isPresidential) {
+        sortedCandidates = sortedCandidates.slice(0, 9);
       }
 
       // Calculate total votes for percentages
@@ -272,9 +302,43 @@ export async function processElectionComponent(
         fields: []
       };
 
-      // Regular race - determine template based on number of candidates (after filtering)
-      const numCandidates = sortedCandidates.length;
-      const templateName = raceTemplate.replace('{numCandidates}', String(numCandidates));
+      // Determine template and sort candidates accordingly
+      let templateName: string;
+      let candidatesToDisplay = sortedCandidates;
+
+      if (isPresidential && presidentialTemplate) {
+        // Presidential race - use special template
+        templateName = presidentialTemplate;
+
+        // Log all candidates and their parties for debugging
+        console.log(`🗳️ Presidential race - all candidates:`, sortedCandidates.map(c => ({
+          name: c.candidate?.display_name || c.candidate?.full_name,
+          party: c.candidate?.e_parties?.abbreviation,
+          votes: c.votes
+        })));
+
+        // Sort: Democrat first, Republican second
+        // Find Democrat and Republican candidates (check both DEM/Dem and REP/GOP, case-insensitive)
+        const democrat = sortedCandidates.find(c =>
+          c.candidate?.e_parties?.abbreviation?.toUpperCase() === 'DEM'
+        );
+        const republican = sortedCandidates.find(c => {
+          const party = c.candidate?.e_parties?.abbreviation?.toUpperCase();
+          return party === 'GOP' || party === 'REP';
+        });
+
+        // Build ordered candidate list: Dem, GOP, then others by votes
+        candidatesToDisplay = [];
+        if (democrat) candidatesToDisplay.push(democrat);
+        if (republican) candidatesToDisplay.push(republican);
+
+        console.log(`🗳️ Presidential race detected, using template: ${templateName}, showing ${candidatesToDisplay.length} candidates (DEM: ${democrat ? 'found' : 'missing'}, GOP/REP: ${republican ? 'found' : 'missing'})`);
+      } else {
+        // Regular race - determine template based on number of candidates (after filtering)
+        const numCandidates = sortedCandidates.length;
+        templateName = raceTemplate.replace('{numCandidates}', String(numCandidates));
+      }
+
       element.template = templateName;
 
       // Extract district from geographic division
@@ -292,8 +356,8 @@ export async function processElectionComponent(
       );
 
       // Add candidate fields (numbered 1-N)
-      for (let i = 0; i < sortedCandidates.length; i++) {
-        const candidateData = sortedCandidates[i];
+      for (let i = 0; i < candidatesToDisplay.length; i++) {
+        const candidateData = candidatesToDisplay[i];
         const candidateInfo = candidateData.candidate;
         const partyInfo = candidateInfo?.e_parties;
         const candidateNum = i + 1;
