@@ -47,3 +47,8 @@ DROP TRIGGER IF EXISTS update_order_after_delete ON templates;
 DROP TRIGGER IF EXISTS templates_order_update_after_delete ON templates;
 
 ALTER PUBLICATION supabase_realtime ADD TABLE template_settings;
+
+ALTER TABLE templates
+ADD COLUMN carousel_name TEXT;
+
+CREATE INDEX idx_templates_carousel_name ON templates(carousel_name);
