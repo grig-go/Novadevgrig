@@ -1,1 +1,0 @@
-export const AP_CURRENT_ELECTION_DATE = '2024-11-05';

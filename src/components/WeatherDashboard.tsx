@@ -21,7 +21,7 @@ import { toast } from "sonner@2.0.3";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { useWeatherData } from "../utils/useWeatherData";
 import { useLocalStorage } from "../utils/useLocalStorage";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 import { 
   RefreshCw, 

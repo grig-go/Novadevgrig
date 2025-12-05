@@ -10,9 +10,11 @@ import { XMLParser } from "npm:fast-xml-parser";
 // ----------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const LEGACY_TLS_PROXY_URL = Deno.env.get("LEGACY_TLS_PROXY_URL"); // e.g., https://your-app.railway.app
 console.log("[school_closing] Booting function…");
 console.log("🔍 SUPABASE_URL:", SUPABASE_URL);
 console.log("🔍 SUPABASE_SERVICE_ROLE_KEY (present?):", !!SUPABASE_SERVICE_ROLE_KEY);
+console.log("🔍 LEGACY_TLS_PROXY_URL:", LEGACY_TLS_PROXY_URL || "(not set)");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // ----------------------------------------------------------------------------
 // Server setup
@@ -68,7 +70,7 @@ app.post("/manual", async (c)=>{
   try {
     const body = await c.req.json();
     console.log("➡️ Manual entry payload:", body);
-    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time } = body;
     // Validate required fields
     if (!organization_name || !status_description) {
       console.error("❌ Missing required fields");
@@ -95,14 +97,11 @@ app.post("/manual", async (c)=>{
         console.log("✅ Manual provider created");
       }
     }
-    
     // Build raw_data object
-    const raw_data: any = {};
+    const raw_data = {};
     if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
     if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
     if (notes) raw_data.NOTES = notes;
-    if (zip) raw_data.ZIP = zip;
-    
     const { data, error } = await supabase.from("school_closings").insert([
       {
         provider_id: "manual_entry",
@@ -166,8 +165,45 @@ app.post("/fetch", async (c)=>{
       const zoneId = ""; // not used for sample mode
       console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
       console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to fetch sample XML: HTTP ${res.status}`);
+
+      // Try legacy-tls-proxy first, then fallback to other methods
+      let res;
+      let fetchSuccess = false;
+
+      // Try our legacy-tls-proxy first (preferred for legacy TLS servers)
+      if (LEGACY_TLS_PROXY_URL) {
+        try {
+          const proxyUrl = `${LEGACY_TLS_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+          console.log(`🔗 Fetching sample XML via legacy-tls-proxy: ${proxyUrl}`);
+          res = await fetch(proxyUrl);
+          if (res.ok) {
+            fetchSuccess = true;
+            console.log(`✅ legacy-tls-proxy successful`);
+          }
+        } catch (proxyError) {
+          console.warn(`⚠️ legacy-tls-proxy failed:`, proxyError.message);
+        }
+      }
+
+      // Fallback to direct fetch
+      if (!fetchSuccess) {
+        try {
+          console.log(`🔗 Fetching sample XML directly: ${url}`);
+          res = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+              'Accept': 'text/xml, application/xml, */*',
+            },
+          });
+          if (res.ok) {
+            fetchSuccess = true;
+          }
+        } catch (directError) {
+          console.warn(`⚠️ Direct fetch failed:`, directError.message);
+        }
+      }
+
+      if (!res || !res.ok) throw new Error(`Failed to fetch sample XML: ${res?.status || 'all methods failed'}`);
       const xmlText = await res.text();
       const parsed = parser.parse(xmlText);
       let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
@@ -176,8 +212,14 @@ app.post("/fetch", async (c)=>{
       ].filter(Boolean);
       console.log(`📚 Sample mode: ${records.length} records found`);
       // 🧹 Clean existing rows for provider (region 42)
-      const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId);
-      if (deleteError) console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${regionId}`);
+      const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId).select();
+      if (deleteError) {
+        console.warn("⚠️ Failed to clean existing rows:", deleteError);
+      } else {
+        console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows`);
+      }
+
       // 🧩 Upsert new records
       const rows = records.map((item)=>({
           provider_id: "school_provider:news12_closings",
@@ -195,13 +237,26 @@ app.post("/fetch", async (c)=>{
           fetched_at: new Date().toISOString(),
           raw_data: item
         }));
-      const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+
+      console.log(`📝 Upserting ${rows.length} records...`);
+      console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
+        org: r.organization_name,
+        status: r.status_description,
+        day: r.status_day
+      })));
+
+      const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
         onConflict: "provider_id,organization_name,status_day",
         ignoreDuplicates: false
-      });
-      if (upsertError) throw upsertError;
-      console.log(`✅ Sample mode: ${rows.length} records upserted`);
-      totalInserted = rows.length;
+      }).select();
+
+      if (upsertError) {
+        console.error(`❌ Upsert error:`, upsertError);
+        throw upsertError;
+      }
+
+      console.log(`✅ Sample mode: ${upsertedRows?.length || rows.length} records upserted successfully`);
+      totalInserted = upsertedRows?.length || rows.length;
     } else {
       // ----------------------------------------------------------------------------
       // 3️⃣ Live mode: use base_url + endpoint
@@ -243,26 +298,95 @@ app.post("/fetch", async (c)=>{
         const endpointTemplate = config.endpoint || "/GetClosings?sOrganizationName=&sRegionId={region_id}&sZoneId={zone_id}";
         // Replace placeholders
         let endpoint = endpointTemplate.replace("{region_id}", region_id || "").replace("{zone_id}", zone_id || "");
-        if (!endpoint.startsWith("/")) endpoint = `/${endpoint}`;
+        
+        // Fix double slash issue
+        if (baseUrl.endsWith("/") && endpoint.startsWith("/")) {
+          endpoint = endpoint.substring(1);
+        } else if (!baseUrl.endsWith("/") && !endpoint.startsWith("/")) {
+          endpoint = `/${endpoint}`;
+        }
+        
         const url = `${baseUrl}${endpoint}`;
         console.log(`🌐 Fetching XML for region_id=${region_id}, zone_id=${zone_id}`);
         console.log(`🔗 URL: ${url}`);
-        const res = await fetch(url);
-        if (!res.ok) {
-          console.warn(`⚠️ Region ${region_id} failed: HTTP ${res.status}`);
+
+        let xmlText;
+        let fetchSuccess = false;
+
+        // Try our legacy-tls-proxy first (preferred for legacy TLS servers)
+        if (LEGACY_TLS_PROXY_URL) {
+          try {
+            const proxyUrl = `${LEGACY_TLS_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+            console.log(`🔗 Fetching via legacy-tls-proxy: ${proxyUrl}`);
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+            const res = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (res.ok) {
+              xmlText = await res.text();
+              fetchSuccess = true;
+              console.log(`✅ legacy-tls-proxy successful, received ${xmlText.length} bytes`);
+            } else {
+              console.warn(`⚠️ legacy-tls-proxy returned ${res.status}`);
+            }
+          } catch (proxyError) {
+            console.warn(`⚠️ legacy-tls-proxy failed:`, proxyError.message);
+          }
+        }
+
+        // Fallback to direct fetch if legacy proxy not configured or failed
+        if (!fetchSuccess) {
+          try {
+            console.log(`🔗 Fetching directly: ${url}`);
+            const res = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+                'Accept': 'text/xml, application/xml, */*',
+              },
+            });
+
+            console.log(`📊 Response status: ${res.status}`);
+
+            if (res.ok) {
+              xmlText = await res.text();
+              fetchSuccess = true;
+              console.log(`✅ Direct fetch successful, received ${xmlText.length} bytes`);
+            } else {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+          } catch (fetchError) {
+            console.error(`❌ Direct fetch failed for region ${region_id}:`, fetchError.message);
+          }
+        }
+
+        if (!fetchSuccess) {
+          console.error(`❌ All fetch methods failed for region ${region_id}`);
           continue;
         }
-        const xmlText = await res.text();
+
         const parsed = parser.parse(xmlText);
         let records = parsed?.DataSet?.["diffgr:diffgram"]?.NewDataSet?.closings || [];
         if (!Array.isArray(records)) records = [
           records
         ].filter(Boolean);
         console.log(`📚 Region ${region_id}: ${records.length} records found`);
-        if (records.length === 0) continue;
+        if (records.length === 0) {
+          console.log(`⏭️ Skipping region ${region_id} - no records to insert`);
+          continue;
+        }
+
         // 🧹 Clean existing rows for same provider + region + zone
-        const { error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id);
-        if (deleteError) console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${region_id}, zone=${zone_id}`);
+        const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id).select();
+        if (deleteError) {
+          console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
+        } else {
+          console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows for region ${region_id}`);
+        }
+
         // 🧩 Prepare and upsert new records
         const rows = records.map((item)=>({
             provider_id: "school_provider:news12_closings",
@@ -280,16 +404,26 @@ app.post("/fetch", async (c)=>{
             fetched_at: new Date().toISOString(),
             raw_data: item
           }));
-        const { error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+
+        console.log(`📝 Upserting ${rows.length} records for region ${region_id}...`);
+        console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
+          org: r.organization_name,
+          status: r.status_description,
+          day: r.status_day
+        })));
+
+        const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
           onConflict: "provider_id,organization_name,status_day",
           ignoreDuplicates: false
-        });
+        }).select();
+
         if (upsertError) {
           console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
           continue;
         }
-        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${rows.length} records upserted`);
-        totalInserted += rows.length;
+
+        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${upsertedRows?.length || rows.length} records upserted successfully`);
+        totalInserted += upsertedRows?.length || rows.length;
       }
     } // 👈 closes live mode else block
     // ----------------------------------------------------------------------------
@@ -315,11 +449,9 @@ app.post("/fetch", async (c)=>{
 app.put("/manual/:id", async (c)=>{
   const id = c.req.param("id");
   console.log("📝 Received manual update request for id:", id);
-  
   try {
     const body = await c.req.json();
     console.log("➡️ Manual update payload:", body);
-    
     // Verify entry exists and is manual
     const { data: record, error: fetchError } = await supabase.from("school_closings").select("id, provider_id, is_manual, notes").eq("id", id).single();
     if (fetchError || !record) {
@@ -327,16 +459,13 @@ app.put("/manual/:id", async (c)=>{
         error: "Entry not found"
       }, 404);
     }
-    
     const isManual = record.provider_id === null || record.provider_id === "manual_entry" || record.is_manual === true || record.notes && record.notes.toLowerCase().includes("manual");
     if (!isManual) {
       return c.json({
         error: "Cannot update non-manual entries (provider data)"
       }, 403);
     }
-    
-    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time, zip } = body;
-    
+    const { state, city, county_name, organization_name, type, status_day, status_description, notes, delay_minutes, dismissal_time } = body;
     // Validate required fields
     if (!organization_name || !status_description) {
       console.error("❌ Missing required fields");
@@ -344,14 +473,11 @@ app.put("/manual/:id", async (c)=>{
         error: "organization_name and status_description are required"
       }, 400);
     }
-    
     // Build raw_data object
-    const raw_data: any = {};
+    const raw_data = {};
     if (delay_minutes) raw_data.DELAY = parseInt(delay_minutes);
     if (dismissal_time) raw_data.DISMISSAL = dismissal_time;
     if (notes) raw_data.NOTES = notes;
-    if (zip) raw_data.ZIP = zip;
-    
     // Update the record
     const { data, error } = await supabase.from("school_closings").update({
       state: state || null,
@@ -365,12 +491,10 @@ app.put("/manual/:id", async (c)=>{
       raw_data: Object.keys(raw_data).length > 0 ? raw_data : null,
       fetched_at: new Date().toISOString()
     }).eq("id", id).select();
-    
     if (error) {
       console.error("❌ Supabase update error:", error);
       throw error;
     }
-    
     console.log("✅ Manual entry updated:", data);
     return c.json({
       ok: true,

@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "./ui/label";
 import { supabase } from "../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Minus, DollarSign, Calendar, RefreshCw } from "lucide-react";
 import { BettingOddsModal } from "./BettingOddsModal";
 

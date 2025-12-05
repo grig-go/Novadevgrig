@@ -25,7 +25,7 @@ import { getFilteredElectionData, clearElectionDataCache } from "../data/electio
 import { updateRaceFieldOverride, updateRacesFieldOverride, updateCandidateFieldOverride, updateCandidatesFieldOverride, updateRaceCandidatesFieldOverride } from "../data/overrideFieldMappings";
 import { supabase } from '../utils/supabase/client';
 import { currentElectionYear } from '../utils/constants';
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 interface ElectionDashboardProps {
   races: Race[];

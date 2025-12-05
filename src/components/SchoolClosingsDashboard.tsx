@@ -72,7 +72,7 @@ import {
   Rss,
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
 

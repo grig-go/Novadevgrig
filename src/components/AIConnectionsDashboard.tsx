@@ -69,7 +69,7 @@ import {
   Clapperboard,
   Film,
 } from "lucide-react";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { projectId, publicAnonKey } from "../utils/supabase/info";
 import { copyToClipboard } from "../utils/clipboard";
 import {
@@ -88,7 +88,7 @@ import {
   STABILITY_MODELS,
   getProvidersWithDynamicModels,
 } from "../types/ai";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { DashboardNavigation, type DashboardView } from "./DashboardNavigation";
 
 interface AIConnectionsDashboardProps {

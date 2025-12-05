@@ -1,7 +1,7 @@
 import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Calendar, MapPin, Users, Clock, TrendingUp, TrendingDown, Minus, MoreVertical, User, Users as UsersIcon, Newspaper } from "lucide-react";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { GameDetailsWithLineups } from "./GameDetailsWithLineups";
 import { TeamStatsModal } from "./TeamStatsModal";
