@@ -10,9 +10,11 @@ import { XMLParser } from "npm:fast-xml-parser";
 // ----------------------------------------------------------------------------
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const LEGACY_TLS_PROXY_URL = Deno.env.get("LEGACY_TLS_PROXY_URL"); // e.g., https://your-app.railway.app
 console.log("[school_closing] Booting function…");
 console.log("🔍 SUPABASE_URL:", SUPABASE_URL);
 console.log("🔍 SUPABASE_SERVICE_ROLE_KEY (present?):", !!SUPABASE_SERVICE_ROLE_KEY);
+console.log("🔍 LEGACY_TLS_PROXY_URL:", LEGACY_TLS_PROXY_URL || "(not set)");
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 // ----------------------------------------------------------------------------
 // Server setup
@@ -164,44 +166,40 @@ app.post("/fetch", async (c)=>{
       console.log("🧩 Using sample_url (bypassing base_url/endpoint):", url);
       console.log(`🌐 Fetching sample XML as region_id: ${regionId}`);
 
-      // Try direct fetch first, then fallback to proxies
+      // Try legacy-tls-proxy first, then fallback to other methods
       let res;
       let fetchSuccess = false;
 
-      try {
-        console.log(`🔗 Fetching sample XML directly: ${url}`);
-        res = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
-            'Accept': 'text/xml, application/xml, */*',
-          },
-        });
-        if (res.ok) {
-          fetchSuccess = true;
+      // Try our legacy-tls-proxy first (preferred for legacy TLS servers)
+      if (LEGACY_TLS_PROXY_URL) {
+        try {
+          const proxyUrl = `${LEGACY_TLS_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+          console.log(`🔗 Fetching sample XML via legacy-tls-proxy: ${proxyUrl}`);
+          res = await fetch(proxyUrl);
+          if (res.ok) {
+            fetchSuccess = true;
+            console.log(`✅ legacy-tls-proxy successful`);
+          }
+        } catch (proxyError) {
+          console.warn(`⚠️ legacy-tls-proxy failed:`, proxyError.message);
         }
-      } catch (directError) {
-        console.warn(`⚠️ Direct fetch failed:`, directError.message);
       }
 
-      // Try proxies if direct fetch failed
+      // Fallback to direct fetch
       if (!fetchSuccess) {
-        const proxies = [
-          { name: 'corsproxy.io', url: (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}` },
-          { name: 'thingproxy', url: (u: string) => `https://thingproxy.freeboard.io/fetch/${u}` },
-        ];
-
-        for (const proxy of proxies) {
-          try {
-            console.log(`🔄 Trying ${proxy.name} for sample XML...`);
-            res = await fetch(proxy.url(url));
-            if (res.ok) {
-              fetchSuccess = true;
-              console.log(`✅ ${proxy.name} successful`);
-              break;
-            }
-          } catch (e) {
-            console.warn(`⚠️ ${proxy.name} failed`);
+        try {
+          console.log(`🔗 Fetching sample XML directly: ${url}`);
+          res = await fetch(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+              'Accept': 'text/xml, application/xml, */*',
+            },
+          });
+          if (res.ok) {
+            fetchSuccess = true;
           }
+        } catch (directError) {
+          console.warn(`⚠️ Direct fetch failed:`, directError.message);
         }
       }
 
@@ -313,97 +311,60 @@ app.post("/fetch", async (c)=>{
         console.log(`🔗 URL: ${url}`);
 
         let xmlText;
+        let fetchSuccess = false;
 
-        try {
-          // Legacy server redirects HTTP to HTTPS but has TLS issues
-          // Solution: Use a CORS proxy or alternative fetching method
+        // Try our legacy-tls-proxy first (preferred for legacy TLS servers)
+        if (LEGACY_TLS_PROXY_URL) {
+          try {
+            const proxyUrl = `${LEGACY_TLS_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+            console.log(`🔗 Fetching via legacy-tls-proxy: ${proxyUrl}`);
 
-          const useProxy = config.use_cors_proxy === true;
-          let fetchUrl = url;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-          if (useProxy) {
-            // Use CORS Anywhere or similar proxy
-            const proxyUrl = config.cors_proxy_url || 'https://corsproxy.io/?';
-            fetchUrl = `${proxyUrl}${encodeURIComponent(url)}`;
-            console.log(`🔄 Using CORS proxy: ${fetchUrl}`);
-          } else {
-            console.log(`🔗 Fetching directly: ${url}`);
-          }
+            const res = await fetch(proxyUrl, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
-          const res = await fetch(fetchUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
-              'Accept': 'text/xml, application/xml, */*',
-            },
-          });
-
-          console.log(`📊 Response status: ${res.status}`);
-
-          if (!res.ok) {
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          }
-
-          xmlText = await res.text();
-          console.log(`✅ Fetch successful, received ${xmlText.length} bytes`);
-
-        } catch (fetchError) {
-          console.error(`❌ Direct fetch failed for region ${region_id}:`, fetchError.message);
-
-          // Fallback to proxy services (skip legacy TLS due to Deno limitations)
-          const proxies = [
-            {
-              name: 'corsproxy.io',
-              url: (targetUrl: string) => `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-            },
-            {
-              name: 'thingproxy.freeboard.io',
-              url: (targetUrl: string) => `https://thingproxy.freeboard.io/fetch/${targetUrl}`,
-            },
-            {
-              name: 'api.codetabs.com',
-              url: (targetUrl: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-            },
-          ];
-
-          let proxySuccess = false;
-
-          for (const proxy of proxies) {
-            try {
-              console.log(`🔄 Trying proxy: ${proxy.name}...`);
-              const proxyUrl = proxy.url(url);
-
-              // Add timeout for proxy requests
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-
-              const proxyRes = await fetch(proxyUrl, {
-                headers: {
-                  'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
-                },
-                signal: controller.signal,
-              });
-
-              clearTimeout(timeoutId);
-
-              if (!proxyRes.ok) {
-                console.warn(`⚠️ ${proxy.name} returned ${proxyRes.status}`);
-                continue;
-              }
-
-              xmlText = await proxyRes.text();
-              console.log(`✅ Proxy ${proxy.name} successful, received ${xmlText.length} bytes`);
-              proxySuccess = true;
-              break;
-            } catch (proxyError) {
-              console.warn(`⚠️ ${proxy.name} failed:`, proxyError.message);
-              continue;
+            if (res.ok) {
+              xmlText = await res.text();
+              fetchSuccess = true;
+              console.log(`✅ legacy-tls-proxy successful, received ${xmlText.length} bytes`);
+            } else {
+              console.warn(`⚠️ legacy-tls-proxy returned ${res.status}`);
             }
+          } catch (proxyError) {
+            console.warn(`⚠️ legacy-tls-proxy failed:`, proxyError.message);
           }
+        }
 
-          if (!proxySuccess) {
-            console.error(`❌ All fetch methods failed for region ${region_id}`);
-            continue;
+        // Fallback to direct fetch if legacy proxy not configured or failed
+        if (!fetchSuccess) {
+          try {
+            console.log(`🔗 Fetching directly: ${url}`);
+            const res = await fetch(url, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; SchoolClosingBot/1.0)',
+                'Accept': 'text/xml, application/xml, */*',
+              },
+            });
+
+            console.log(`📊 Response status: ${res.status}`);
+
+            if (res.ok) {
+              xmlText = await res.text();
+              fetchSuccess = true;
+              console.log(`✅ Direct fetch successful, received ${xmlText.length} bytes`);
+            } else {
+              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+          } catch (fetchError) {
+            console.error(`❌ Direct fetch failed for region ${region_id}:`, fetchError.message);
           }
+        }
+
+        if (!fetchSuccess) {
+          console.error(`❌ All fetch methods failed for region ${region_id}`);
+          continue;
         }
 
         const parsed = parser.parse(xmlText);
