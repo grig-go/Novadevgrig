@@ -2490,9 +2490,9 @@ alter table "public"."api_endpoints" add constraint "api_endpoints_output_format
 
 alter table "public"."api_endpoints" validate constraint "api_endpoints_output_format_check";
 
-alter table "public"."api_endpoints" add constraint "api_endpoints_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE not valid;
+-- alter table "public"."api_endpoints" add constraint "api_endpoints_user_id_fkey" FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE not valid;
 
-alter table "public"."api_endpoints" validate constraint "api_endpoints_user_id_fkey";
+-- alter table "public"."api_endpoints" validate constraint "api_endpoints_user_id_fkey";
 
 alter table "public"."applications" add constraint "applications_app_key_key" UNIQUE using index "applications_app_key_key";
 
