@@ -2,6 +2,7 @@ node_modules
 *_backup
 .env
 .zip
+seed.sql
 
 # Build and Distribution
 dist/
