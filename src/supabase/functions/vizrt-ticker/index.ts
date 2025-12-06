@@ -60,7 +60,7 @@ serve(async (req)=>{
   }
   try {
     // Get timezone from environment variable
-    const timezone = Deno.env.get('TICKER_TIMEZONE') || 'UTC';
+    const timezone = Deno.env.get('TIMEZONE') || Deno.env.get('TICKER_TIMEZONE') || 'America/New_York';
     console.log('Using timezone:', timezone);
     if (CACHE_PATH) {
       console.log('Using CACHE_PATH for images:', CACHE_PATH);
