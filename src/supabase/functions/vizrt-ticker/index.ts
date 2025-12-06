@@ -105,10 +105,18 @@ serve(async (req)=>{
         persistSession: false
       }
     });
-    // 1. Find the channel from the channels table (stores channel configuration)
-    // The channel name should always be queried from this table
-    const { data: channel, error: channelError } = await supabaseClient.from('channels').select('*').eq('name', decodeURIComponent(channelName)).single();
-    if (channelError || !channel) {
+    // 1. Find the channel entry in channel_playlists (the hierarchy root with type='channel')
+    // This is the parent node that contains playlists as children via parent_id
+    const decodedChannelName = decodeURIComponent(channelName);
+    console.log(`[VIZRT-TICKER] Looking up channel: "${decodedChannelName}"`);
+    const { data: channelEntry, error: channelError } = await supabaseClient
+      .from('channel_playlists')
+      .select('*')
+      .eq('name', decodedChannelName)
+      .eq('type', 'channel')
+      .single();
+    if (channelError || !channelEntry) {
+      console.log(`[VIZRT-TICKER] Channel not found: "${channelName}", error:`, channelError);
       return new Response(JSON.stringify({
         error: `Channel "${channelName}" not found`
       }), {
@@ -119,13 +127,15 @@ serve(async (req)=>{
         }
       });
     }
+    console.log(`[VIZRT-TICKER] Found channel: id=${channelEntry.id}, name=${channelEntry.name}`);
     // 2. Get playlists for this channel from channel_playlists (stores hierarchy)
-    // Use channel_id to link playlists to their channel
-    const playlistQuery = supabaseClient.from('channel_playlists').select('*').eq('channel_id', channel.id).eq('type', 'playlist').order('order');
+    // Use parent_id to find playlists that are children of this channel
+    const playlistQuery = supabaseClient.from('channel_playlists').select('*').eq('parent_id', channelEntry.id).eq('type', 'playlist').order('order');
     if (!includeInactive) {
       playlistQuery.eq('active', true);
     }
     const { data: playlists } = await playlistQuery;
+    console.log(`[VIZRT-TICKER] Found ${playlists?.length || 0} playlists for channel ${channelEntry.name}`);
 
     // Handle /images endpoint - return list of image URLs for caching
     if (isImagesRequest) {
@@ -179,8 +189,10 @@ serve(async (req)=>{
   }
 });
 async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
+  console.log(`[VIZRT-TICKER] Building playlist: ${playlist.name} (id=${playlist.id})`);
   // Check if playlist is currently active based on its schedule
   if (!isCurrentlyActive(playlist.schedule, timezone)) {
+    console.log(`[VIZRT-TICKER] Playlist ${playlist.name} skipped - not currently active (schedule)`);
     return null; // Skip this entire playlist if it's not scheduled to be active
   }
   // Get buckets for this playlist
@@ -189,6 +201,7 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
     bucketQuery.eq('active', true);
   }
   const { data: buckets } = await bucketQuery;
+  console.log(`[VIZRT-TICKER] Playlist ${playlist.name} has ${buckets?.length || 0} buckets`);
   if (!buckets || buckets.length === 0) return null;
   // Filter buckets that are currently active
   const activeBuckets = [];
@@ -219,7 +232,9 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
   return xml;
 }
 async function buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
+  console.log(`[VIZRT-TICKER] Building group for bucket: ${bucket.name} (id=${bucket.id}, content_id=${bucket.content_id})`);
   const elements = await getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts);
+  console.log(`[VIZRT-TICKER] Bucket ${bucket.name} has ${elements.length} elements`);
   if (elements.length === 0) return null;
   let xml = `    <group use_existing="${bucket.content_id || ''}">\n`;
   xml += `      <description>${escapeXml(bucket.name)}</description>\n`;
