@@ -212,6 +212,19 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
   }
   if (activeBuckets.length === 0) return null;
 
+  // Build groups for each active bucket FIRST to check if there's any content
+  const groupXmls: string[] = [];
+  for (const bucket of activeBuckets){
+    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds, bucketInstanceCounts);
+    if (groupXml) groupXmls.push(groupXml);
+  }
+
+  // Skip playlist entirely if no groups have content
+  if (groupXmls.length === 0) {
+    console.log(`[VIZRT-TICKER] Playlist ${playlist.name} skipped - no content in any bucket`);
+    return null;
+  }
+
   // Use playlist properties for XML attributes
   const playlistType = playlist.carousel_type || determinePlaylistType(playlist);
   const carouselName = playlist.carousel_name || playlist.name;
@@ -223,10 +236,9 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
   xml += '      <template>default_template</template>\n';
   xml += `      <gui-color>${generateColorForPlaylist(playlist.name)}</gui-color>\n`;
   xml += '    </defaults>\n';
-  // Build groups for each active bucket
-  for (const bucket of activeBuckets){
-    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds, bucketInstanceCounts);
-    if (groupXml) xml += groupXml;
+  // Add all groups with content
+  for (const groupXml of groupXmls){
+    xml += groupXml;
   }
   xml += '  </playlist>\n';
   return xml;
@@ -260,8 +272,9 @@ async function getElementsForBucket(bucket, supabase, includeInactive, timezone,
     }
   }
 
-  // Check for generateItem config to prepend a generated element as first child
-  if (bucket.content_id) {
+  // Only add generateItem if there are actual content items in the bucket
+  // Skip generateItem for empty buckets
+  if (elements.length > 0 && bucket.content_id) {
     const { data: bucketContent } = await supabase
       .from('content')
       .select('bucket_config')
