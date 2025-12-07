@@ -774,9 +774,11 @@ export function WeatherDashboard({
 
       <WeatherFilters
         locations={locations}
-        onFilterChange={(filtered) => {
+        onFilterChange={(filtered, isUserAction) => {
           setFilteredLocations(filtered);
-          setCurrentPage(1); // Reset to first page when filters change
+          if (isUserAction) {
+            setCurrentPage(1); // Only reset to first page when user changes filters
+          }
         }}
         currentView={currentView}
         onViewChange={setCurrentView}

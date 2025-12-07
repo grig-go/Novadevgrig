@@ -41,7 +41,7 @@ interface Provider {
 
 interface WeatherFiltersProps {
   locations: WeatherLocationWithOverrides[];
-  onFilterChange: (filtered: WeatherLocationWithOverrides[]) => void;
+  onFilterChange: (filtered: WeatherLocationWithOverrides[], isUserAction: boolean) => void;
   currentView: WeatherView;
   onViewChange: (view: WeatherView) => void;
   currentPage: number;
@@ -75,6 +75,17 @@ export function WeatherFilters({
   const [selectedTempRange, setSelectedTempRange] = useState<string>("all");
   const [selectedChannel, setSelectedChannel] = useState<string>("all");
   const [providers, setProviders] = useState<Provider[]>([]);
+
+  // Track previous filter values to detect user-initiated changes
+  const [prevFilters, setPrevFilters] = useState({
+    searchTerm: "",
+    selectedProvider: "all",
+    selectedCountry: "all",
+    selectedState: "all",
+    selectedTempRange: "all",
+    selectedChannel: "all",
+    currentView: currentView,
+  });
 
   // Load providers when component mounts
   useEffect(() => {
@@ -169,8 +180,29 @@ export function WeatherFilters({
       filtered = filtered.filter((loc) => (loc.data.alerts?.length || 0) > 0);
     }
 
-    onFilterChange(filtered);
-  }, [searchTerm, selectedProvider, selectedCountry, selectedState, selectedTempRange, selectedChannel, currentView, locations, onFilterChange]);
+    // Check if any user-controlled filter changed (not just locations data refresh)
+    const isUserAction =
+      searchTerm !== prevFilters.searchTerm ||
+      selectedProvider !== prevFilters.selectedProvider ||
+      selectedCountry !== prevFilters.selectedCountry ||
+      selectedState !== prevFilters.selectedState ||
+      selectedTempRange !== prevFilters.selectedTempRange ||
+      selectedChannel !== prevFilters.selectedChannel ||
+      currentView !== prevFilters.currentView;
+
+    // Update previous filters
+    setPrevFilters({
+      searchTerm,
+      selectedProvider,
+      selectedCountry,
+      selectedState,
+      selectedTempRange,
+      selectedChannel,
+      currentView,
+    });
+
+    onFilterChange(filtered, isUserAction);
+  }, [searchTerm, selectedProvider, selectedCountry, selectedState, selectedTempRange, selectedChannel, currentView, locations]);
 
   // Get unique countries from locations
   const countries = Array.from(
