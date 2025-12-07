@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { InlineTextEdit } from "./InlineEditField";
 import { WeatherLocationWithOverrides, WeatherView, getFieldValue, isFieldOverridden } from "../types/weather";
 import { getTranslation, translateCountry } from "../utils/weather-translations";
@@ -436,6 +437,12 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       const result = await response.json();
       console.log('✅ Channel assignments saved successfully:', result);
 
+      // Update local assigned channels state immediately
+      const newAssignedChannels = selectedChannelIds
+        .map(id => channels.find(c => c.id === id))
+        .filter((ch): ch is { id: string; name: string } => ch !== undefined);
+      setAssignedChannels(newAssignedChannels);
+
       if (selectedChannelIds.length === 0) {
         toast.success(`✅ Removed all channel assignments from "${locationNameValue}"`);
       } else if (selectedChannelIds.length === 1) {
@@ -470,27 +477,15 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const humidityValue = getFieldValue(location.data?.current?.humidity);
   const uvIndexValue = getFieldValue(location.data?.current?.uvIndex);
 
-  // Fetch channel name if location has a channel assigned
-  const [channelName, setChannelName] = useState<string | null>(null);
-  
+  // Fetch assigned channel names (supports multiple channels)
+  const [assignedChannels, setAssignedChannels] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
-    const fetchChannelName = async () => {
-      if (!location.location.channel_id) {
-        setChannelName(null);
-        return;
-      }
-
-      // Check if we already have the channel name from the channels state
-      const existingChannel = channels.find(c => c.id === location.location.channel_id);
-      if (existingChannel) {
-        setChannelName(existingChannel.name);
-        return;
-      }
-
-      // Otherwise fetch it
+    const fetchAssignedChannels = async () => {
       try {
+        // First try to fetch from the junction table
         const response = await fetch(
-          getEdgeFunctionUrl('weather_dashboard/channels'),
+          getEdgeFunctionUrl(`weather_dashboard/locations/${location.location.id}/channels`),
           {
             headers: {
               Authorization: `Bearer ${getSupabaseAnonKey()}`,
@@ -500,18 +495,49 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
 
         if (response.ok) {
           const data = await response.json();
-          const channel = data.channels?.find((ch: { id: string; name: string }) => ch.id === location.location.channel_id);
-          if (channel) {
-            setChannelName(channel.name);
+          if (data.ok && data.channels) {
+            setAssignedChannels(data.channels);
+            return;
           }
         }
+
+        // Fall back to legacy single channel_id
+        if (location.location.channel_id) {
+          // Try to get channel name from already fetched channels
+          const existingChannel = channels.find(c => c.id === location.location.channel_id);
+          if (existingChannel) {
+            setAssignedChannels([existingChannel]);
+            return;
+          }
+
+          // Otherwise fetch all channels to find the name
+          const channelsResponse = await fetch(
+            getEdgeFunctionUrl('weather_dashboard/channels'),
+            {
+              headers: {
+                Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              },
+            }
+          );
+
+          if (channelsResponse.ok) {
+            const channelsData = await channelsResponse.json();
+            const channel = channelsData.channels?.find((ch: { id: string; name: string }) => ch.id === location.location.channel_id);
+            if (channel) {
+              setAssignedChannels([channel]);
+            }
+          }
+        } else {
+          setAssignedChannels([]);
+        }
       } catch (error) {
-        console.error('Error fetching channel name:', error);
+        console.error('Error fetching assigned channels:', error);
+        setAssignedChannels([]);
       }
     };
 
-    fetchChannelName();
-  }, [location.location.channel_id, channels]);
+    fetchAssignedChannels();
+  }, [location.location.id, location.location.channel_id, channels]);
 
   // Common dropdown menu component
   const renderDropdownMenu = () => (
@@ -704,11 +730,39 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                   >
                     <h3 className="font-semibold">{locationNameValue}</h3>
                   </InlineTextEdit>
-                  {channelName && (
-                    <Badge variant="outline" className="text-xs bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300">
-                      <Tv className="h-3 w-3 mr-1" />
-                      {channelName}
-                    </Badge>
+                  {assignedChannels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 items-center">
+                      <Badge
+                        variant="outline"
+                        className="text-xs bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300"
+                      >
+                        <Tv className="h-3 w-3 mr-1" />
+                        {assignedChannels[0].name}
+                      </Badge>
+                      {assignedChannels.length > 1 && (
+                        <Tooltip delayDuration={100}>
+                          <TooltipTrigger asChild>
+                            <Badge
+                              variant="outline"
+                              className="text-xs bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 cursor-pointer"
+                            >
+                              +{assignedChannels.length - 1} more
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={5}>
+                            <div className="space-y-1">
+                              <p className="font-medium text-xs">All channels:</p>
+                              {assignedChannels.map((ch) => (
+                                <div key={ch.id} className="flex items-center gap-1 text-xs">
+                                  <Tv className="h-3 w-3" />
+                                  {ch.name}
+                                </div>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   )}
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -894,9 +948,9 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           transition={{ duration: 0.3, type: "spring", stiffness: 100 }}
           whileHover={{ y: -4, transition: { duration: 0.2 } }}
         >
-        <Card className="h-full relative overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
+        <Card className="h-full relative transition-all duration-300 hover:shadow-2xl hover:shadow-primary/10 group">
           <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+            className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
             initial={false}
           />
         <CardHeader className="pb-3">
@@ -922,7 +976,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="space-y-3 max-h-80 overflow-y-auto">
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
             {(location.data?.daily?.items || []).slice(0, 7).map((day, index) => {
               // Parse date as local date to avoid timezone offset issues
               const dateStr = getFieldValue(day.date);
