@@ -27,12 +27,31 @@ ALTER TABLE "public"."weather_location_channels"
 -- Enable RLS
 ALTER TABLE "public"."weather_location_channels" ENABLE ROW LEVEL SECURITY;
 
--- Create RLS policies (allow all operations for authenticated users)
-CREATE POLICY "Allow all operations on weather_location_channels"
+-- Create RLS policies (authenticated users only)
+CREATE POLICY "Allow select for authenticated users"
     ON "public"."weather_location_channels"
-    FOR ALL
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+CREATE POLICY "Allow insert for authenticated users"
+    ON "public"."weather_location_channels"
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (true);
+
+CREATE POLICY "Allow update for authenticated users"
+    ON "public"."weather_location_channels"
+    FOR UPDATE
+    TO authenticated
     USING (true)
     WITH CHECK (true);
+
+CREATE POLICY "Allow delete for authenticated users"
+    ON "public"."weather_location_channels"
+    FOR DELETE
+    TO authenticated
+    USING (true);
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS "idx_weather_location_channels_location_id"
