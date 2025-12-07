@@ -80,7 +80,7 @@
     "vite": "6.3.5"
   },
   "scripts": {
-    "dev": "dotenv -- vite --host --port ${VITE_PORT:-5173}",
+    "dev": "dotenv -- vite --host",
     "build": "vite build",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:file-server\" \"npm run dev:proxy\"",
     "dev:file-server": "cd file-server && deno run --allow-net --allow-read --allow-env server.ts",
