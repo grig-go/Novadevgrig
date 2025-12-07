@@ -80,11 +80,11 @@
     "vite": "6.3.5"
   },
   "scripts": {
-    "dev": "vite --host --port ${VITE_PORT:-5173}",
+    "dev": "dotenv -- vite --host --port ${VITE_PORT:-5173}",
     "build": "vite build",
-    "dev:full": "dotenv -e .env -- concurrently \"npm run dev\" \"npm run dev:file-server\" \"npm run dev:proxy\"",
-    "dev:file-server": "cd file-server && PORT=${FILE_SERVER_PORT:-8001} FILE_ROOT=${FILE_ROOT:-/tmp/files} deno run --allow-net --allow-read --allow-env server.ts",
-    "dev:proxy": "cd legacy-tls-proxy && PORT=${PROXY_PORT:-3000} npm start",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:file-server\" \"npm run dev:proxy\"",
+    "dev:file-server": "cd file-server && deno run --allow-net --allow-read --allow-env server.ts",
+    "dev:proxy": "cd legacy-tls-proxy && npm start",
     "dev:start": "./scripts/dev-start.sh",
     "dev:stop": "./scripts/dev-stop.sh",
     "prod:start": "./scripts/prod-start.sh",

@@ -9,6 +9,11 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUPABASE_DIR="$PROJECT_ROOT/src/supabase"
 LOG_DIR="$PROJECT_ROOT/logs"
 
+# Load .env file if it exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -77,11 +82,11 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}   Nova App Development Environment Ready${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
 echo ""
-echo -e "  Frontend:    ${YELLOW}http://localhost:5173${NC}"
+echo -e "  Frontend:    ${YELLOW}http://localhost:${VITE_PORT:-5173}${NC}"
 echo -e "  Supabase:    ${YELLOW}http://localhost:54321${NC}"
 echo -e "  Studio:      ${YELLOW}http://localhost:54323${NC}"
 echo -e "  File Server: ${YELLOW}http://localhost:8001${NC}"
-echo -e "  TLS Proxy:   ${YELLOW}http://localhost:3000${NC}"
+echo -e "  TLS Proxy:   ${YELLOW}http://localhost:8002${NC}"
 echo ""
 echo -e "  Logs:        ${YELLOW}$LOG_DIR/${NC}"
 echo ""

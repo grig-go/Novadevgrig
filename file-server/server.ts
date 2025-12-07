@@ -1,7 +1,20 @@
 // file-server/server.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import * as path from "https://deno.land/std@0.168.0/path/mod.ts";
-import "https://deno.land/std@0.168.0/dotenv/load.ts"; // Auto-load .env
+import { load } from "https://deno.land/std@0.168.0/dotenv/mod.ts";
+
+// Load .env from the script's directory (works regardless of cwd)
+const scriptDir = path.dirname(path.fromFileUrl(import.meta.url));
+const envPath = path.join(scriptDir, ".env");
+let envVars: Record<string, string> = {};
+try {
+  envVars = await load({ envPath, export: true });
+  console.log("✅ Loaded .env from:", envPath);
+  console.log("   Variables:", Object.keys(envVars).join(", "));
+} catch (e) {
+  console.warn("⚠️ Could not load .env file:", e.message);
+  console.warn("   Expected at:", envPath);
+}
 
 interface FileEntry {
   name: string;
@@ -25,8 +38,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
-const FILE_ROOT = Deno.env.get("FILE_ROOT") || "/tmp/files";
-const ALLOWED_EXTENSIONS = Deno.env.get("ALLOWED_EXTENSIONS")?.split(",") || [
+// Use envVars directly (loaded above) with Deno.env.get as fallback
+const FILE_ROOT = envVars.FILE_ROOT || Deno.env.get("FILE_ROOT") || "/tmp/files";
+const ALLOWED_EXTENSIONS = (envVars.ALLOWED_EXTENSIONS || Deno.env.get("ALLOWED_EXTENSIONS"))?.split(",") || [
   "csv",
   "tsv",
   "txt",
@@ -36,9 +50,9 @@ const ALLOWED_EXTENSIONS = Deno.env.get("ALLOWED_EXTENSIONS")?.split(",") || [
   "xls",
 ];
 const MAX_FILE_SIZE = parseInt(
-  Deno.env.get("MAX_FILE_SIZE") || "52428800"
+  envVars.MAX_FILE_SIZE || Deno.env.get("MAX_FILE_SIZE") || "52428800"
 ); // 50MB default
-const PORT = parseInt(Deno.env.get("PORT") || "8001");
+const PORT = parseInt(envVars.PORT || Deno.env.get("PORT") || "8001");
 
 console.log("=================================");
 console.log("File Server Starting...");

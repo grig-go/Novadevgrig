@@ -6,6 +6,11 @@
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs"
 
+# Load .env file if it exists
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    export $(grep -v '^#' "$PROJECT_ROOT/.env" | xargs)
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -40,10 +45,15 @@ stop_service "File server" "file-server"
 stop_service "Legacy TLS proxy" "proxy"
 
 # Also kill any remaining processes by name (cleanup)
-pkill -f "vite.*5173" 2>/dev/null || true
+pkill -f "vite.*${VITE_PORT:-5173}" 2>/dev/null || true
+pkill -f "vite.*Novadevgrig" 2>/dev/null || true
 pkill -f "supabase functions serve" 2>/dev/null || true
-pkill -f "deno.*file-server" 2>/dev/null || true
-pkill -f "legacy-tls-proxy" 2>/dev/null || true
+# File server (Deno)
+pkill -f "deno.*server.ts" 2>/dev/null || true
+pkill -f "npm run dev:file-server" 2>/dev/null || true
+# Legacy TLS proxy (Node)
+pkill -f "legacy-tls-proxy.*server.js" 2>/dev/null || true
+pkill -f "npm run dev:proxy" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"
