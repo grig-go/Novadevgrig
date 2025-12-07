@@ -81,6 +81,7 @@ interface SchoolClosing {
   id?: number;
   provider_id: string;
   region_id: string;
+  zone_id?: string;
   state: string | null;
   city: string | null;
   county_name: string | null;
@@ -1275,11 +1276,19 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         </span>
                       </motion.div>
                     )}
-                    <div className="text-xs text-muted-foreground mt-4 pt-2 border-t flex items-center justify-between">
-                      <span>Last updated: {new Date(school.fetched_at).toLocaleString()}</span>
-                      <span className="text-muted-foreground/70">
-                        Provider: {school.provider_id.replace('school_provider:', '')}
-                      </span>
+                    <div className="text-xs text-muted-foreground mt-4 pt-2 border-t space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>Last updated: {new Date(school.fetched_at).toLocaleString()}</span>
+                        <span className="text-muted-foreground/70">
+                          Provider: {school.provider_id.replace('school_provider:', '')}
+                        </span>
+                      </div>
+                      {school.region_id && school.region_id !== "manual" && (
+                        <div className="flex items-center justify-end gap-2 text-muted-foreground/70">
+                          <span>Region: {school.region_id}</span>
+                          {school.zone_id && <span>| Zone: {school.zone_id}</span>}
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -1311,6 +1320,8 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                       <TableHead>Type</TableHead>
                       <TableHead>Last Updated</TableHead>
                       <TableHead>Provider</TableHead>
+                      <TableHead>Region</TableHead>
+                      <TableHead>Zone</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1381,6 +1392,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           <TableCell>
                             <span className="text-muted-foreground text-xs">
                               {school.provider_id.replace('school_provider:', '')}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.region_id !== "manual" ? school.region_id : "-"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.zone_id || "-"}
                             </span>
                           </TableCell>
                           <TableCell>
