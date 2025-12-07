@@ -1398,24 +1398,19 @@ app.get("/weather-data-csv", async (c)=>{
           created_at: new Date().toISOString()
         });
       } else {
-        // Compute forecast date based on CSV "Generated:" timestamp
-        // Extract once from file header if available
-        if (!globalThis.generatedBaseDate) {
-          const match = csvText.match(/^Generated:\s*([^\n\r]+)/m);
-          if (match) {
-            globalThis.generatedBaseDate = new Date(match[1].trim());
-            console.log(`🕓 Using Generated timestamp as base date: ${globalThis.generatedBaseDate.toISOString()}`);
-          } else {
-            globalThis.generatedBaseDate = new Date(); // fallback
-            console.warn("⚠️ No Generated timestamp found in CSV; using current date as base");
-          }
-        }
-        // Helper to compute forecast date relative to Generated base date
+        // Compute forecast date using current time as base (not CSV Generated timestamp)
+        // Day 1 (Today) = offset 0, Day 2 = offset 1, etc.
         function computeForecastDate(forecastName) {
-          const base = new Date(generatedBaseDate);
+          const base = new Date(); // Use current date as base
+          base.setHours(0, 0, 0, 0); // Normalize to start of day
           const lower = forecastName.toLowerCase();
           let offset = 0;
-          if (lower.includes("tomorrow") || lower.includes("day 2")) offset = 1;
+          // Skip "Tonight" entries - they have same high/low and overlap with "Today"
+          if (lower.includes("tonight")) {
+            return null; // Will be filtered out
+          }
+          if (lower.includes("today") || lower.includes("day 1")) offset = 0;
+          else if (lower.includes("tomorrow") || lower.includes("day 2")) offset = 1;
           else if (lower.includes("day 3")) offset = 2;
           else if (lower.includes("day 4")) offset = 3;
           else if (lower.includes("day 5")) offset = 4;
@@ -1426,6 +1421,7 @@ app.get("/weather-data-csv", async (c)=>{
           return result;
         }
         const fcDate = computeForecastDate(forecastName);
+        if (!fcDate) continue; // Skip "Tonight" entries
         forecastRows.push({
           location_id,
           forecast_date: fcDate.toISOString().split("T")[0],
