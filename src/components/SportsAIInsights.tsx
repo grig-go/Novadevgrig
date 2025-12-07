@@ -16,7 +16,7 @@ import {
   Send, X, Loader2, Search, Target, TrendingUp, TrendingDown,
   AlertTriangle, Award, Activity, BarChart3, Shield, Zap
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -54,10 +54,10 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       // COMMENTED OUT - not using sports_dashboard edge function right now
       // try {
       //   const response = await fetch(
-      //     `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
+      //     getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
       //     {
       //       headers: {
-      //         Authorization: `Bearer ${publicAnonKey}`,
+      //         Authorization: `Bearer ${getSupabaseAnonKey()}`,
       //       },
       //     }
       //   );
@@ -89,10 +89,10 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -133,10 +133,10 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       // try {
       //   setLoadingInsights(true);
       //   const response = await fetch(
-      //     `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights`,
+      //     getEdgeFunctionUrl('sports_dashboard/sports-ai-insights'),
       //     {
       //       headers: {
-      //         Authorization: `Bearer ${publicAnonKey}`,
+      //         Authorization: `Bearer ${getSupabaseAnonKey()}`,
       //       },
       //     }
       //   );
@@ -303,11 +303,11 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       console.log('Sending AI request with context:', context);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
+        getEdgeFunctionUrl('ai_provider/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -368,11 +368,11 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights`,
+        getEdgeFunctionUrl('sports_dashboard/sports-ai-insights'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -411,11 +411,11 @@ export function SportsAIInsights({ entities, data, providers = [], compact = fal
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-ai-insights/${insightId}`,
+        getEdgeFunctionUrl('sports_dashboard/sports-ai-insights/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

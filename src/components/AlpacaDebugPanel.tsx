@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { AlertCircle, CheckCircle, RefreshCw, XCircle } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 interface DebugInfo {
   configured: boolean;
@@ -28,10 +28,10 @@ export function AlpacaDebugPanel() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/debug`,
+        getEdgeFunctionUrl('finance_dashboard/stocks/debug'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

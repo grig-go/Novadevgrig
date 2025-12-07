@@ -1196,7 +1196,10 @@ app.post("/test-provider", async (c)=>{
 // ============================================================================
 // ============================================================================
 // WEATHER CSV INGEST (News12 format — with timestamp + dedupe fix)
+// Supports: source_url (direct URL) or local_file_path (via FILE_SERVER_URL)
 // ============================================================================
+const FILE_SERVER_URL = Deno.env.get("FILE_SERVER_URL");
+
 app.get("/weather-data-csv", async (c)=>{
   try {
     console.log("🌦️ [CSV] Starting ingestion (News12 with time/dedupe fixes)");
@@ -1204,11 +1207,47 @@ app.get("/weather-data-csv", async (c)=>{
     const { data: providers, error: provErr } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("type", "csv").eq("is_active", true);
     if (provErr) throw new Error(provErr.message);
     const provider = providers?.[0];
-    if (!provider?.source_url) throw new Error("No active CSV provider with source_url");
-    // 2️⃣ Fetch CSV
-    const res = await fetch(provider.source_url);
-    if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.status} ${res.statusText}`);
-    const csvText = await res.text();
+
+    // Check for local_file_path in config (preferred) or fall back to source_url
+    const config = typeof provider?.config === "string" ? JSON.parse(provider.config) : provider?.config || {};
+    const localFilePath = config.local_file_path;
+
+    if (!localFilePath && !provider?.source_url) {
+      throw new Error("No active CSV provider with source_url or local_file_path configured");
+    }
+
+    // 2️⃣ Fetch CSV - either from file server or direct URL
+    let csvText: string;
+
+    if (localFilePath && FILE_SERVER_URL) {
+      // Fetch from local file server
+      console.log(`📁 Fetching CSV from file server: ${localFilePath}`);
+      const fileServerRes = await fetch(FILE_SERVER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "read", relativePath: localFilePath })
+      });
+
+      if (!fileServerRes.ok) {
+        throw new Error(`File server error: ${fileServerRes.status} ${fileServerRes.statusText}`);
+      }
+
+      const fileData = await fileServerRes.json();
+      if (!fileData.success) {
+        throw new Error(`File server read failed: ${fileData.error}`);
+      }
+
+      csvText = fileData.content;
+      console.log(`✅ Loaded ${csvText.length} bytes from file server`);
+    } else if (provider?.source_url) {
+      // Fetch from direct URL
+      console.log(`🌐 Fetching CSV from URL: ${provider.source_url}`);
+      const res = await fetch(provider.source_url);
+      if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.status} ${res.statusText}`);
+      csvText = await res.text();
+    } else {
+      throw new Error("FILE_SERVER_URL not configured and no source_url available");
+    }
     const delimiter = csvText.includes("\t") ? "\t" : ",";
     let lines = csvText.trim().split(/\r?\n/);
     // 🕓 Extract "Generated:" timestamp BEFORE removing it
@@ -1247,16 +1286,62 @@ app.get("/weather-data-csv", async (c)=>{
       const parsed = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes || 0);
       return parsed.toISOString();
     }
+
+    // City to State mapping for News12 tri-state area
+    const cityStateMap: Record<string, string> = {
+      // New York
+      "Bronx": "New York",
+      "Brooklyn": "New York",
+      "Central Park": "New York",
+      "East Hampton": "New York",
+      "Farmingdale": "New York",
+      "Islip": "New York",
+      "JFK Airport": "New York",
+      "LGA Airport": "New York",
+      "Montauk": "New York",
+      "Newburgh": "New York",
+      "New York/Central Park": "New York",
+      "Poughkeepsie": "New York",
+      "Shirley": "New York",
+      "Stewart": "New York",
+      "Wall Street - NYC": "New York",
+      "Westhampton Beach": "New York",
+      "White Plains": "New York",
+      // New Jersey
+      "Atlantic City": "New Jersey",
+      "Caldwell": "New Jersey",
+      "Freehold": "New Jersey",
+      "Jackson Township": "New Jersey",
+      "Morristown": "New Jersey",
+      "Newark": "New Jersey",
+      "Ridgewood": "New Jersey",
+      "Sussex": "New Jersey",
+      "Teterboro": "New Jersey",
+      "Trenton": "New Jersey",
+      // Connecticut
+      "Bridgeport": "Connecticut",
+      "Danbury": "Connecticut",
+      "Groton": "Connecticut",
+      "Hartford": "Connecticut",
+      "Meriden": "Connecticut",
+      "New Haven": "Connecticut",
+      "Oxford": "Connecticut",
+      "Waterbury": "Connecticut",
+      "Windsor Locks": "Connecticut",
+      "Montgomery": "New Jersey",
+    };
+
     // 3️⃣ Create/Upsert weather_locations
     const uniqueLocs = new Map();
     for (const r of rows){
       const locName = r.LocationName?.trim();
       if (!locName) continue;
       if (!uniqueLocs.has(locName)) {
+        const state = cityStateMap[locName] || "New York"; // Default to NY if unknown
         uniqueLocs.set(locName, {
           id: generateLocationId(locName, "news12"),
           name: locName,
-          admin1: "New Jersey",
+          admin1: state,
           country: "United States of America",
           lat: 0,
           lon: 0,

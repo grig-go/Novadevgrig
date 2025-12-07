@@ -30,7 +30,7 @@ import {
   Check,
   Target,
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 interface Provider {
   id: string;
@@ -81,10 +81,10 @@ export function WeatherFilters({
     const loadProviders = async () => {
       try {
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
+          getEdgeFunctionUrl('weather_dashboard/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -204,10 +204,10 @@ export function WeatherFilters({
 
       try {
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          getEdgeFunctionUrl('weather_dashboard/channels'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );

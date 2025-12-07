@@ -73,7 +73,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "framer-motion";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
 import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
 
 // Backend data structure from school_closings table
@@ -135,10 +135,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   const fetchSchoolClosings = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/school_closing`,
+        getEdgeFunctionUrl('school_closing'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -168,11 +168,11 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     setRefreshing(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/school_closing/fetch`,
+        getEdgeFunctionUrl('school_closing/fetch'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -219,13 +219,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Sending manual entry:", dataToSend);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual`;
+      const url = getEdgeFunctionUrl('school_closing/manual');
       console.log("📡 [SchoolClosings] POST to:", url);
       
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),
@@ -285,13 +285,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("🗑️ [SchoolClosings] Deleting school:", schoolToDelete.id);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual/${schoolToDelete.id}`;
+      const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToDelete.id}`);
       console.log("📡 [SchoolClosings] DELETE to:", url);
       
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
         },
       });
 
@@ -413,13 +413,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Updating manual entry:", dataToSend);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual/${schoolToEdit.id}`;
+      const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToEdit.id}`);
       console.log("📡 [SchoolClosings] PUT to:", url);
       
       const response = await fetch(url, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),

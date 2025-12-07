@@ -6,7 +6,7 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Cloud, CheckCircle, XCircle, Loader2, Eye, EyeOff, Zap, ExternalLink } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface WeatherProvider {
@@ -88,12 +88,12 @@ export function WeatherAPIConfigCard() {
       console.log("Loading weather provider using RPC...");
       
       // First, get list of weather providers using RPC
-      const listUrl = `https://${projectId}.supabase.co/rest/v1/rpc/list_providers_with_status_category`;
+      const listUrl = getRestUrl('rpc/list_providers_with_status_category');
       const listResponse = await fetch(listUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          apikey: publicAnonKey,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          apikey: getSupabaseAnonKey(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ p_category: 'weather' }),
@@ -110,12 +110,12 @@ export function WeatherAPIConfigCard() {
         const firstProvider = providers[0];
         
         // Fetch full details including API key using get_provider_details RPC
-        const detailsUrl = `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`;
+        const detailsUrl = getRestUrl('rpc/get_provider_details');
         const detailsResponse = await fetch(detailsUrl, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ p_id: firstProvider.id }),
@@ -179,12 +179,12 @@ export function WeatherAPIConfigCard() {
       setSaving(true);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/providers`,
+        getEdgeFunctionUrl('weather_dashboard/providers'),
         {
           method: provider ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
           body: JSON.stringify({
             id: provider?.id || "weatherapi-default",
@@ -230,10 +230,10 @@ export function WeatherAPIConfigCard() {
       
       // Test with a simple query for New York
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/search?q=New York`,
+        getEdgeFunctionUrl('weather_dashboard/locations/search?q=New York'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

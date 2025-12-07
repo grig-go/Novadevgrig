@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "./ui/label";
 import { useNewsProviders } from "../utils/useNewsProviders";
 import { Article } from "../utils/useNewsFeed";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { NewsDebugPanel } from "./NewsDebugPanel";
 import { NewsAIInsights } from "./NewsAIInsights";
@@ -53,12 +53,13 @@ export function NewsDashboard({
   useEffect(() => {
     const fetchProviders = async () => {
       try {
+        const anonKey = getSupabaseAnonKey();
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,is_active&category=eq.news`,
+          getRestUrl('data_providers_public?select=id,name,type,is_active&category=eq.news'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${anonKey}`,
+              apikey: anonKey,
             },
           }
         );
@@ -87,26 +88,27 @@ export function NewsDashboard({
     setError(null);
 
     try {
-      const url = new URL(`https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles/stored`);
-      
+      const url = new URL(getEdgeFunctionUrl('news_dashboard/news-articles/stored'));
+
       // Add filters as query parameters
       if (selectedProvider !== 'all') {
         url.searchParams.set('provider', selectedProvider);
       }
-      
+
       // Add time filter
       const dateFilter = getDateFilter(timeFilter);
       if (dateFilter) {
         url.searchParams.set('from_date', dateFilter);
       }
-      
+
       url.searchParams.set('limit', '1000');
 
       console.log('📡 [NEWS] Fetching from:', url.toString());
 
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(url.toString(), {
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
         },
       });
 
@@ -184,12 +186,13 @@ export function NewsDashboard({
       // Step 1: Get active news providers from data_providers_public table
       console.log('📡 [NEWS] Fetching providers from data_providers_public...');
       
+      const anonKey = getSupabaseAnonKey();
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,is_active&category=eq.news`,
+        getRestUrl('data_providers_public?select=id,name,type,is_active&category=eq.news'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
           },
         }
       );
@@ -216,12 +219,12 @@ export function NewsDashboard({
       console.log('📡 [NEWS] Fetching provider credentials via RPC...');
       const providerDetailsPromises = activeProviders.map(async (provider: any) => {
         const rpcResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+          getRestUrl('rpc/get_provider_details'),
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${anonKey}`,
+              apikey: anonKey,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ p_id: provider.id }),
@@ -260,7 +263,7 @@ export function NewsDashboard({
       console.log('📡 [NEWS] Formatted providers:', formattedProviders.map(p => ({ name: p.name, type: p.type, hasKey: !!p.apiKey })));
 
       // Step 4: Fetch articles from backend endpoint
-      const url = `https://${projectId}.supabase.co/functions/v1/news_dashboard/news-articles`;
+      const url = getEdgeFunctionUrl('news_dashboard/news-articles');
 
       console.log('📡 [NEWS] Fetching articles from:', url);
       console.log('📡 [NEWS] Params:', { q, country: formattedProviders[0]?.country, language: formattedProviders[0]?.language });
@@ -268,7 +271,7 @@ export function NewsDashboard({
       const articlesResponse = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${anonKey}`,
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache'
         },

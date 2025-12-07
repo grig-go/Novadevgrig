@@ -11,7 +11,7 @@ import {
   Brain, Send, Loader2, X, Newspaper, ChevronDown, ChevronRight,
   Save, Trash2, Search, ExternalLink
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { Input } from "./ui/input";
 
@@ -54,10 +54,10 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -99,10 +99,10 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       try {
         setLoadingInsights(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
+          getEdgeFunctionUrl('ai_insights/news'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -184,11 +184,11 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/chat`,
+        getEdgeFunctionUrl('ai_insights/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -260,11 +260,11 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
     try {
       setSavingInsight(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
+        getEdgeFunctionUrl('ai_insights/news'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -301,11 +301,11 @@ export function NewsAIInsightsDialog({ articles, open, onOpenChange, onInsightSa
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/news/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

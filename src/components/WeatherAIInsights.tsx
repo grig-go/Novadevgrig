@@ -15,7 +15,7 @@ import {
   Brain, ChevronDown, ChevronRight, Cloud, Thermometer, Wind, Droplets,
   AlertTriangle, Eye, Flame, Zap, Send, X, Loader2, Search, Trash2, ChevronLeft
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -79,10 +79,10 @@ export function WeatherAIInsights({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -130,10 +130,10 @@ export function WeatherAIInsights({
         setLoadingInsights(true);
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
+          getEdgeFunctionUrl('ai_insights/weather'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -236,11 +236,11 @@ export function WeatherAIInsights({
       context += `User Question: ${chatMessage}`;
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
+        getEdgeFunctionUrl('ai_provider/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -304,11 +304,11 @@ export function WeatherAIInsights({
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather`,
+        getEdgeFunctionUrl('ai_insights/weather'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -346,11 +346,11 @@ export function WeatherAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/weather/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/weather/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { projectId, publicAnonKey } from './supabase/info';
+import { getEdgeFunctionUrl, getSupabaseAnonKey } from './supabase/config';
 import { Race, Candidate } from '../types/election';
 import { supabase } from './supabase/client';
 
@@ -78,10 +78,10 @@ export function useSyntheticRaceWorkflow() {
   const fetchProviders = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+        getEdgeFunctionUrl('ai_provider/providers'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -348,11 +348,11 @@ CRITICAL RULES:
 
       // Call AI provider chat endpoint to generate scenario
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
+        getEdgeFunctionUrl('ai_provider/chat'),
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
+            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

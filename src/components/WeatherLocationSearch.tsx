@@ -11,7 +11,7 @@ import {
 } from "./ui/dialog";
 import { Search, MapPin, Loader2, Plus } from "lucide-react";
 import { SavedWeatherLocation } from "../types/weather";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface SearchResult {
@@ -48,12 +48,10 @@ export function WeatherLocationSearch({
     setSearching(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/search?q=${encodeURIComponent(
-          searchQuery
-        )}`,
+        getEdgeFunctionUrl(`weather_dashboard/locations/search?q=${encodeURIComponent(searchQuery)}`),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

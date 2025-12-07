@@ -14,7 +14,7 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Database, Activity, RefreshCw, CheckCircle2, XCircle, Loader2, Trophy, Plus, Info } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import {
   Dialog,
@@ -86,10 +86,10 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
     try {
       setIsLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
+        getEdgeFunctionUrl('sports_dashboard/sports-providers'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -112,11 +112,11 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
     try {
       setIsTesting(providerId);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers/${providerId}/test`,
+        getEdgeFunctionUrl('sports_dashboard/sports-providers/${providerId}/test'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
         }
@@ -145,11 +145,11 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
       const provider = providers.find(p => p.id === providerId);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/sync`,
+        getEdgeFunctionUrl('sports_dashboard/sports-data/sync'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -193,11 +193,11 @@ export function SportsradarConfigCard({ onDataSync }: SportsradarConfigCardProps
       }
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
+        getEdgeFunctionUrl('sports_dashboard/sports-providers'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({

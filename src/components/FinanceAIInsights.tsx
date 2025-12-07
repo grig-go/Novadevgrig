@@ -13,7 +13,7 @@ import {
   Brain, ChevronDown, ChevronRight, Coins, Building2, BarChart3,
   Send, X, Loader2, Search
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface AIInsight {
@@ -122,10 +122,10 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -165,10 +165,10 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       try {
         setLoadingInsights(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_insights/finance`,
+          getEdgeFunctionUrl('ai_insights/finance'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -257,11 +257,11 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       console.log('Sending AI request with context:', context);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/chat`,
+        getEdgeFunctionUrl('ai_insights/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -322,11 +322,11 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/finance`,
+        getEdgeFunctionUrl('ai_insights/finance'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -366,11 +366,11 @@ export function FinanceAIInsights({ securities, compact = false, listView = fals
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/finance/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/finance/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

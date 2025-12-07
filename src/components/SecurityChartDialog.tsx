@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from "recharts";
 import { Loader2, TrendingUp, TrendingDown, Activity, BarChart3, Calendar } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface SecurityChartDialogProps {
@@ -81,10 +81,10 @@ export function SecurityChartDialog({ open, onOpenChange, symbol, name, type }: 
       console.log(`🔍 Fetching chart data for ${symbol} with resolution ${res}...`);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/chart/${symbol}?resolution=${res}`,
+        getEdgeFunctionUrl('finance_dashboard/chart/${symbol}?resolution=${res}'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

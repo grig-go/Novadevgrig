@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { projectId, publicAnonKey } from "./supabase/info";
+import { getEdgeFunctionUrl, getSupabaseAnonKey } from "./supabase/config";
 import { MediaAsset, MediaType, MediaSource, SyncStatus } from "../types/media";
 
 interface MediaFilters {
@@ -44,11 +44,11 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
   const [count, setCount] = useState(0);
   const hasInitialFetch = useRef(false);
 
-  const baseUrl = `https://${projectId}.supabase.co/functions/v1/media-library`;
-  
+  const baseUrl = getEdgeFunctionUrl('media-library');
+  const anonKey = getSupabaseAnonKey();
+
   console.log("📡 Media library base URL:", baseUrl);
-  console.log("📡 Project ID:", projectId);
-  console.log("📡 Public Anon Key (first 20 chars):", publicAnonKey.substring(0, 20) + "...");
+  console.log("📡 Public Anon Key (first 20 chars):", anonKey.substring(0, 20) + "...");
 
   const fetchAssets = useCallback(async () => {
     try {
@@ -71,7 +71,7 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
 
       const response = await fetch(url, {
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
       });
@@ -147,8 +147,8 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${publicAnonKey}`,
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
         },
         body: formData,
       });
@@ -197,8 +197,8 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       const response = await fetch(baseUrl, {
         method: "POST",
         headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${publicAnonKey}`,
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
         },
         body: formData,
       });
@@ -236,8 +236,8 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
       const response = await fetch(`${baseUrl}/media/${id}`, {
         method: "DELETE",
         headers: {
-          apikey: publicAnonKey,
-          Authorization: `Bearer ${publicAnonKey}`,
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
       });
@@ -275,9 +275,9 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
         method: "PATCH",
         mode: "cors",
         headers: {
-          "Authorization": `Bearer ${publicAnonKey}`,
+          "Authorization": `Bearer ${anonKey}`,
           "Content-Type": "application/json",
-          "apikey": publicAnonKey,
+          "apikey": anonKey,
         },
         body: JSON.stringify({
           operation: "delete",
@@ -326,9 +326,9 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
           method: "PATCH",
           mode: "cors",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
+            "Authorization": `Bearer ${anonKey}`,
             "Content-Type": "application/json",
-            "apikey": publicAnonKey,
+            "apikey": anonKey,
           },
           body: JSON.stringify(requestBody),
         });
@@ -381,9 +381,9 @@ export function useMediaData(filters?: MediaFilters): UseMediaDataReturn {
         method: "PATCH",
         mode: "cors",
         headers: {
-          "Authorization": `Bearer ${publicAnonKey}`,
+          "Authorization": `Bearer ${anonKey}`,
           "Content-Type": "application/json",
-          "apikey": publicAnonKey,
+          "apikey": anonKey,
         },
         body: JSON.stringify({
           operation: "archive",

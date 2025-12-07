@@ -6,7 +6,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Bug, Database, Newspaper, AlertCircle, CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 export function NewsDebugPanel() {
@@ -30,10 +30,10 @@ export function NewsDebugPanel() {
       console.log('[Debug] Testing news_dashboard edge function health...');
       try {
         const healthResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/news_dashboard/health`,
+          getEdgeFunctionUrl('news_dashboard/health'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -75,11 +75,11 @@ export function NewsDebugPanel() {
       try {
         // Step 1: Get provider list from public view (IDs only, credentials masked)
         const listResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.news`,
+          getRestUrl('data_providers_public?select=id,name,type,category,is_active&category=eq.news'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
             },
           }
         );
@@ -95,12 +95,12 @@ export function NewsDebugPanel() {
         const providersWithDetails = [];
         for (const provider of providerList) {
           const rpcResponse = await fetch(
-            `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+            getRestUrl('rpc/get_provider_details'),
             {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${publicAnonKey}`,
-                apikey: publicAnonKey,
+                Authorization: `Bearer ${getSupabaseAnonKey()}`,
+                apikey: getSupabaseAnonKey(),
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({ p_id: provider.id }),

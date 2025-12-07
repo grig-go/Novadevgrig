@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner@2.0.3";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 export interface DashboardConfig {
   id: string;
@@ -75,10 +75,10 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
     try {
       setLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/dashboard_config`,
+        getEdgeFunctionUrl('dashboard_config'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -198,11 +198,11 @@ export function DashboardConfigDialog({ open, onOpenChange }: DashboardConfigDia
       }
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/dashboard_config/update`,
+        getEdgeFunctionUrl('dashboard_config/update'),
         {
           method: "PATCH",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(updates),

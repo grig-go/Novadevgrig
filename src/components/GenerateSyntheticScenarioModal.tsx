@@ -31,7 +31,7 @@ import {
   CheckCircle
 } from "lucide-react";
 import { supabase } from "../utils/supabase/client";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 // State name to code mapping
 const STATE_NAME_TO_CODE: Record<string, string> = {
@@ -300,12 +300,12 @@ export function GenerateSyntheticScenarioModal({
     setIsSearching(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/rpc/e_search_candidates`,
+        getRestUrl('rpc/e_search_candidates'),
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'apikey': publicAnonKey,
+            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+            'apikey': getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

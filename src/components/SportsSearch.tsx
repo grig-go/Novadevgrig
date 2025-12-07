@@ -7,7 +7,7 @@ import { Checkbox } from "./ui/checkbox";
 import { ScrollArea } from "./ui/scroll-area";
 import { Plus, Users, ChevronDown, Trophy } from "lucide-react";
 import { SportsView, League, Team, SportsEntityWithOverrides, Provider } from "../types/sports";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface SportsSearchProps {
@@ -46,9 +46,9 @@ export function SportsSearch({ view, leagues, onAdd }: SportsSearchProps) {
       
       // Fetch tournaments (leagues)
       const tournamentsResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`,
+        getEdgeFunctionUrl('sports_dashboard/sports-data/tournaments'),
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` }
         }
       );
       
@@ -60,9 +60,9 @@ export function SportsSearch({ view, leagues, onAdd }: SportsSearchProps) {
       
       // Fetch all teams
       const teamsResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
+        getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` }
         }
       );
       

@@ -41,7 +41,7 @@ import { Textarea } from "./ui/textarea";
 import { Channel, ChannelType } from "../types/channels";
 import { Plus, Search, Filter, Edit, X, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 const CHANNEL_TYPES: ChannelType[] = ["Pixera", "Vizrt", "Unreal", "Web"];
 
@@ -79,10 +79,10 @@ export function ChannelsPage() {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/channels`,
+        getEdgeFunctionUrl('channels'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -135,11 +135,11 @@ export function ChannelsPage() {
     try {
       setSubmitting(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/channels`,
+        getEdgeFunctionUrl('channels'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -195,11 +195,11 @@ export function ChannelsPage() {
     try {
       setSubmitting(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/channels/${editingChannel.id}`,
+        getEdgeFunctionUrl('channels/${editingChannel.id}'),
         {
           method: "PATCH",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -236,11 +236,11 @@ export function ChannelsPage() {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/channels/${deletingChannel.id}`,
+        getEdgeFunctionUrl('channels/${deletingChannel.id}'),
         {
           method: "DELETE",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

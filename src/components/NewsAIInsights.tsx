@@ -10,7 +10,7 @@ import {
   Brain, Loader2, ChevronDown, ChevronRight, Search, Trash2, 
   TrendingUp, AlertTriangle, Newspaper, Globe, Target, X
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { NewsAIInsightsDialog } from "./NewsAIInsightsDialog";
 
@@ -56,10 +56,10 @@ export function NewsAIInsights({
     try {
       setLoadingInsights(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news`,
+        getEdgeFunctionUrl('ai_insights/news'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -100,11 +100,11 @@ export function NewsAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/news/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/news/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

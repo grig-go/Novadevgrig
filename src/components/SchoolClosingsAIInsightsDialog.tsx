@@ -8,7 +8,7 @@ import { Badge } from "./ui/badge";
 import { 
   Brain, Send, Loader2, X, School, Save
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface SchoolClosing {
@@ -70,10 +70,10 @@ export function SchoolClosingsAIInsightsDialog({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -168,11 +168,11 @@ export function SchoolClosingsAIInsightsDialog({
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/chat`,
+        getEdgeFunctionUrl('ai_insights/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -241,11 +241,11 @@ export function SchoolClosingsAIInsightsDialog({
     try {
       setSavingInsight(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/school-closings`,
+        getEdgeFunctionUrl('ai_insights/school-closings'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

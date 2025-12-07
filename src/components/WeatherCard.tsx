@@ -10,7 +10,7 @@ import { InlineTextEdit } from "./InlineEditField";
 import { WeatherLocationWithOverrides, WeatherView, getFieldValue, isFieldOverridden } from "../types/weather";
 import { getTranslation, translateCountry } from "../utils/weather-translations";
 import { WeatherBackendDataDialog } from "./WeatherBackendDataDialog";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
 import { 
   Cloud, 
   Sun, 
@@ -169,11 +169,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       console.log(`🔵 FRONTEND: Saving custom name for location ${location.location.id}:`, customName);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
+        getEdgeFunctionUrl('weather_dashboard/locations/${location.location.id}'),
         {
           method: "PUT",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
+            "Authorization": `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ custom_name: customName })
@@ -325,11 +325,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       console.log('📺 Fetching channels list...');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+        getEdgeFunctionUrl('weather_dashboard/channels'),
         {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
+            "Authorization": `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
         }
@@ -366,11 +366,11 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       toast.info(`Assigning channel "${channelName}" to "${locationNameValue}"...`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${location.location.id}`,
+        getEdgeFunctionUrl('weather_dashboard/locations/${location.location.id}'),
         {
           method: "PUT",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
+            "Authorization": `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ channel_id: channelId })
@@ -434,10 +434,10 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       // Otherwise fetch it
       try {
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/weather_dashboard/channels`,
+          getEdgeFunctionUrl('weather_dashboard/channels'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );

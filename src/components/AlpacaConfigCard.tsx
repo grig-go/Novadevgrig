@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { Database, RefreshCw, CheckCircle, XCircle, Loader2, Clock, Rss } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface AlpacaConfig {
@@ -32,10 +32,10 @@ export function AlpacaConfigCard() {
     setIsLoading(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/config`,
+        getEdgeFunctionUrl('finance_dashboard/stocks/config'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -59,12 +59,12 @@ export function AlpacaConfigCard() {
     setSaving(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/config`,
+        getEdgeFunctionUrl('finance_dashboard/stocks/config'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
           body: JSON.stringify({ refreshInterval }),
         }

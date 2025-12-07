@@ -28,7 +28,7 @@ import { toast } from "sonner@2.0.3";
 import { useMediaData } from "../utils/useMediaData";
 import { copyToClipboard } from "../utils/clipboard";
 import { VideoThumbnail } from "./VideoThumbnail";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
 import { LocationMapPicker } from "./LocationMapPicker";
 
 // Temporary empty object for distributions until backend provides this data
@@ -202,11 +202,12 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     const loadAIProviders = async () => {
       try {
         setLoadingAIProviders(true);
+        const anonKey = getSupabaseAnonKey();
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${anonKey}`,
             },
           }
         );
@@ -442,12 +443,13 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     try {
       setCopyingURL(true);
       console.log('🔗 Fetching public URL for asset:', assetId);
-      
+
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/media-library/${assetId}/signed-url`,
+        getEdgeFunctionUrl(`media-library/${assetId}/signed-url`),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${anonKey}`,
           },
         }
       );
@@ -708,14 +710,15 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       const formData = new FormData();
       formData.append('thumbnail', blob, 'thumbnail.jpg');
       formData.append('video_asset_id', selectedAsset.id);
-      
+
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/media-library/generate-thumbnail`,
+        getEdgeFunctionUrl('media-library/generate-thumbnail'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
           },
           body: formData,
         }
@@ -766,13 +769,14 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       // Step 1: Get raw API key using the existing /reveal endpoint (same as AI Connections)
       console.log('🔑 Step 1: Fetching API key from backend...');
       console.log(`   • Provider ID: ${selectedAIProvider}`);
-      
+
+      const anonKey = getSupabaseAnonKey();
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
+        getEdgeFunctionUrl(`ai_provider/providers/${selectedAIProvider}/reveal`),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${anonKey}`,
           },
         }
       );
@@ -907,12 +911,13 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
       // Step 1: Get raw API key
       console.log('🔑 Step 1: Fetching API key from backend...');
+      const anonKey = getSupabaseAnonKey();
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedAIProvider}/reveal`,
+        getEdgeFunctionUrl(`ai_provider/providers/${selectedAIProvider}/reveal`),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${anonKey}`,
           },
         }
       );
@@ -1360,10 +1365,11 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     try {
       setLoadingSystems(true);
       console.log("🔍 Fetching systems from media-library/systems endpoint...");
-      
-      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/systems`, {
+
+      const anonKey = getSupabaseAnonKey();
+      const response = await fetch(getEdgeFunctionUrl('media-library/systems'), {
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
       });
@@ -1398,10 +1404,11 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
       
       const system = availableSystems.find(s => s.id === systemId);
 
-      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute`, {
+      const anonKey = getSupabaseAnonKey();
+      const response = await fetch(getEdgeFunctionUrl('media-library/distribute'), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -1444,10 +1451,11 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
     try {
       setLoadingDistributions(true);
       console.log("🔍 Fetching distributions for media asset:", mediaAssetId);
-      
-      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute?media_asset_id=${mediaAssetId}`, {
+
+      const anonKey = getSupabaseAnonKey();
+      const response = await fetch(getEdgeFunctionUrl(`media-library/distribute?media_asset_id=${mediaAssetId}`), {
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
       });
@@ -1477,11 +1485,12 @@ export function MediaLibrary({ onNavigate }: MediaLibraryProps) {
 
     try {
       console.log("🗑️  Removing distribution:", distributionId);
-      
-      const response = await fetch(`https://${projectId}.functions.supabase.co/media-library/distribute/${distributionId}`, {
+
+      const anonKey = getSupabaseAnonKey();
+      const response = await fetch(getEdgeFunctionUrl(`media-library/distribute/${distributionId}`), {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
           "Content-Type": "application/json",
         },
       });
