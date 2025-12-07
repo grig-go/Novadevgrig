@@ -694,20 +694,23 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </Collapsible>
           )}
 
-          <div className="text-xs text-muted-foreground mt-4">
-            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground mt-4 flex items-center justify-between">
+            <span>{t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
       </motion.div>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>
@@ -769,20 +772,23 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             ))}
           </div>
           
-          <div className="text-xs text-muted-foreground">
-            {getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>{getFieldValue(location.data.hourly?.stepHours)}-hour {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
       </motion.div>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>
@@ -860,20 +866,23 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             })}
           </div>
           
-          <div className="text-xs text-muted-foreground">
-            7-day {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>7-day {t.forecast} • {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
       </motion.div>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>
@@ -986,20 +995,23 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          <div className="text-xs text-muted-foreground mt-4">
-            {t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground mt-4 flex items-center justify-between">
+            <span>{t.lastUpdated}: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
       </motion.div>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>
@@ -1243,19 +1255,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          <div className="text-xs text-muted-foreground">
-            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>
@@ -1413,19 +1428,22 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
             </div>
           )}
           
-          <div className="text-xs text-muted-foreground">
-            Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>Last updated: {location.data?.current?.asOf ? formatTime(getFieldValue(location.data.current.asOf)) : 'N/A'}</span>
+            {location.location.provider_name && (
+              <span className="text-muted-foreground/70">Provider: {location.location.provider_name}</span>
+            )}
           </div>
         </CardContent>
       </Card>
-      
+
       <WeatherBackendDataDialog
         open={backendDataOpen}
         onOpenChange={setBackendDataOpen}
         locationId={location.location.id}
         locationName={getFieldValue(location.location.name)}
       />
-      
+
       {renderDeleteDialog()}
       {renderChannelDialog()}
       </>

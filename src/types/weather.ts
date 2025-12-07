@@ -171,6 +171,7 @@ export interface Location {
   elevation_m: number | FieldOverride<number>;
   stationId?: string | FieldOverride<string>;
   provider_id?: string;
+  provider_name?: string;
   channel_id?: string;
 }
 

@@ -572,9 +572,11 @@ async function fetchWeatherAPI(provider, locations) {
             lat,
             lon,
             provider_id: loc.provider_id,
+            provider_name: loc.provider_name || provider.name,
             channel_id: channel_id || null
           },
           data: {
+            locationProvider: loc.provider_name || provider.name,
             current: {
               asOf: current.last_updated,
               temperature: {
@@ -787,9 +789,11 @@ async function fetchFromDatabase(locations) {
             lat,
             lon,
             provider_id,
+            provider_name: loc.provider_name,
             channel_id: channel_id || null
           },
           data: {
+            locationProvider: loc.provider_name,
             current: currentData ? {
               asOf: currentData.timestamp || currentData.as_of,
               temperature: {
