@@ -245,15 +245,16 @@ app.delete("/locations/:id", async (c)=>{
     return jsonErr(c, 500, "LOCATION_DELETE_FAILED", err);
   }
 });
-// PUT update location (for overrides like custom_name and channel_id)
+// PUT update location (for overrides like custom_name and channel assignments)
 app.put("/locations/:id", async (c)=>{
   try {
     const id = c.req.param("id");
     const body = await safeJson(c);
-    const { custom_name, channel_id } = body;
+    const { custom_name, channel_id, channel_ids } = body;
     console.log(`✏️ Updating location ${id}`, {
       custom_name,
-      channel_id
+      channel_id,
+      channel_ids
     });
     const updateData = {
       updated_at: new Date().toISOString()
@@ -261,19 +262,63 @@ app.put("/locations/:id", async (c)=>{
     if (custom_name !== undefined) {
       updateData.custom_name = custom_name || null;
     }
-    if (channel_id !== undefined) {
+    // Handle legacy single channel_id (for backward compatibility)
+    if (channel_id !== undefined && channel_ids === undefined) {
       updateData.channel_id = channel_id || null;
-      console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} channel for location ${id}`);
+      console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} single channel for location ${id}`);
     }
     const { data, error } = await supabase.from("weather_locations").update(updateData).eq("id", id).select().single();
     if (error) {
       console.error("Failed to update location:", error);
       return jsonErr(c, 500, "LOCATION_UPDATE_FAILED", error.message);
     }
+    // Handle multiple channel assignments via junction table
+    if (channel_ids !== undefined) {
+      console.log(`📺 Updating channel assignments for location ${id}:`, channel_ids);
+      // First, delete all existing channel assignments for this location
+      const { error: deleteError } = await supabase
+        .from("weather_location_channels")
+        .delete()
+        .eq("location_id", id);
+      if (deleteError) {
+        console.error("Failed to clear existing channel assignments:", deleteError);
+        return jsonErr(c, 500, "CHANNEL_ASSIGNMENT_FAILED", deleteError.message);
+      }
+      // Then, insert new channel assignments
+      if (channel_ids.length > 0) {
+        const channelAssignments = channel_ids.map((channelId: string) => ({
+          location_id: id,
+          channel_id: channelId
+        }));
+        const { error: insertError } = await supabase
+          .from("weather_location_channels")
+          .insert(channelAssignments);
+        if (insertError) {
+          console.error("Failed to insert channel assignments:", insertError);
+          return jsonErr(c, 500, "CHANNEL_ASSIGNMENT_FAILED", insertError.message);
+        }
+      }
+      // Also update the legacy channel_id field with the first channel (for backward compatibility)
+      const primaryChannelId = channel_ids.length > 0 ? channel_ids[0] : null;
+      await supabase
+        .from("weather_locations")
+        .update({ channel_id: primaryChannelId })
+        .eq("id", id);
+      console.log(`✅ Updated ${channel_ids.length} channel assignment(s) for location ${id}`);
+    }
+    // Fetch the updated channel assignments
+    const { data: channelAssignments } = await supabase
+      .from("weather_location_channels")
+      .select("channel_id")
+      .eq("location_id", id);
+    const assignedChannelIds = channelAssignments?.map(a => a.channel_id) || [];
     console.log(`✅ Location updated: ${id}`);
     return c.json({
       ok: true,
-      location: data
+      location: {
+        ...data,
+        channel_ids: assignedChannelIds
+      }
     });
   } catch (err) {
     console.error("Error updating location:", err);
@@ -1071,7 +1116,7 @@ app.put("/providers", async (c)=>{
 app.get("/channels", async (c)=>{
   try {
     console.log("📺 Fetching channels list for weather location assignment");
-    const { data, error } = await supabase.from("channels").select("id, name").eq("status", "active").order("name");
+    const { data, error } = await supabase.from("channels").select("id, name").eq("active", true).order("name");
     if (error) {
       console.error("Failed to fetch channels:", error);
       return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", error.message);
@@ -1084,6 +1129,39 @@ app.get("/channels", async (c)=>{
   } catch (err) {
     console.error("Error fetching channels:", err);
     return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", err);
+  }
+});
+
+// GET channel assignments for a specific location
+app.get("/locations/:id/channels", async (c)=>{
+  try {
+    const id = c.req.param("id");
+    console.log(`📺 Fetching channel assignments for location ${id}`);
+
+    const { data, error } = await supabase
+      .from("weather_location_channels")
+      .select("channel_id, channels(id, name)")
+      .eq("location_id", id);
+
+    if (error) {
+      console.error("Failed to fetch channel assignments:", error);
+      return jsonErr(c, 500, "CHANNEL_ASSIGNMENTS_FETCH_FAILED", error.message);
+    }
+
+    const channels = data?.map((item: any) => ({
+      id: item.channel_id,
+      name: item.channels?.name || 'Unknown'
+    })) || [];
+
+    console.log(`✅ Found ${channels.length} channel assignment(s) for location ${id}`);
+    return c.json({
+      ok: true,
+      channel_ids: channels.map((ch: any) => ch.id),
+      channels: channels
+    });
+  } catch (err) {
+    console.error("Error fetching channel assignments:", err);
+    return jsonErr(c, 500, "CHANNEL_ASSIGNMENTS_FETCH_FAILED", err);
   }
 });
 // ============================================================================

@@ -159,6 +159,8 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [assigningChannel, setAssigningChannel] = useState(false);
+  // State for multi-select channel assignments
+  const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
   
   // Get translations for current language
   const t = getTranslation(language);
@@ -169,7 +171,7 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
       console.log(`🔵 FRONTEND: Saving custom name for location ${location.location.id}:`, customName);
       
       const response = await fetch(
-        getEdgeFunctionUrl('weather_dashboard/locations/${location.location.id}'),
+        getEdgeFunctionUrl(`weather_dashboard/locations/${location.location.id}`),
         {
           method: "PUT",
           headers: {
@@ -312,10 +314,43 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
   const handleAssignChannel = async () => {
     console.log('📺 Assign Channel clicked for location:', location.location.id);
     setAssignChannelOpen(true);
-    
+
     // Fetch channels when opening the dialog
     if (channels.length === 0) {
       await fetchChannels();
+    }
+
+    // Fetch current channel assignments for this location
+    await fetchCurrentChannelAssignments();
+  };
+
+  const fetchCurrentChannelAssignments = async () => {
+    try {
+      console.log('📺 Fetching current channel assignments for location:', location.location.id);
+      const response = await fetch(
+        getEdgeFunctionUrl(`weather_dashboard/locations/${location.location.id}/channels`),
+        {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${getSupabaseAnonKey()}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Current channel assignments:', result);
+        if (result.ok && result.channel_ids) {
+          setSelectedChannelIds(result.channel_ids);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching channel assignments:', error);
+      // Fall back to legacy single channel_id if junction table fails
+      if (location.location.channel_id) {
+        setSelectedChannelIds([location.location.channel_id]);
+      }
     }
   };
 
@@ -357,45 +392,66 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
     }
   };
 
-  const assignChannel = async (channelId: string) => {
+  // Toggle channel selection (for multi-select)
+  const toggleChannelSelection = (channelId: string) => {
+    setSelectedChannelIds(prev => {
+      if (prev.includes(channelId)) {
+        return prev.filter(id => id !== channelId);
+      } else {
+        return [...prev, channelId];
+      }
+    });
+  };
+
+  // Save multiple channel assignments
+  const saveChannelAssignments = async () => {
     try {
       setAssigningChannel(true);
-      const channelName = channels.find(c => c.id === channelId)?.name || channelId;
-      console.log(`🔗 Assigning channel "${channelName}" to location "${locationNameValue}"...`);
-      
-      toast.info(`Assigning channel "${channelName}" to "${locationNameValue}"...`);
-      
+      const selectedNames = selectedChannelIds
+        .map(id => channels.find(c => c.id === id)?.name)
+        .filter(Boolean)
+        .join(', ');
+
+      console.log(`🔗 Saving ${selectedChannelIds.length} channel(s) for location "${locationNameValue}":`, selectedChannelIds);
+      toast.info(`Saving channel assignments for "${locationNameValue}"...`);
+
       const response = await fetch(
-        getEdgeFunctionUrl('weather_dashboard/locations/${location.location.id}'),
+        getEdgeFunctionUrl(`weather_dashboard/locations/${location.location.id}`),
         {
           method: "PUT",
           headers: {
             "Authorization": `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ channel_id: channelId })
+          body: JSON.stringify({ channel_ids: selectedChannelIds })
         }
       );
-      
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Failed to assign channel (HTTP ${response.status}):`, errorText);
+        console.error(`Failed to save channel assignments (HTTP ${response.status}):`, errorText);
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       const result = await response.json();
-      console.log('✅ Channel assigned successfully:', result);
-      
-      toast.success(`✅ Assigned "${channelName}" to "${locationNameValue}"`);
+      console.log('✅ Channel assignments saved successfully:', result);
+
+      if (selectedChannelIds.length === 0) {
+        toast.success(`✅ Removed all channel assignments from "${locationNameValue}"`);
+      } else if (selectedChannelIds.length === 1) {
+        toast.success(`✅ Assigned "${selectedNames}" to "${locationNameValue}"`);
+      } else {
+        toast.success(`✅ Assigned ${selectedChannelIds.length} channels to "${locationNameValue}"`);
+      }
       setAssignChannelOpen(false);
-      
+
       // Refresh the card to show updated data
       if (onRefresh) {
         onRefresh();
       }
     } catch (error) {
-      console.error('Error assigning channel:', error);
-      toast.error(`Failed to assign channel: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('Error saving channel assignments:', error);
+      toast.error(`Failed to save channel assignments: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setAssigningChannel(false);
     }
@@ -490,18 +546,15 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
     </DropdownMenu>
   );
 
-  // Common channel assignment dialog component
+  // Common channel assignment dialog component (multi-select)
   const renderChannelDialog = () => {
-    // Get current channel_id from location (it's returned from backend but not in type)
-    const currentChannelId = (location.location as any).channel_id;
-    
     return (
       <Dialog open={assignChannelOpen} onOpenChange={setAssignChannelOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign Channel to {locationNameValue}</DialogTitle>
+            <DialogTitle>Assign Channels to {locationNameValue}</DialogTitle>
             <DialogDescription>
-              Select a channel to assign to this weather location
+              Select one or more channels to assign to this weather location
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -516,28 +569,65 @@ export function WeatherCard({ location, onUpdate, onDelete, onRefresh, onAIInsig
                 <p className="text-sm text-muted-foreground">No active channels found</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {channels.map((channel) => {
-                  const isCurrentChannel = currentChannelId === channel.id;
-                  return (
+              <>
+                <div className="space-y-2 max-h-72 overflow-y-auto border rounded-md p-2">
+                  {channels.map((channel) => {
+                    const isSelected = selectedChannelIds.includes(channel.id);
+                    return (
+                      <div
+                        key={channel.id}
+                        className={`flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-primary/10 border border-primary'
+                            : 'bg-muted/50 hover:bg-muted border border-transparent'
+                        }`}
+                        onClick={() => toggleChannelSelection(channel.id)}
+                      >
+                        <div className="flex items-center">
+                          <Tv className="mr-3 h-4 w-4 text-muted-foreground" />
+                          <span className={isSelected ? 'font-medium' : ''}>{channel.name}</span>
+                        </div>
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                          isSelected
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground/30'
+                        }`}>
+                          {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedChannelIds.length} channel{selectedChannelIds.length !== 1 ? 's' : ''} selected
+                  </p>
+                  <div className="flex gap-2">
                     <Button
-                      key={channel.id}
-                      variant={isCurrentChannel ? "default" : "outline"}
-                      className={`w-full justify-between ${isCurrentChannel ? 'bg-primary text-primary-foreground' : ''}`}
-                      onClick={() => assignChannel(channel.id)}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedChannelIds([])}
+                      disabled={selectedChannelIds.length === 0 || assigningChannel}
+                    >
+                      Clear All
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={saveChannelAssignments}
                       disabled={assigningChannel}
                     >
-                      <div className="flex items-center">
-                        <Tv className="mr-2 h-4 w-4" />
-                        {channel.name}
-                      </div>
-                      {isCurrentChannel && (
-                        <Check className="h-4 w-4 ml-2" />
+                      {assigningChannel ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        'Save'
                       )}
                     </Button>
-                  );
-                })}
-              </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </DialogContent>
