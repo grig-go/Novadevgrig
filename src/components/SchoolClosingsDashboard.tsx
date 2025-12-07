@@ -590,6 +590,14 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     return `${minutes}m`;
   };
 
+  // Format ZIP code to ensure 5 digits with leading zeros
+  const formatZipCode = (zip: string | number | undefined | null): string => {
+    if (!zip) return "";
+    const zipStr = String(zip);
+    // Pad with leading zeros if less than 5 digits
+    return zipStr.padStart(5, '0');
+  };
+
   const handleClearFilters = () => {
     setStatusFilter("all");
     setCountyFilter("all");
@@ -1118,12 +1126,20 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                             {school.organization_name}
                           </CardTitle>
                         </motion.div>
-                        <motion.div 
-                          className="flex items-center gap-2 mt-2"
+                        <motion.div
+                          className="flex items-center gap-2 mt-2 flex-wrap"
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.05 + 0.2 }}
                         >
+                          <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            transition={{ type: "spring", stiffness: 400 }}
+                          >
+                            <Badge variant="outline" className="text-xs">
+                              {school.type}
+                            </Badge>
+                          </motion.div>
                           <motion.div
                             whileHover={{ scale: 1.05 }}
                             transition={{ type: "spring", stiffness: 400 }}
@@ -1136,6 +1152,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           >
                             {getDayBadge(school.status_day)}
                           </motion.div>
+                          {school.provider_id === "manual_entry" && (
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              transition={{ type: "spring", stiffness: 400 }}
+                            >
+                              <Badge variant="secondary" className="text-xs">
+                                Manual
+                              </Badge>
+                            </motion.div>
+                          )}
                         </motion.div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1217,7 +1243,7 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                       </motion.div>
                       <span className="text-muted-foreground truncate">
-                        {school.city}, {school.state} {school.raw_data?.ZIP || school.raw_data?.zip}
+                        {school.city}, {school.state} {formatZipCode(school.raw_data?.ZIP || school.raw_data?.zip)}
                       </span>
                     </motion.div>
                     <motion.div 
@@ -1230,8 +1256,8 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         {school.county_name} County
                       </span>
                     </motion.div>
-                    {school.raw_data?.DELAY && school.raw_data?.DELAY > 0 && (
-                      <motion.div 
+                    {Number(school.raw_data?.DELAY) > 0 && (
+                      <motion.div
                         className="flex items-center gap-2 text-sm"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -1245,47 +1271,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                         </motion.div>
                         <span className="text-muted-foreground">
-                          Delay: {formatDelay(parseInt(school.raw_data?.DELAY))}
+                          Delay: {formatDelay(Number(school.raw_data?.DELAY))}
                         </span>
                       </motion.div>
                     )}
-                    <motion.div 
-                      className="flex items-center gap-2 text-sm"
-                      whileHover={{ x: 4 }}
-                      transition={{ type: "spring", stiffness: 300 }}
-                    >
-                      <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground text-xs">
-                        {new Date(school.fetched_at).toLocaleDateString()}
+                    <div className="text-xs text-muted-foreground mt-4 pt-2 border-t flex items-center justify-between">
+                      <span>Last updated: {new Date(school.fetched_at).toLocaleString()}</span>
+                      <span className="text-muted-foreground/70">
+                        Provider: {school.provider_id.replace('school_provider:', '')}
                       </span>
-                    </motion.div>
-                    <motion.div 
-                      className="pt-2 border-t flex items-center justify-between"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.3 }}
-                    >
-                      <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        transition={{ type: "spring", stiffness: 400 }}
-                      >
-                        <Badge variant="outline" className="text-xs">
-                          {school.type}
-                        </Badge>
-                      </motion.div>
-                      {school.provider_id === "manual_entry" && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.4 }}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          <Badge variant="secondary" className="text-xs">
-                            Manual
-                          </Badge>
-                        </motion.div>
-                      )}
-                    </motion.div>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1314,6 +1309,8 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                       <TableHead>Day</TableHead>
                       <TableHead>Delay</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead>Provider</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1355,10 +1352,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           </TableCell>
                           <TableCell>{getDayBadge(school.status_day)}</TableCell>
                           <TableCell>
-                            {school.raw_data?.DELAY && school.raw_data?.DELAY > 0 ? (
+                            {Number(school.raw_data?.DELAY) > 0 ? (
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-muted-foreground" />
-                                {formatDelay(parseInt(school.raw_data?.DELAY))}
+                                {formatDelay(Number(school.raw_data?.DELAY))}
                               </div>
                             ) : (
                               <span className="text-muted-foreground">-</span>
@@ -1375,6 +1372,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                                 </Badge>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {new Date(school.fetched_at).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.provider_id.replace('school_provider:', '')}
+                            </span>
                           </TableCell>
                           <TableCell>
                             {school.provider_id === "manual_entry" && (
