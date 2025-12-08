@@ -45,8 +45,9 @@ stop_service "File server" "file-server"
 stop_service "Legacy TLS proxy" "proxy"
 
 # Also kill any remaining processes by name (cleanup)
-pkill -f "vite.*${VITE_PORT:-5173}" 2>/dev/null || true
-pkill -f "vite.*Novadevgrig" 2>/dev/null || true
+pkill -f "Novadevgrig.*vite" 2>/dev/null || true
+pkill -f "Novadevgrig/node_modules/.bin/vite" 2>/dev/null || true
+pkill -f "dotenv -- vite" 2>/dev/null || true
 pkill -f "supabase functions serve" 2>/dev/null || true
 # File server (Deno)
 pkill -f "deno.*server.ts" 2>/dev/null || true
