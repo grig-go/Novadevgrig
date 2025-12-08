@@ -157,9 +157,12 @@ app.post("/fetch", async (c)=>{
     });
     let totalInserted = 0;
     // ----------------------------------------------------------------------------
-    // 2️⃣ If sample_url exists — ignore regions and use directly
+    // 2️⃣ Use base_url if available, otherwise fall back to sample_url
     // ----------------------------------------------------------------------------
-    if (config.sample_url && config.sample_url.trim() !== "") {
+    const hasBaseUrl = provider.base_url && provider.base_url.trim() !== "";
+    const hasSampleUrl = config.sample_url && config.sample_url.trim() !== "";
+
+    if (!hasBaseUrl && hasSampleUrl) {
       const url = config.sample_url;
       const regionId = "42"; // fixed demo region
       const zoneId = ""; // not used for sample mode
@@ -449,11 +452,12 @@ app.post("/fetch", async (c)=>{
           totalInserted += upsertedRows?.length || rows.length;
         }
 
-        // 🧹 Delete stale records not in current feed (more efficient than delete-all)
+        // 🧹 Delete stale records not in current feed for THIS specific region/zone
+        // Only affects records from this region/zone - never touches other regions
         console.log(`🧹 Checking for stale records in region=${region_id}, zone=${zone_id}...`);
         const { data: existingRows, error: fetchError } = await supabase
           .from("school_closings")
-          .select("id, organization_name, status_day")
+          .select("id, organization_name, status_day, is_manual")
           .eq("provider_id", "school_provider:news12_closings")
           .eq("region_id", region_id)
           .eq("zone_id", zone_id);
@@ -462,8 +466,9 @@ app.post("/fetch", async (c)=>{
           console.warn(`⚠️ Failed to fetch existing records for comparison:`, fetchError);
         } else if (existingRows) {
           // Find records that exist in DB but not in current feed
+          // Never delete manual entries (is_manual = true)
           const staleIds = existingRows
-            .filter(row => !currentOrgNames.has(`${row.organization_name}|${row.status_day}`))
+            .filter(row => !row.is_manual && !currentOrgNames.has(`${row.organization_name}|${row.status_day}`))
             .map(row => row.id);
 
           if (staleIds.length > 0) {
