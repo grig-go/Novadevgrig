@@ -156,7 +156,6 @@ serve(async (req)=>{
 
     // 3. Build XML structure
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += '<!DOCTYPE tickerfeed SYSTEM "http://www.vizrt.com/ticker/tickerfeed-2.4.dtd">\n';
     xml += '<tickerfeed version="2.4">\n';
     // Track bucket instance counts across all playlists for unique IDs
     const bucketInstanceCounts: Map<string, number> = new Map();
