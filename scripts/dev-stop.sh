@@ -53,7 +53,7 @@ pkill -f "deno.*server.ts" 2>/dev/null || true
 pkill -f "npm run dev:file-server" 2>/dev/null || true
 # Legacy TLS proxy (Node)
 pkill -f "legacy-tls-proxy.*server.js" 2>/dev/null || true
-pkill -f "npm run dev:proxy" 2>/dev/null || true
+pkill -f "npm run dev:legacy-tls-proxy" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════${NC}"

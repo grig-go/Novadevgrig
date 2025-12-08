@@ -65,7 +65,7 @@ echo -e "${GREEN}✓ File server started (PID: $(cat $LOG_DIR/file-server.pid))$
 # Start legacy TLS proxy in background
 echo -e "${YELLOW}Starting legacy TLS proxy...${NC}"
 cd "$PROJECT_ROOT"
-nohup npm run dev:proxy > "$LOG_DIR/proxy.log" 2>&1 &
+nohup npm run dev:legacy-tls-proxy > "$LOG_DIR/proxy.log" 2>&1 &
 echo $! > "$LOG_DIR/proxy.pid"
 echo -e "${GREEN}✓ Legacy TLS proxy started (PID: $(cat $LOG_DIR/proxy.pid))${NC}"
 
