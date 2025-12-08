@@ -84,7 +84,7 @@
     "build": "vite build",
     "dev:full": "concurrently \"npm run dev\" \"npm run dev:file-server\" \"npm run dev:proxy\"",
     "dev:file-server": "cd file-server && deno run --allow-net --allow-read --allow-env server.ts",
-    "dev:proxy": "cd legacy-tls-proxy && npm start",
+    "dev:legacy-tls-proxy": "cd legacy-tls-proxy && npm start",
     "dev:start": "./scripts/dev-start.sh",
     "dev:stop": "./scripts/dev-stop.sh",
     "prod:start": "./scripts/prod-start.sh",
