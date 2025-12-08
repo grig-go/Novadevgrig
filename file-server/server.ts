@@ -248,7 +248,66 @@ async function handleRequest(req: Request): Promise<Response> {
       throw new Error("FILE_ROOT environment variable not configured");
     }
 
-    // Parse request body
+    // Handle GET requests - serve files directly by URL path
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      const relativePath = decodeURIComponent(url.pathname.slice(1)); // Remove leading /
+
+      if (!relativePath) {
+        // Root path - list directory
+        const entries = await listDirectory(FILE_ROOT, FILE_ROOT, ALLOWED_EXTENSIONS);
+        return new Response(
+          JSON.stringify({ success: true, path: "", entries, root: FILE_ROOT }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
+      const sanitizedPath = sanitizePath(relativePath);
+      const fullPath = path.join(FILE_ROOT, sanitizedPath);
+
+      // Ensure the resolved path is within FILE_ROOT
+      if (!fullPath.startsWith(FILE_ROOT)) {
+        throw new Error("Access denied: Path traversal attempt detected");
+      }
+
+      const fileInfo = await Deno.stat(fullPath);
+
+      if (fileInfo.isDirectory) {
+        // List directory contents
+        const entries = await listDirectory(fullPath, FILE_ROOT, ALLOWED_EXTENSIONS);
+        return new Response(
+          JSON.stringify({ success: true, path: sanitizedPath, entries, root: FILE_ROOT }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
+      // Serve file directly
+      const ext = path.extname(fullPath).toLowerCase().slice(1);
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        throw new Error(`File type .${ext} is not allowed`);
+      }
+
+      if (fileInfo.size > MAX_FILE_SIZE) {
+        throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE} bytes`);
+      }
+
+      console.log(`GET: Serving file ${sanitizedPath} (${fileInfo.size} bytes)`);
+      const content = await Deno.readTextFile(fullPath);
+
+      // Return raw file content with appropriate content type
+      const contentType = ext === "json" ? "application/json" :
+                          ext === "xml" ? "application/xml" :
+                          ext === "csv" ? "text/csv" :
+                          ext === "tsv" ? "text/tab-separated-values" :
+                          "text/plain";
+
+      return new Response(content, {
+        headers: { ...corsHeaders, "Content-Type": contentType },
+        status: 200,
+      });
+    }
+
+    // Handle POST requests - original JSON API
     const body: BrowseRequest = await req.json();
     const { action, relativePath = "" } = body;
 

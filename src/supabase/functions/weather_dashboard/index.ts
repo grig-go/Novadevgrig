@@ -1302,24 +1302,16 @@ app.get("/weather-data-csv", async (c)=>{
     let csvText: string;
 
     if (localFilePath && FILE_SERVER_URL) {
-      // Fetch from local file server
-      console.log(`📁 Fetching CSV from file server: ${localFilePath}`);
-      const fileServerRes = await fetch(FILE_SERVER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "read", relativePath: localFilePath })
-      });
+      // Fetch from local file server via GET request
+      const fileUrl = `${FILE_SERVER_URL.replace(/\/$/, '')}/${localFilePath.replace(/^\//, '')}`;
+      console.log(`📁 Fetching CSV from file server: ${fileUrl}`);
+      const fileServerRes = await fetch(fileUrl);
 
       if (!fileServerRes.ok) {
         throw new Error(`File server error: ${fileServerRes.status} ${fileServerRes.statusText}`);
       }
 
-      const fileData = await fileServerRes.json();
-      if (!fileData.success) {
-        throw new Error(`File server read failed: ${fileData.error}`);
-      }
-
-      csvText = fileData.content;
+      csvText = await fileServerRes.text();
       console.log(`✅ Loaded ${csvText.length} bytes from file server`);
     } else if (provider?.source_url) {
       // Fetch from direct URL
