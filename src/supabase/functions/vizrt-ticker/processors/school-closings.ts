@@ -24,8 +24,18 @@ export async function processSchoolClosingsComponent(
   const format1 = config.format1 || '{{organization}}';
   const format2 = config.format2 || '{{status}}';
 
-  // Check if passthrough mode is enabled
-  const isPassthrough = config.passthrough === true;
+  // Parse field value to check for passthrough mode
+  let fieldData: { passthrough?: boolean; regionId?: string; zoneId?: string } = {};
+  try {
+    if (field.value) {
+      fieldData = JSON.parse(field.value);
+    }
+  } catch (e) {
+    console.log('🏫 Could not parse field value');
+  }
+
+  // Check if passthrough mode is enabled (now stored in field value)
+  const isPassthrough = fieldData.passthrough === true;
 
   // Get filters - either from passthrough params or from field value
   let regionId = '';
@@ -37,19 +47,9 @@ export async function processSchoolClosingsComponent(
     zoneId = passthroughParams.passthroughZoneId || '';
     console.log(`🏫 Passthrough mode enabled - using URL params`);
   } else {
-    // Normal mode - use config defaults and field values
-    regionId = config.defaultRegionId || '';
-    zoneId = config.defaultZoneId || '';
-
-    try {
-      if (field.value) {
-        const filters = JSON.parse(field.value);
-        regionId = filters.regionId || regionId;
-        zoneId = filters.zoneId || zoneId;
-      }
-    } catch (e) {
-      console.log('🏫 Could not parse field value, using config defaults');
-    }
+    // Normal mode - use field values or config defaults
+    regionId = fieldData.regionId || config.defaultRegionId || '';
+    zoneId = fieldData.zoneId || config.defaultZoneId || '';
   }
 
   console.log(`🏫 Config: templateName=${templateName}, field1=${field1}, field2=${field2}, passthrough=${isPassthrough}`);

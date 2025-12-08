@@ -234,11 +234,6 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
   const target = playlist.target || 'carousel';
 
   let xml = `  <playlist type="${playlistType}" name="${escapeXml(carouselName)}" target="${escapeXml(target)}">\n`;
-  // Add defaults
-  xml += '    <defaults>\n';
-  xml += '      <template>default_template</template>\n';
-  xml += `      <gui-color>${generateColorForPlaylist(playlist.name)}</gui-color>\n`;
-  xml += '    </defaults>\n';
   // Add all groups with content
   for (const groupXml of groupXmls){
     xml += groupXml;
