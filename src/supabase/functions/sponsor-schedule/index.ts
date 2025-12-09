@@ -60,7 +60,6 @@ interface SponsorSchedule {
   time_ranges: TimeRange[];
   days_of_week: DaysOfWeek;
   active: boolean;
-  is_default: boolean;
   priority: number;
   category: string | null;
 }
@@ -267,28 +266,14 @@ app.get("/:channelNameOrId", async (c) => {
     console.log(`[SPONSOR-SCHEDULE] Found ${parsedSchedules.length} schedules:`);
     parsedSchedules.forEach(s => {
       const isActive = isScheduleActiveNow(s);
-      console.log(`  - ${s.name}: is_default=${s.is_default}, priority=${s.priority}, category=${s.category || 'general'}, active_now=${isActive}`);
+      console.log(`  - ${s.name}: priority=${s.priority}, category=${s.category || 'general'}, active_now=${isActive}`);
       console.log(`    days_of_week: ${JSON.stringify(s.days_of_week)}`);
       console.log(`    time_ranges: ${JSON.stringify(s.time_ranges)}`);
       console.log(`    start_date: ${s.start_date}, end_date: ${s.end_date}`);
     });
 
-    // Find the first non-default schedule that is currently active (highest priority first)
-    let activeSponsor = parsedSchedules.find(s => !s.is_default && isScheduleActiveNow(s));
-
-    // If no scheduled sponsor is active, fall back to default
-    // When category filter is provided, fall back to default of that category
-    // When no category filter, fall back to "General" default (null/empty category)
-    if (!activeSponsor) {
-      console.log(`[SPONSOR-SCHEDULE] No non-default schedule active, falling back to default for category: ${category || 'general'}`);
-      if (category) {
-        // Category specified - find default for that category
-        activeSponsor = parsedSchedules.find(s => s.is_default && s.category === category);
-      } else {
-        // No category specified - find "General" default (null or empty string category)
-        activeSponsor = parsedSchedules.find(s => s.is_default && (!s.category || s.category === ''));
-      }
-    }
+    // Find the first schedule that is currently active (highest priority first, already sorted by priority desc)
+    const activeSponsor = parsedSchedules.find(s => isScheduleActiveNow(s));
 
     if (!activeSponsor) {
       console.log(`[SPONSOR-SCHEDULE] No active sponsor for channel ${channelId}`);
@@ -322,25 +307,20 @@ app.get("/:channelNameOrId", async (c) => {
     const validTimeRanges = timeRanges.filter((r: TimeRange) => r.start && r.end);
 
     if (validTimeRanges.length > 0) {
-      // If it's a default sponsor with no specific time ranges, use all day
-      if (activeSponsor.is_default && validTimeRanges.length === 0) {
-        activeTimeRange = { start: "0:00", end: "23:59" };
-      } else {
-        // Find which time range is currently active
-        const now = new Date();
-        const currentTime = now.toTimeString().slice(0, 5); // "HH:MM"
+      // Find which time range is currently active
+      const now = new Date();
+      const currentTime = now.toTimeString().slice(0, 5); // "HH:MM"
 
-        const currentlyActive = validTimeRanges.find((range: TimeRange) => {
-          const isOvernight = range.start > range.end;
-          if (isOvernight) {
-            return currentTime >= range.start || currentTime <= range.end;
-          } else {
-            return currentTime >= range.start && currentTime <= range.end;
-          }
-        });
+      const currentlyActive = validTimeRanges.find((range: TimeRange) => {
+        const isOvernight = range.start > range.end;
+        if (isOvernight) {
+          return currentTime >= range.start || currentTime <= range.end;
+        } else {
+          return currentTime >= range.start && currentTime <= range.end;
+        }
+      });
 
-        activeTimeRange = currentlyActive || validTimeRanges[0];
-      }
+      activeTimeRange = currentlyActive || validTimeRanges[0];
     }
 
     // Extract file name and extension from the file_url (storage path)
@@ -472,8 +452,8 @@ app.get("/:channelNameOrId/today", async (c) => {
       end: string;
       sponsor: string;
       extension: string;
-      is_default: boolean;
       name: string;
+      priority: number;
     }> = [];
 
     for (const s of schedules || []) {
@@ -536,8 +516,8 @@ app.get("/:channelNameOrId/today", async (c) => {
           end: "23:59",
           sponsor,
           extension,
-          is_default: parsed.is_default,
-          name: parsed.name
+          name: parsed.name,
+          priority: parsed.priority
         });
       } else {
         // Add an entry for each time range
@@ -563,17 +543,22 @@ app.get("/:channelNameOrId/today", async (c) => {
             end: range.end,
             sponsor,
             extension,
-            is_default: parsed.is_default,
-            name: parsed.name
+            name: parsed.name,
+            priority: parsed.priority
           });
         }
       }
     }
 
-    // Sort by start time, with default sponsors at the end
+    // Sort by priority (highest first), then by start time
+    // Priority 0 sponsors (fallbacks) go to the end
     todaysSponsors.sort((a, b) => {
-      if (a.is_default && !b.is_default) return 1;
-      if (!a.is_default && b.is_default) return -1;
+      // Priority 0 (fallback) sponsors go to the end
+      if (a.priority === 0 && b.priority !== 0) return 1;
+      if (a.priority !== 0 && b.priority === 0) return -1;
+      // Higher priority first
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      // Same priority: sort by start time
       return a.start.localeCompare(b.start);
     });
 
@@ -662,8 +647,8 @@ app.get("/:channelNameOrId/all", async (c) => {
       end: string;
       sponsor: string;
       extension: string;
-      is_default: boolean;
       name: string;
+      priority: number;
       active: boolean;
       is_active_now: boolean;
       days_of_week: DaysOfWeek;
@@ -716,8 +701,8 @@ app.get("/:channelNameOrId/all", async (c) => {
           end: "23:59",
           sponsor,
           extension,
-          is_default: parsed.is_default,
           name: parsed.name,
+          priority: parsed.priority,
           active: parsed.active,
           is_active_now: isScheduleActiveNow(parsed),
           days_of_week: parsed.days_of_week
@@ -731,8 +716,8 @@ app.get("/:channelNameOrId/all", async (c) => {
             end: range.end,
             sponsor,
             extension,
-            is_default: parsed.is_default,
             name: parsed.name,
+            priority: parsed.priority,
             active: parsed.active,
             is_active_now: isScheduleActiveNow(parsed),
             days_of_week: parsed.days_of_week
@@ -741,10 +726,15 @@ app.get("/:channelNameOrId/all", async (c) => {
       }
     }
 
-    // Sort by start time, with default sponsors at the end
+    // Sort by priority (highest first), then by start time
+    // Priority 0 sponsors (fallbacks) go to the end
     allSponsors.sort((a, b) => {
-      if (a.is_default && !b.is_default) return 1;
-      if (!a.is_default && b.is_default) return -1;
+      // Priority 0 (fallback) sponsors go to the end
+      if (a.priority === 0 && b.priority !== 0) return 1;
+      if (a.priority !== 0 && b.priority === 0) return -1;
+      // Higher priority first
+      if (b.priority !== a.priority) return b.priority - a.priority;
+      // Same priority: sort by start time
       return a.start.localeCompare(b.start);
     });
 
@@ -773,7 +763,8 @@ app.get("/:channelNameOrId/all", async (c) => {
 app.get("/:channelNameOrId/images", async (c) => {
   try {
     const channelNameOrId = c.req.param("channelNameOrId");
-    console.log(`[SPONSOR-SCHEDULE] GET images for channel: ${channelNameOrId}`);
+    const category = c.req.query("category"); // Optional category filter
+    console.log(`[SPONSOR-SCHEDULE] GET images for channel: ${channelNameOrId}${category ? `, category: ${category}` : ''}`);
 
     const supabase = getSupabase();
 
@@ -813,11 +804,22 @@ app.get("/:channelNameOrId/images", async (c) => {
     const today = dayNames[dayOfWeek];
 
     // Fetch all active schedules for this channel
-    const { data: schedules, error: fetchError } = await supabase
+    let imagesQuery = supabase
       .from("sponsor_schedules")
       .select("*")
       .eq("active", true)
       .filter("channel_ids", "cs", `["${channelId}"]`);
+
+    // Apply category filter
+    if (category) {
+      // Specific category requested
+      imagesQuery = imagesQuery.eq("category", category);
+    } else {
+      // No category specified - return only General sponsors (null or empty category)
+      imagesQuery = imagesQuery.or("category.is.null,category.eq.");
+    }
+
+    const { data: schedules, error: fetchError } = await imagesQuery;
 
     if (fetchError || !schedules) {
       return c.json([]);
@@ -906,6 +908,7 @@ app.all("*", (c) => {
       "GET /sponsor-schedule/:channelName/today": "Get all sponsors scheduled for today on channel",
       "GET /sponsor-schedule/:channelName/today?category=X": "Get today's sponsors filtered by category",
       "GET /sponsor-schedule/:channelName/images": "Get all image URLs for today's sponsors",
+      "GET /sponsor-schedule/:channelName/images?category=X": "Get today's image URLs filtered by category",
       "GET /sponsor-schedule/:channelName/all": "Get all schedules for channel (admin)",
       "GET /sponsor-schedule/health": "Health check"
     },
