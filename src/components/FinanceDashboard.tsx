@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { TrendingUp, TrendingDown, Minus, Building2, Database, Brain, Rss, CheckCircle2, AlertCircle, Eye, Loader2, RefreshCw, X } from "lucide-react";
-import { projectId, publicAnonKey, projectId3, publicAnonKey3 } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -101,9 +101,9 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       setError(null);
       
       // Fetch from finance_dashboard edge function
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`, {
+      const response = await fetch(getEdgeFunctionUrl('finance_dashboard/stocks'), {
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
         },
       });
       
@@ -213,10 +213,10 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       }
       
       // Call the refresh endpoint to get fresh data from Alpaca/CoinGecko
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/refresh`, {
+      const response = await fetch(getEdgeFunctionUrl('finance_dashboard/stocks/refresh'), {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
         },
       });
 
@@ -258,11 +258,11 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       // Fetch providers from public view (masked credentials)
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=*&category=eq.finance`,
+        getRestUrl('data_providers_public?select=*&category=eq.finance'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -307,11 +307,11 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       // Step 1: Get provider list from public view (IDs only)
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id&category=eq.finance`,
+        getRestUrl('data_providers_public?select=id&category=eq.finance'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -326,12 +326,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const providersWithDetails = [];
       for (const provider of providerList) {
         const rpcResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+          getRestUrl('rpc/get_provider_details'),
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ p_id: provider.id }),
@@ -390,11 +390,11 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       // Get all finance provider IDs first
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id&category=eq.finance`,
+        getRestUrl('data_providers_public?select=id&category=eq.finance'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -409,12 +409,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const revealedProviders = [];
       for (const provider of providerList) {
         const rpcResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+          getRestUrl('rpc/get_provider_details'),
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ p_id: provider.id }),
@@ -449,12 +449,12 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       // Fetch full provider details using secure RPC function
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+        getRestUrl('rpc/get_provider_details'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ p_id: provider.id }),
@@ -489,10 +489,10 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
     try {
       // Fetch all securities with custom names from finance_dashboard edge function
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/overrides/list`,
+        getEdgeFunctionUrl('finance_dashboard/stocks/overrides/list'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -579,7 +579,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
   // Handler to save custom name to backend
   const handleSaveCustomName = async (symbol: string, customName: string, type: string) => {
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/${symbol}`;
+      const url = getEdgeFunctionUrl(`finance_dashboard/stocks/${symbol}`);
       console.log(`📝 Saving custom name for ${symbol} (${type}):`, customName);
       console.log(`📡 Request URL:`, url);
       
@@ -592,7 +592,7 @@ export function FinanceDashboard({ securities, onUpdateSecurity, onAddSecurity, 
       const response = await fetch(url, {
         method: 'PUT',
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

@@ -87,7 +87,6 @@ export function InlineEditField<T>({
   };
 
   const handleRevert = () => {
-    return false;
     if (isFieldOverridden(field)) {
       const revertedValue = revertOverride(field);
       //onUpdate(revertedValue);

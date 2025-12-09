@@ -245,15 +245,16 @@ app.delete("/locations/:id", async (c)=>{
     return jsonErr(c, 500, "LOCATION_DELETE_FAILED", err);
   }
 });
-// PUT update location (for overrides like custom_name and channel_id)
+// PUT update location (for overrides like custom_name and channel assignments)
 app.put("/locations/:id", async (c)=>{
   try {
     const id = c.req.param("id");
     const body = await safeJson(c);
-    const { custom_name, channel_id } = body;
+    const { custom_name, channel_id, channel_ids } = body;
     console.log(`✏️ Updating location ${id}`, {
       custom_name,
-      channel_id
+      channel_id,
+      channel_ids
     });
     const updateData = {
       updated_at: new Date().toISOString()
@@ -261,19 +262,63 @@ app.put("/locations/:id", async (c)=>{
     if (custom_name !== undefined) {
       updateData.custom_name = custom_name || null;
     }
-    if (channel_id !== undefined) {
+    // Handle legacy single channel_id (for backward compatibility)
+    if (channel_id !== undefined && channel_ids === undefined) {
       updateData.channel_id = channel_id || null;
-      console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} channel for location ${id}`);
+      console.log(`🔗 ${channel_id ? 'Assigning' : 'Unassigning'} single channel for location ${id}`);
     }
     const { data, error } = await supabase.from("weather_locations").update(updateData).eq("id", id).select().single();
     if (error) {
       console.error("Failed to update location:", error);
       return jsonErr(c, 500, "LOCATION_UPDATE_FAILED", error.message);
     }
+    // Handle multiple channel assignments via junction table
+    if (channel_ids !== undefined) {
+      console.log(`📺 Updating channel assignments for location ${id}:`, channel_ids);
+      // First, delete all existing channel assignments for this location
+      const { error: deleteError } = await supabase
+        .from("weather_location_channels")
+        .delete()
+        .eq("location_id", id);
+      if (deleteError) {
+        console.error("Failed to clear existing channel assignments:", deleteError);
+        return jsonErr(c, 500, "CHANNEL_ASSIGNMENT_FAILED", deleteError.message);
+      }
+      // Then, insert new channel assignments
+      if (channel_ids.length > 0) {
+        const channelAssignments = channel_ids.map((channelId: string) => ({
+          location_id: id,
+          channel_id: channelId
+        }));
+        const { error: insertError } = await supabase
+          .from("weather_location_channels")
+          .insert(channelAssignments);
+        if (insertError) {
+          console.error("Failed to insert channel assignments:", insertError);
+          return jsonErr(c, 500, "CHANNEL_ASSIGNMENT_FAILED", insertError.message);
+        }
+      }
+      // Also update the legacy channel_id field with the first channel (for backward compatibility)
+      const primaryChannelId = channel_ids.length > 0 ? channel_ids[0] : null;
+      await supabase
+        .from("weather_locations")
+        .update({ channel_id: primaryChannelId })
+        .eq("id", id);
+      console.log(`✅ Updated ${channel_ids.length} channel assignment(s) for location ${id}`);
+    }
+    // Fetch the updated channel assignments
+    const { data: channelAssignments } = await supabase
+      .from("weather_location_channels")
+      .select("channel_id")
+      .eq("location_id", id);
+    const assignedChannelIds = channelAssignments?.map(a => a.channel_id) || [];
     console.log(`✅ Location updated: ${id}`);
     return c.json({
       ok: true,
-      location: data
+      location: {
+        ...data,
+        channel_ids: assignedChannelIds
+      }
     });
   } catch (err) {
     console.error("Error updating location:", err);
@@ -572,9 +617,11 @@ async function fetchWeatherAPI(provider, locations) {
             lat,
             lon,
             provider_id: loc.provider_id,
+            provider_name: loc.provider_name || provider.name,
             channel_id: channel_id || null
           },
           data: {
+            locationProvider: loc.provider_name || provider.name,
             current: {
               asOf: current.last_updated,
               temperature: {
@@ -787,9 +834,11 @@ async function fetchFromDatabase(locations) {
             lat,
             lon,
             provider_id,
+            provider_name: loc.provider_name,
             channel_id: channel_id || null
           },
           data: {
+            locationProvider: loc.provider_name,
             current: currentData ? {
               asOf: currentData.timestamp || currentData.as_of,
               temperature: {
@@ -1082,6 +1131,39 @@ app.get("/channels", async (c)=>{
     return jsonErr(c, 500, "CHANNELS_FETCH_FAILED", err);
   }
 });
+
+// GET channel assignments for a specific location
+app.get("/locations/:id/channels", async (c)=>{
+  try {
+    const id = c.req.param("id");
+    console.log(`📺 Fetching channel assignments for location ${id}`);
+
+    const { data, error } = await supabase
+      .from("weather_location_channels")
+      .select("channel_id, channels(id, name)")
+      .eq("location_id", id);
+
+    if (error) {
+      console.error("Failed to fetch channel assignments:", error);
+      return jsonErr(c, 500, "CHANNEL_ASSIGNMENTS_FETCH_FAILED", error.message);
+    }
+
+    const channels = data?.map((item: any) => ({
+      id: item.channel_id,
+      name: item.channels?.name || 'Unknown'
+    })) || [];
+
+    console.log(`✅ Found ${channels.length} channel assignment(s) for location ${id}`);
+    return c.json({
+      ok: true,
+      channel_ids: channels.map((ch: any) => ch.id),
+      channels: channels
+    });
+  } catch (err) {
+    console.error("Error fetching channel assignments:", err);
+    return jsonErr(c, 500, "CHANNEL_ASSIGNMENTS_FETCH_FAILED", err);
+  }
+});
 // ============================================================================
 // TEST PROVIDER
 // ============================================================================
@@ -1196,7 +1278,10 @@ app.post("/test-provider", async (c)=>{
 // ============================================================================
 // ============================================================================
 // WEATHER CSV INGEST (News12 format — with timestamp + dedupe fix)
+// Supports: source_url (direct URL) or local_file_path (via FILE_SERVER_URL)
 // ============================================================================
+const FILE_SERVER_URL = Deno.env.get("FILE_SERVER_URL");
+
 app.get("/weather-data-csv", async (c)=>{
   try {
     console.log("🌦️ [CSV] Starting ingestion (News12 with time/dedupe fixes)");
@@ -1204,11 +1289,39 @@ app.get("/weather-data-csv", async (c)=>{
     const { data: providers, error: provErr } = await supabase.from("data_providers").select("*").eq("category", "weather").eq("type", "csv").eq("is_active", true);
     if (provErr) throw new Error(provErr.message);
     const provider = providers?.[0];
-    if (!provider?.source_url) throw new Error("No active CSV provider with source_url");
-    // 2️⃣ Fetch CSV
-    const res = await fetch(provider.source_url);
-    if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.status} ${res.statusText}`);
-    const csvText = await res.text();
+
+    // Check for local_file_path in config (preferred) or fall back to source_url
+    const config = typeof provider?.config === "string" ? JSON.parse(provider.config) : provider?.config || {};
+    const localFilePath = config.local_file_path;
+
+    if (!localFilePath && !provider?.source_url) {
+      throw new Error("No active CSV provider with source_url or local_file_path configured");
+    }
+
+    // 2️⃣ Fetch CSV - either from file server or direct URL
+    let csvText: string;
+
+    if (localFilePath && FILE_SERVER_URL) {
+      // Fetch from local file server via GET request
+      const fileUrl = `${FILE_SERVER_URL.replace(/\/$/, '')}/${localFilePath.replace(/^\//, '')}`;
+      console.log(`📁 Fetching CSV from file server: ${fileUrl}`);
+      const fileServerRes = await fetch(fileUrl);
+
+      if (!fileServerRes.ok) {
+        throw new Error(`File server error: ${fileServerRes.status} ${fileServerRes.statusText}`);
+      }
+
+      csvText = await fileServerRes.text();
+      console.log(`✅ Loaded ${csvText.length} bytes from file server`);
+    } else if (provider?.source_url) {
+      // Fetch from direct URL
+      console.log(`🌐 Fetching CSV from URL: ${provider.source_url}`);
+      const res = await fetch(provider.source_url);
+      if (!res.ok) throw new Error(`Failed to fetch CSV: ${res.status} ${res.statusText}`);
+      csvText = await res.text();
+    } else {
+      throw new Error("FILE_SERVER_URL not configured and no source_url available");
+    }
     const delimiter = csvText.includes("\t") ? "\t" : ",";
     let lines = csvText.trim().split(/\r?\n/);
     // 🕓 Extract "Generated:" timestamp BEFORE removing it
@@ -1247,16 +1360,62 @@ app.get("/weather-data-csv", async (c)=>{
       const parsed = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes || 0);
       return parsed.toISOString();
     }
+
+    // City to State mapping for News12 tri-state area
+    const cityStateMap: Record<string, string> = {
+      // New York
+      "Bronx": "New York",
+      "Brooklyn": "New York",
+      "Central Park": "New York",
+      "East Hampton": "New York",
+      "Farmingdale": "New York",
+      "Islip": "New York",
+      "JFK Airport": "New York",
+      "LGA Airport": "New York",
+      "Montauk": "New York",
+      "Newburgh": "New York",
+      "New York/Central Park": "New York",
+      "Poughkeepsie": "New York",
+      "Shirley": "New York",
+      "Stewart": "New York",
+      "Wall Street - NYC": "New York",
+      "Westhampton Beach": "New York",
+      "White Plains": "New York",
+      // New Jersey
+      "Atlantic City": "New Jersey",
+      "Caldwell": "New Jersey",
+      "Freehold": "New Jersey",
+      "Jackson Township": "New Jersey",
+      "Morristown": "New Jersey",
+      "Newark": "New Jersey",
+      "Ridgewood": "New Jersey",
+      "Sussex": "New Jersey",
+      "Teterboro": "New Jersey",
+      "Trenton": "New Jersey",
+      // Connecticut
+      "Bridgeport": "Connecticut",
+      "Danbury": "Connecticut",
+      "Groton": "Connecticut",
+      "Hartford": "Connecticut",
+      "Meriden": "Connecticut",
+      "New Haven": "Connecticut",
+      "Oxford": "Connecticut",
+      "Waterbury": "Connecticut",
+      "Windsor Locks": "Connecticut",
+      "Montgomery": "New Jersey",
+    };
+
     // 3️⃣ Create/Upsert weather_locations
     const uniqueLocs = new Map();
     for (const r of rows){
       const locName = r.LocationName?.trim();
       if (!locName) continue;
       if (!uniqueLocs.has(locName)) {
+        const state = cityStateMap[locName] || "New York"; // Default to NY if unknown
         uniqueLocs.set(locName, {
           id: generateLocationId(locName, "news12"),
           name: locName,
-          admin1: "New Jersey",
+          admin1: state,
           country: "United States of America",
           lat: 0,
           lon: 0,
@@ -1313,24 +1472,19 @@ app.get("/weather-data-csv", async (c)=>{
           created_at: new Date().toISOString()
         });
       } else {
-        // Compute forecast date based on CSV "Generated:" timestamp
-        // Extract once from file header if available
-        if (!globalThis.generatedBaseDate) {
-          const match = csvText.match(/^Generated:\s*([^\n\r]+)/m);
-          if (match) {
-            globalThis.generatedBaseDate = new Date(match[1].trim());
-            console.log(`🕓 Using Generated timestamp as base date: ${globalThis.generatedBaseDate.toISOString()}`);
-          } else {
-            globalThis.generatedBaseDate = new Date(); // fallback
-            console.warn("⚠️ No Generated timestamp found in CSV; using current date as base");
-          }
-        }
-        // Helper to compute forecast date relative to Generated base date
+        // Compute forecast date using current time as base (not CSV Generated timestamp)
+        // Day 1 (Today) = offset 0, Day 2 = offset 1, etc.
         function computeForecastDate(forecastName) {
-          const base = new Date(generatedBaseDate);
+          const base = new Date(); // Use current date as base
+          base.setHours(0, 0, 0, 0); // Normalize to start of day
           const lower = forecastName.toLowerCase();
           let offset = 0;
-          if (lower.includes("tomorrow") || lower.includes("day 2")) offset = 1;
+          // Skip "Tonight" entries - they have same high/low and overlap with "Today"
+          if (lower.includes("tonight")) {
+            return null; // Will be filtered out
+          }
+          if (lower.includes("today") || lower.includes("day 1")) offset = 0;
+          else if (lower.includes("tomorrow") || lower.includes("day 2")) offset = 1;
           else if (lower.includes("day 3")) offset = 2;
           else if (lower.includes("day 4")) offset = 3;
           else if (lower.includes("day 5")) offset = 4;
@@ -1341,6 +1495,7 @@ app.get("/weather-data-csv", async (c)=>{
           return result;
         }
         const fcDate = computeForecastDate(forecastName);
+        if (!fcDate) continue; // Skip "Tonight" entries
         forecastRows.push({
           location_id,
           forecast_date: fcDate.toISOString().split("T")[0],

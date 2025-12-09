@@ -173,12 +173,20 @@ export async function processWeatherForecastComponent(
       console.log(`🌤️ Found location: ${location.name}`);
 
       // Fetch forecast from weather_daily_forecast table
-      // Get the first N days available (ascending order)
+      // Get the next N days AFTER today (excluding today)
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+      console.log(`🌤️ Fetching forecast starting from tomorrow: ${tomorrowStr}`);
+
       const { data: forecastData, error: forecastError } = await supabase
         .from('weather_daily_forecast')
         .select('*')
         .eq('location_id', locationId)
-        .order('forecast_date', { ascending: true }) // Oldest first
+        .gte('forecast_date', tomorrowStr) // Start from tomorrow, not today
+        .order('forecast_date', { ascending: true })
         .limit(numDays);
 
       if (forecastError) {

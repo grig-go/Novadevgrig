@@ -70,7 +70,7 @@ import {
   Film,
 } from "lucide-react";
 import { toast } from "sonner";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { copyToClipboard } from "../utils/clipboard";
 import {
   AIProvider,
@@ -175,10 +175,10 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     try {
       setLoading(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+        getEdgeFunctionUrl('ai_provider/providers'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -196,10 +196,10 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
         await initializeClaude();
         // Re-fetch after initialization
         const retryResponse = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -221,11 +221,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
   const initializeClaude = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/initialize`,
+        getEdgeFunctionUrl('ai_provider/initialize'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -349,11 +349,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
       console.log('📤 Sending POST payload:', JSON.stringify(payload, null, 2));
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+        getEdgeFunctionUrl('ai_provider/providers'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
@@ -443,11 +443,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
       });
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}`,
+        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}'),
         {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(updatePayload),
@@ -483,11 +483,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${providerToDelete.id}`,
+        getEdgeFunctionUrl('ai_provider/providers/${providerToDelete.id}'),
         {
           method: "DELETE",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -523,11 +523,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
       
       // First, reveal the API key to test with
       const revealResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${provider.id}/reveal`,
+        getEdgeFunctionUrl('ai_provider/providers/${provider.id}/reveal'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -540,11 +540,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
 
       // Test the connection by fetching models
       const testResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/fetch-models`,
+        getEdgeFunctionUrl('ai_provider/fetch-models'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -608,11 +608,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
   const handleToggleEnabled = async (provider: AIProviderWithMaskedKey) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${provider.id}`,
+        getEdgeFunctionUrl('ai_provider/providers/${provider.id}'),
         {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -647,11 +647,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}/reveal`,
+        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}/reveal'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -691,11 +691,11 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     setLoadingReveal(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers/${selectedProvider.id}/reveal`,
+        getEdgeFunctionUrl('ai_provider/providers/${selectedProvider.id}/reveal'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -823,12 +823,12 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     try {
       console.log('🌐 Fetching models from API...');
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/fetch-models`,
+        getEdgeFunctionUrl('ai_provider/fetch-models'),
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
           body: JSON.stringify({
             providerName,
@@ -913,10 +913,10 @@ export function AIConnectionsDashboard({ onNavigate, dashboardConfig }: AIConnec
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+        getEdgeFunctionUrl('ai_provider/providers'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

@@ -9,7 +9,7 @@ import {
   Brain, Loader2, ChevronDown, ChevronRight, Search, Trash2, 
   TrendingUp, AlertTriangle, School, MapPin, Target, X
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { SchoolClosingsAIInsightsDialog } from "./SchoolClosingsAIInsightsDialog";
 
@@ -73,10 +73,10 @@ export function SchoolClosingsAIInsights({
     try {
       setLoadingInsights(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/school-closings`,
+        getEdgeFunctionUrl('ai_insights/school-closings'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -117,11 +117,11 @@ export function SchoolClosingsAIInsights({
   const handleDeleteInsight = async (insightId: string) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/school-closings/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/school-closings/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

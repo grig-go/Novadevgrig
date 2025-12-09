@@ -60,7 +60,7 @@ serve(async (req)=>{
   }
   try {
     // Get timezone from environment variable
-    const timezone = Deno.env.get('TICKER_TIMEZONE') || 'UTC';
+    const timezone = Deno.env.get('TIMEZONE') || Deno.env.get('TICKER_TIMEZONE') || 'America/New_York';
     console.log('Using timezone:', timezone);
     if (CACHE_PATH) {
       console.log('Using CACHE_PATH for images:', CACHE_PATH);
@@ -98,6 +98,9 @@ serve(async (req)=>{
     // Get query parameters
     const includeInactive = url.searchParams.get('include_inactive') === 'true';
     const includeIds = url.searchParams.get('includeIds') === 'true';
+    // Passthrough parameters for school closings
+    const passthroughRegionId = url.searchParams.get('region_id') || '';
+    const passthroughZoneId = url.searchParams.get('zone_id') || '';
     // Create Supabase client
     const supabaseClient = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '', {
       auth: {
@@ -105,10 +108,18 @@ serve(async (req)=>{
         persistSession: false
       }
     });
-    // 1. Find the channel from the channels table (stores channel configuration)
-    // The channel name should always be queried from this table
-    const { data: channel, error: channelError } = await supabaseClient.from('channels').select('*').eq('name', decodeURIComponent(channelName)).single();
-    if (channelError || !channel) {
+    // 1. Find the channel entry in channel_playlists (the hierarchy root with type='channel')
+    // This is the parent node that contains playlists as children via parent_id
+    const decodedChannelName = decodeURIComponent(channelName);
+    console.log(`[VIZRT-TICKER] Looking up channel: "${decodedChannelName}"`);
+    const { data: channelEntry, error: channelError } = await supabaseClient
+      .from('channel_playlists')
+      .select('*')
+      .eq('name', decodedChannelName)
+      .eq('type', 'channel')
+      .single();
+    if (channelError || !channelEntry) {
+      console.log(`[VIZRT-TICKER] Channel not found: "${channelName}", error:`, channelError);
       return new Response(JSON.stringify({
         error: `Channel "${channelName}" not found`
       }), {
@@ -119,13 +130,15 @@ serve(async (req)=>{
         }
       });
     }
+    console.log(`[VIZRT-TICKER] Found channel: id=${channelEntry.id}, name=${channelEntry.name}`);
     // 2. Get playlists for this channel from channel_playlists (stores hierarchy)
-    // Use channel_id to link playlists to their channel
-    const playlistQuery = supabaseClient.from('channel_playlists').select('*').eq('channel_id', channel.id).eq('type', 'playlist').order('order');
+    // Use parent_id to find playlists that are children of this channel
+    const playlistQuery = supabaseClient.from('channel_playlists').select('*').eq('parent_id', channelEntry.id).eq('type', 'playlist').order('order');
     if (!includeInactive) {
       playlistQuery.eq('active', true);
     }
     const { data: playlists } = await playlistQuery;
+    console.log(`[VIZRT-TICKER] Found ${playlists?.length || 0} playlists for channel ${channelEntry.name}`);
 
     // Handle /images endpoint - return list of image URLs for caching
     if (isImagesRequest) {
@@ -143,14 +156,13 @@ serve(async (req)=>{
 
     // 3. Build XML structure
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-    xml += '<!DOCTYPE tickerfeed SYSTEM "http://www.vizrt.com/ticker/tickerfeed-2.4.dtd">\n';
     xml += '<tickerfeed version="2.4">\n';
     // Track bucket instance counts across all playlists for unique IDs
     const bucketInstanceCounts: Map<string, number> = new Map();
 
     // 4. Process each playlist
     for (const playlist of playlists || []){
-      const playlistXml = await buildPlaylistXml(playlist, supabaseClient, includeInactive, timezone, includeIds, bucketInstanceCounts);
+      const playlistXml = await buildPlaylistXml(playlist, supabaseClient, includeInactive, timezone, includeIds, bucketInstanceCounts, { passthroughRegionId, passthroughZoneId });
       if (playlistXml) {
         xml += playlistXml;
       }
@@ -178,9 +190,11 @@ serve(async (req)=>{
     });
   }
 });
-async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
+async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map(), passthroughParams: { passthroughRegionId?: string; passthroughZoneId?: string } = {}) {
+  console.log(`[VIZRT-TICKER] Building playlist: ${playlist.name} (id=${playlist.id})`);
   // Check if playlist is currently active based on its schedule
   if (!isCurrentlyActive(playlist.schedule, timezone)) {
+    console.log(`[VIZRT-TICKER] Playlist ${playlist.name} skipped - not currently active (schedule)`);
     return null; // Skip this entire playlist if it's not scheduled to be active
   }
   // Get buckets for this playlist
@@ -189,6 +203,7 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
     bucketQuery.eq('active', true);
   }
   const { data: buckets } = await bucketQuery;
+  console.log(`[VIZRT-TICKER] Playlist ${playlist.name} has ${buckets?.length || 0} buckets`);
   if (!buckets || buckets.length === 0) return null;
   // Filter buckets that are currently active
   const activeBuckets = [];
@@ -199,27 +214,36 @@ async function buildPlaylistXml(playlist, supabase, includeInactive, timezone, i
   }
   if (activeBuckets.length === 0) return null;
 
+  // Build groups for each active bucket FIRST to check if there's any content
+  const groupXmls: string[] = [];
+  for (const bucket of activeBuckets){
+    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds, bucketInstanceCounts, passthroughParams);
+    if (groupXml) groupXmls.push(groupXml);
+  }
+
+  // Skip playlist entirely if no groups have content
+  if (groupXmls.length === 0) {
+    console.log(`[VIZRT-TICKER] Playlist ${playlist.name} skipped - no content in any bucket`);
+    return null;
+  }
+
   // Use playlist properties for XML attributes
   const playlistType = playlist.carousel_type || determinePlaylistType(playlist);
   const carouselName = playlist.carousel_name || playlist.name;
   const target = playlist.target || 'carousel';
 
   let xml = `  <playlist type="${playlistType}" name="${escapeXml(carouselName)}" target="${escapeXml(target)}">\n`;
-  // Add defaults
-  xml += '    <defaults>\n';
-  xml += '      <template>default_template</template>\n';
-  xml += `      <gui-color>${generateColorForPlaylist(playlist.name)}</gui-color>\n`;
-  xml += '    </defaults>\n';
-  // Build groups for each active bucket
-  for (const bucket of activeBuckets){
-    const groupXml = await buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds, bucketInstanceCounts);
-    if (groupXml) xml += groupXml;
+  // Add all groups with content
+  for (const groupXml of groupXmls){
+    xml += groupXml;
   }
   xml += '  </playlist>\n';
   return xml;
 }
-async function buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map()) {
-  const elements = await getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts);
+async function buildGroupXml(bucket, supabase, includeInactive, timezone, includeIds = false, bucketInstanceCounts: Map<string, number> = new Map(), passthroughParams: { passthroughRegionId?: string; passthroughZoneId?: string } = {}) {
+  console.log(`[VIZRT-TICKER] Building group for bucket: ${bucket.name} (id=${bucket.id}, content_id=${bucket.content_id})`);
+  const elements = await getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts, passthroughParams);
+  console.log(`[VIZRT-TICKER] Bucket ${bucket.name} has ${elements.length} elements`);
   if (elements.length === 0) return null;
   let xml = `    <group use_existing="${bucket.content_id || ''}">\n`;
   xml += `      <description>${escapeXml(bucket.name)}</description>\n`;
@@ -232,11 +256,11 @@ async function buildGroupXml(bucket, supabase, includeInactive, timezone, includ
   xml += '    </group>\n';
   return xml;
 }
-async function getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts: Map<string, number> = new Map()) {
+async function getElementsForBucket(bucket, supabase, includeInactive, timezone, bucketInstanceCounts: Map<string, number> = new Map(), passthroughParams: { passthroughRegionId?: string; passthroughZoneId?: string } = {}) {
   const items = await getItemsForBucket(bucket, supabase, includeInactive, timezone);
   const elements = [];
   for (const item of items){
-    const itemElements = await createElement(item, supabase);
+    const itemElements = await createElement(item, supabase, passthroughParams);
     // createElement can now return either a single element or an array of elements
     if (Array.isArray(itemElements)) {
       elements.push(...itemElements);
@@ -245,8 +269,9 @@ async function getElementsForBucket(bucket, supabase, includeInactive, timezone,
     }
   }
 
-  // Check for generateItem config to prepend a generated element as first child
-  if (bucket.content_id) {
+  // Only add generateItem if there are actual content items in the bucket
+  // Skip generateItem for empty buckets
+  if (elements.length > 0 && bucket.content_id) {
     const { data: bucketContent } = await supabase
       .from('content')
       .select('bucket_config')
@@ -338,7 +363,7 @@ async function getItemsForBucket(bucket, supabase, includeInactive, timezone) {
 
   return items;
 }
-async function createElement(item, supabase) {
+async function createElement(item, supabase, passthroughParams: { passthroughRegionId?: string; passthroughZoneId?: string } = {}) {
   // Get item fields
   const { data: fields } = await supabase.from('item_tabfields').select('*').eq('item_id', item.id);
   const element: {
@@ -389,7 +414,7 @@ async function createElement(item, supabase) {
         hasSchoolClosingsComponent = true;
         // Process school closings and return multiple elements
         console.log(`Found schoolClosings component, processing...`);
-        return await processSchoolClosingsComponent(field, componentConfig, supabase, item);
+        return await processSchoolClosingsComponent(field, componentConfig, supabase, item, passthroughParams);
       }
       if (componentConfig?.type === 'election') {
         // Process election and return multiple elements

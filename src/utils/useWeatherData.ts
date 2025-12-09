@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { WeatherLocationWithOverrides, createOverride, FieldOverride } from "../types/weather";
-import { projectId, publicAnonKey } from "./supabase/info";
+import { getEdgeFunctionUrl, getSupabaseAnonKey } from "./supabase/config";
 
 export interface WeatherDataStats {
   locations: WeatherLocationWithOverrides[];
@@ -54,10 +54,10 @@ export function useWeatherData() {
   const fetchWeatherData = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/weather-data`,
+        getEdgeFunctionUrl('weather_dashboard/weather-data'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

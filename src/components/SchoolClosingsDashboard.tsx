@@ -73,7 +73,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { motion, AnimatePresence } from "framer-motion";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from "../utils/supabase/config";
 import { SchoolClosingsAIInsights } from "./SchoolClosingsAIInsights";
 
 // Backend data structure from school_closings table
@@ -81,6 +81,7 @@ interface SchoolClosing {
   id?: number;
   provider_id: string;
   region_id: string;
+  zone_id?: string;
   state: string | null;
   city: string | null;
   county_name: string | null;
@@ -135,10 +136,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
   const fetchSchoolClosings = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/school_closing`,
+        getEdgeFunctionUrl('school_closing'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -168,11 +169,11 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     setRefreshing(true);
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/school_closing/fetch`,
+        getEdgeFunctionUrl('school_closing/fetch'),
         {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -219,13 +220,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Sending manual entry:", dataToSend);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual`;
+      const url = getEdgeFunctionUrl('school_closing/manual');
       console.log("📡 [SchoolClosings] POST to:", url);
       
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),
@@ -285,13 +286,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("🗑️ [SchoolClosings] Deleting school:", schoolToDelete.id);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual/${schoolToDelete.id}`;
+      const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToDelete.id}`);
       console.log("📡 [SchoolClosings] DELETE to:", url);
       
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
         },
       });
 
@@ -413,13 +414,13 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
     console.log("📤 [SchoolClosings] Updating manual entry:", dataToSend);
 
     try {
-      const url = `https://${projectId}.supabase.co/functions/v1/school_closing/manual/${schoolToEdit.id}`;
+      const url = getEdgeFunctionUrl(`school_closing/manual/${schoolToEdit.id}`);
       console.log("📡 [SchoolClosings] PUT to:", url);
       
       const response = await fetch(url, {
         method: "PUT",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(dataToSend),
@@ -588,6 +589,14 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
       return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
     }
     return `${minutes}m`;
+  };
+
+  // Format ZIP code to ensure 5 digits with leading zeros
+  const formatZipCode = (zip: string | number | undefined | null): string => {
+    if (!zip) return "";
+    const zipStr = String(zip);
+    // Pad with leading zeros if less than 5 digits
+    return zipStr.padStart(5, '0');
   };
 
   const handleClearFilters = () => {
@@ -1118,12 +1127,20 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                             {school.organization_name}
                           </CardTitle>
                         </motion.div>
-                        <motion.div 
-                          className="flex items-center gap-2 mt-2"
+                        <motion.div
+                          className="flex items-center gap-2 mt-2 flex-wrap"
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.05 + 0.2 }}
                         >
+                          <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            transition={{ type: "spring", stiffness: 400 }}
+                          >
+                            <Badge variant="outline" className="text-xs">
+                              {school.type}
+                            </Badge>
+                          </motion.div>
                           <motion.div
                             whileHover={{ scale: 1.05 }}
                             transition={{ type: "spring", stiffness: 400 }}
@@ -1136,6 +1153,16 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           >
                             {getDayBadge(school.status_day)}
                           </motion.div>
+                          {school.provider_id === "manual_entry" && (
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              transition={{ type: "spring", stiffness: 400 }}
+                            >
+                              <Badge variant="secondary" className="text-xs">
+                                Manual
+                              </Badge>
+                            </motion.div>
+                          )}
                         </motion.div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1217,7 +1244,7 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
                       </motion.div>
                       <span className="text-muted-foreground truncate">
-                        {school.city}, {school.state} {school.raw_data?.ZIP || school.raw_data?.zip}
+                        {school.city}, {school.state} {formatZipCode(school.raw_data?.ZIP || school.raw_data?.zip)}
                       </span>
                     </motion.div>
                     <motion.div 
@@ -1230,8 +1257,8 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                         {school.county_name} County
                       </span>
                     </motion.div>
-                    {school.raw_data?.DELAY && school.raw_data?.DELAY > 0 && (
-                      <motion.div 
+                    {Number(school.raw_data?.DELAY) > 0 && (
+                      <motion.div
                         className="flex items-center gap-2 text-sm"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -1245,47 +1272,24 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
                         </motion.div>
                         <span className="text-muted-foreground">
-                          Delay: {formatDelay(parseInt(school.raw_data?.DELAY))}
+                          Delay: {formatDelay(Number(school.raw_data?.DELAY))}
                         </span>
                       </motion.div>
                     )}
-                    <motion.div 
-                      className="flex items-center gap-2 text-sm"
-                      whileHover={{ x: 4 }}
-                      transition={{ type: "spring", stiffness: 300 }}
-                    >
-                      <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <span className="text-muted-foreground text-xs">
-                        {new Date(school.fetched_at).toLocaleDateString()}
-                      </span>
-                    </motion.div>
-                    <motion.div 
-                      className="pt-2 border-t flex items-center justify-between"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.3 }}
-                    >
-                      <motion.div
-                        whileHover={{ scale: 1.05 }}
-                        transition={{ type: "spring", stiffness: 400 }}
-                      >
-                        <Badge variant="outline" className="text-xs">
-                          {school.type}
-                        </Badge>
-                      </motion.div>
-                      {school.provider_id === "manual_entry" && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: 0.4 }}
-                          whileHover={{ scale: 1.05 }}
-                        >
-                          <Badge variant="secondary" className="text-xs">
-                            Manual
-                          </Badge>
-                        </motion.div>
+                    <div className="text-xs text-muted-foreground mt-4 pt-2 border-t space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>Last updated: {new Date(school.fetched_at).toLocaleString()}</span>
+                        <span className="text-muted-foreground/70">
+                          Provider: {school.provider_id.replace('school_provider:', '')}
+                        </span>
+                      </div>
+                      {school.region_id && school.region_id !== "manual" && (
+                        <div className="flex items-center justify-end gap-2 text-muted-foreground/70">
+                          <span>Region: {school.region_id}</span>
+                          {school.zone_id && <span>| Zone: {school.zone_id}</span>}
+                        </div>
                       )}
-                    </motion.div>
+                    </div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -1314,6 +1318,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                       <TableHead>Day</TableHead>
                       <TableHead>Delay</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Region</TableHead>
+                      <TableHead>Zone</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1355,10 +1363,10 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                           </TableCell>
                           <TableCell>{getDayBadge(school.status_day)}</TableCell>
                           <TableCell>
-                            {school.raw_data?.DELAY && school.raw_data?.DELAY > 0 ? (
+                            {Number(school.raw_data?.DELAY) > 0 ? (
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3 h-3 text-muted-foreground" />
-                                {formatDelay(parseInt(school.raw_data?.DELAY))}
+                                {formatDelay(Number(school.raw_data?.DELAY))}
                               </div>
                             ) : (
                               <span className="text-muted-foreground">-</span>
@@ -1375,6 +1383,26 @@ export default function SchoolClosingsDashboard({ onNavigateToProviders }: Schoo
                                 </Badge>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {new Date(school.fetched_at).toLocaleString()}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.provider_id.replace('school_provider:', '')}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.region_id !== "manual" ? school.region_id : "-"}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-muted-foreground text-xs">
+                              {school.zone_id || "-"}
+                            </span>
                           </TableCell>
                           <TableCell>
                             {school.provider_id === "manual_entry" && (

@@ -22,7 +22,7 @@ import {
   Info,
   X
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 
@@ -122,10 +122,10 @@ export function SportsLeagueTestPanel() {
     try {
       // Use backend endpoint that internally uses RPC for provider details
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/providers/active`,
+        getEdgeFunctionUrl('sports_dashboard/sports/providers/active'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -208,13 +208,13 @@ export function SportsLeagueTestPanel() {
       }
       
       // Use backend endpoint to avoid CORS issues
-      const endpoint = `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`;
+      const endpoint = getEdgeFunctionUrl('sports_dashboard/sports/sportmonks/soccer/leagues');
       console.log('[SportMonks] Fetching from backend:', endpoint);
       
       const response = await fetch(endpoint, {
         headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'apikey': publicAnonKey,
+          'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+          'apikey': getSupabaseAnonKey(),
         },
       });
 
@@ -317,12 +317,12 @@ export function SportsLeagueTestPanel() {
       console.log('[SaveLeagues] Saving', selectedItems.length, 'league-season combinations');
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/save-leagues`,
+        getEdgeFunctionUrl('sports_dashboard/sports/save-leagues'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
+            'Authorization': `Bearer ${getSupabaseAnonKey()}`,
           },
           body: JSON.stringify({ leagues: selectedItems }),
         }
@@ -385,9 +385,9 @@ export function SportsLeagueTestPanel() {
   const fetchCurrentTeams = async () => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
+        getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
         }
       );
 
@@ -424,11 +424,11 @@ export function SportsLeagueTestPanel() {
     
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/add-league`,
+        getEdgeFunctionUrl('sports_dashboard/sports/add-league'),
         {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

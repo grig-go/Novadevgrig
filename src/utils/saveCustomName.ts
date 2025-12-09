@@ -1,14 +1,14 @@
-import { projectId, publicAnonKey } from './supabase/info';
+import { getEdgeFunctionUrl, getSupabaseHeaders } from './supabase/config';
 
 /**
  * Save custom name with optimistic update and rollback support
  * Drop-in pattern from user requirements
  */
 export async function saveCustomName(
-  row: any, 
+  row: any,
   newName: string
 ): Promise<string> {
-  const url = `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks/custom-name`;
+  const url = getEdgeFunctionUrl('finance_dashboard/stocks/custom-name');
 
   // Optimistic UI update
   const prev = row.custom_name;
@@ -17,10 +17,7 @@ export async function saveCustomName(
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${publicAnonKey}`
-      },
+      headers: getSupabaseHeaders(),
       body: JSON.stringify({
         id: row.id ?? null,            // use UUID if you have it (not used by backend)
         symbol: row.symbol ?? null,    // fallback if you don't

@@ -6,7 +6,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Bug, Database, Trophy, Users, AlertCircle, CheckCircle2, XCircle, Loader2, TrendingUp, Play, CheckCircle, RefreshCw } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { SportsLeagueTestPanel } from "./SportsLeagueTestPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -65,11 +65,11 @@ export function SportsDebugPanel() {
       try {
         // Step 1: Get provider list from public view (IDs only)
         const listResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
+          getRestUrl('data_providers_public?select=id,name,type,category,is_active&category=eq.sports'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
             },
           }
         );
@@ -85,12 +85,12 @@ export function SportsDebugPanel() {
         const providersWithDetails = [];
         for (const provider of providerList) {
           const rpcResponse = await fetch(
-            `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+            getRestUrl('rpc/get_provider_details'),
             {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${publicAnonKey}`,
-                apikey: publicAnonKey,
+                Authorization: `Bearer ${getSupabaseAnonKey()}`,
+                apikey: getSupabaseAnonKey(),
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({ p_id: provider.id }),
@@ -136,8 +136,8 @@ export function SportsDebugPanel() {
       // 2. Fetch Tournaments
       console.log('[Debug] Fetching tournaments...');
       const tournamentsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+        getEdgeFunctionUrl('sports_dashboard/sports-data/tournaments'),
+        { headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` } }
       );
       
       if (tournamentsRes.ok) {
@@ -155,8 +155,8 @@ export function SportsDebugPanel() {
       // 3. Fetch Teams
       console.log('[Debug] Fetching teams...');
       const teamsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+        getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
+        { headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` } }
       );
       
       if (teamsRes.ok) {
@@ -260,10 +260,10 @@ export function SportsDebugPanel() {
       console.log('[Cleanup] Starting tournament deduplication...');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/tournaments/cleanup`,
+        getEdgeFunctionUrl('sports_dashboard/sports-data/tournaments/cleanup'),
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
         }
       );
       
@@ -294,10 +294,10 @@ export function SportsDebugPanel() {
       leagueId,
       leagueName: debugData.tournaments?.find((t: any) => t.id === leagueId)?.name || leagueId,
       request: {
-        url: `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/standings/${leagueId}`,
+        url: getEdgeFunctionUrl('sports_dashboard/sports/standings/${leagueId}'),
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${publicAnonKey.substring(0, 20)}...`
+          Authorization: `Bearer ${getSupabaseAnonKey().substring(0, 20)}...`
         }
       }
     };
@@ -311,11 +311,11 @@ export function SportsDebugPanel() {
       
       try {
         const listResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
+          getRestUrl('data_providers_public?select=id,name,type,category,is_active&category=eq.sports'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
             },
           }
         );
@@ -326,12 +326,12 @@ export function SportsDebugPanel() {
           
           for (const provider of providerList) {
             const rpcResponse = await fetch(
-              `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+              getRestUrl('rpc/get_provider_details'),
               {
                 method: 'POST',
                 headers: {
-                  Authorization: `Bearer ${publicAnonKey}`,
-                  apikey: publicAnonKey,
+                  Authorization: `Bearer ${getSupabaseAnonKey()}`,
+                  apikey: getSupabaseAnonKey(),
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ p_id: provider.id }),
@@ -356,8 +356,8 @@ export function SportsDebugPanel() {
       // Fetch teams info
       console.log('👥 [Standings Test] Fetching teams info...');
       const teamsRes = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/teams`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+        getEdgeFunctionUrl('sports_dashboard/sports-data/teams'),
+        { headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` } }
       );
       
       if (teamsRes.ok) {
@@ -374,7 +374,7 @@ export function SportsDebugPanel() {
       // Now test the standings endpoint
       console.log('📊 [Standings Test] Calling standings endpoint...');
       const response = await fetch(logEntry.request.url, {
-        headers: { Authorization: `Bearer ${publicAnonKey}` }
+        headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` }
       });
 
       const responseBody = await response.json().catch(() => null);
@@ -434,11 +434,11 @@ export function SportsDebugPanel() {
       console.log('[Refresh Branding] Starting...');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/refresh-branding`,
+        getEdgeFunctionUrl('sports_dashboard/sports/refresh-branding'),
         {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ leagueId })

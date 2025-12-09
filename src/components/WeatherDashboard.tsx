@@ -18,7 +18,7 @@ import {
 } from "./ui/dialog";
 import { Loader2, Rss } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { useWeatherData } from "../utils/useWeatherData";
 import { useLocalStorage } from "../utils/useLocalStorage";
 import { motion } from "framer-motion";
@@ -82,14 +82,15 @@ export function WeatherDashboard({
   // Fetch weather providers from backend using RPC
   const fetchWeatherProviders = async () => {
     try {
-      const url = `https://${projectId}.supabase.co/rest/v1/rpc/list_providers_with_status_category`;
+      const url = getRestUrl('rpc/list_providers_with_status_category');
       console.log("Fetching weather providers from RPC:", url);
-      
+
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          apikey: publicAnonKey,
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ p_category: 'weather' }),
@@ -129,12 +130,13 @@ export function WeatherDashboard({
   // Fetch language config from the active provider
   const fetchProviderLanguage = async (providerId: string) => {
     try {
-      const url = `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`;
+      const url = getRestUrl('rpc/get_provider_details');
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          apikey: publicAnonKey,
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ p_id: providerId }),
@@ -200,13 +202,14 @@ export function WeatherDashboard({
 
   const handleAddLocation = async (newLocation: SavedWeatherLocation) => {
     try {
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations`,
+        getEdgeFunctionUrl('weather_dashboard/locations'),
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${anonKey}`,
           },
           body: JSON.stringify(newLocation),
         }
@@ -231,14 +234,15 @@ export function WeatherDashboard({
   const handleDeleteLocation = async (locationId: string, locationName: string) => {
     try {
       console.log(`🗑️ Attempting to delete weather location: ${locationId} (${locationName})`);
-      
-      const url = `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${locationId}`;
+
+      const url = getEdgeFunctionUrl(`weather_dashboard/locations/${locationId}`);
       console.log(`🗑️ DELETE URL: ${url}`);
-      
+
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(url, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
+          Authorization: `Bearer ${anonKey}`,
         },
       });
 
@@ -303,13 +307,14 @@ export function WeatherDashboard({
     
     try {
       console.log('🔍 Fetching custom name overrides...');
-      
+
       // Fetch all weather locations from backend API
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations`,
+        getEdgeFunctionUrl('weather_dashboard/locations'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${anonKey}`,
           },
         }
       );
@@ -341,12 +346,13 @@ export function WeatherDashboard({
     
     try {
       // Update the location to set custom_name to null
+      const anonKey = getSupabaseAnonKey();
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${locationId}`,
+        getEdgeFunctionUrl(`weather_dashboard/locations/${locationId}`),
         {
           method: "PUT",
           headers: {
-            "Authorization": `Bearer ${publicAnonKey}`,
+            "Authorization": `Bearer ${anonKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ custom_name: null })
@@ -388,14 +394,15 @@ export function WeatherDashboard({
       let successCount = 0;
       let failCount = 0;
       
+      const anonKey = getSupabaseAnonKey();
       for (const override of overrides) {
         try {
           const response = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/weather_dashboard/locations/${override.id}`,
+            getEdgeFunctionUrl(`weather_dashboard/locations/${override.id}`),
             {
               method: "PUT",
               headers: {
-                "Authorization": `Bearer ${publicAnonKey}`,
+                "Authorization": `Bearer ${anonKey}`,
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({ custom_name: null })
@@ -767,9 +774,11 @@ export function WeatherDashboard({
 
       <WeatherFilters
         locations={locations}
-        onFilterChange={(filtered) => {
+        onFilterChange={(filtered, isUserAction) => {
           setFilteredLocations(filtered);
-          setCurrentPage(1); // Reset to first page when filters change
+          if (isUserAction) {
+            setCurrentPage(1); // Only reset to first page when user changes filters
+          }
         }}
         currentView={currentView}
         onViewChange={setCurrentView}

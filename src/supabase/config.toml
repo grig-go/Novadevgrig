@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.banner-schedule]
 verify_jwt = false
+
+[functions.current-weather]
+verify_jwt = false

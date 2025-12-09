@@ -1,13 +1,28 @@
 // Simple Node.js proxy server for legacy TLS endpoints
 // Deploy this to a Node.js environment (Vercel, Railway, Render, etc.)
 
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import express from 'express';
 import axios from 'axios';
 import https from 'https';
 import cors from 'cors';
 
+// Load .env from script's directory (works regardless of cwd)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const envPath = join(__dirname, '.env');
+const result = dotenv.config({ path: envPath });
+
+if (result.error) {
+  console.warn('⚠️ Could not load .env file:', result.error.message);
+} else {
+  console.log('✅ Loaded .env from:', envPath);
+}
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8002;
 
 // Enable CORS for all origins
 app.use(cors());

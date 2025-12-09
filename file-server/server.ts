@@ -1,7 +1,20 @@
 // file-server/server.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import * as path from "https://deno.land/std@0.168.0/path/mod.ts";
-import "https://deno.land/std@0.168.0/dotenv/load.ts"; // Auto-load .env
+import { load } from "https://deno.land/std@0.168.0/dotenv/mod.ts";
+
+// Load .env from the script's directory (works regardless of cwd)
+const scriptDir = path.dirname(path.fromFileUrl(import.meta.url));
+const envPath = path.join(scriptDir, ".env");
+let envVars: Record<string, string> = {};
+try {
+  envVars = await load({ envPath, export: true });
+  console.log("✅ Loaded .env from:", envPath);
+  console.log("   Variables:", Object.keys(envVars).join(", "));
+} catch (e) {
+  console.warn("⚠️ Could not load .env file:", e.message);
+  console.warn("   Expected at:", envPath);
+}
 
 interface FileEntry {
   name: string;
@@ -25,8 +38,9 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
-const FILE_ROOT = Deno.env.get("FILE_ROOT") || "/tmp/files";
-const ALLOWED_EXTENSIONS = Deno.env.get("ALLOWED_EXTENSIONS")?.split(",") || [
+// Use envVars directly (loaded above) with Deno.env.get as fallback
+const FILE_ROOT = envVars.FILE_ROOT || Deno.env.get("FILE_ROOT") || "/tmp/files";
+const ALLOWED_EXTENSIONS = (envVars.ALLOWED_EXTENSIONS || Deno.env.get("ALLOWED_EXTENSIONS"))?.split(",") || [
   "csv",
   "tsv",
   "txt",
@@ -36,9 +50,9 @@ const ALLOWED_EXTENSIONS = Deno.env.get("ALLOWED_EXTENSIONS")?.split(",") || [
   "xls",
 ];
 const MAX_FILE_SIZE = parseInt(
-  Deno.env.get("MAX_FILE_SIZE") || "52428800"
+  envVars.MAX_FILE_SIZE || Deno.env.get("MAX_FILE_SIZE") || "52428800"
 ); // 50MB default
-const PORT = parseInt(Deno.env.get("PORT") || "8001");
+const PORT = parseInt(envVars.PORT || Deno.env.get("PORT") || "8001");
 
 console.log("=================================");
 console.log("File Server Starting...");
@@ -234,7 +248,66 @@ async function handleRequest(req: Request): Promise<Response> {
       throw new Error("FILE_ROOT environment variable not configured");
     }
 
-    // Parse request body
+    // Handle GET requests - serve files directly by URL path
+    if (req.method === "GET") {
+      const url = new URL(req.url);
+      const relativePath = decodeURIComponent(url.pathname.slice(1)); // Remove leading /
+
+      if (!relativePath) {
+        // Root path - list directory
+        const entries = await listDirectory(FILE_ROOT, FILE_ROOT, ALLOWED_EXTENSIONS);
+        return new Response(
+          JSON.stringify({ success: true, path: "", entries, root: FILE_ROOT }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
+      const sanitizedPath = sanitizePath(relativePath);
+      const fullPath = path.join(FILE_ROOT, sanitizedPath);
+
+      // Ensure the resolved path is within FILE_ROOT
+      if (!fullPath.startsWith(FILE_ROOT)) {
+        throw new Error("Access denied: Path traversal attempt detected");
+      }
+
+      const fileInfo = await Deno.stat(fullPath);
+
+      if (fileInfo.isDirectory) {
+        // List directory contents
+        const entries = await listDirectory(fullPath, FILE_ROOT, ALLOWED_EXTENSIONS);
+        return new Response(
+          JSON.stringify({ success: true, path: sanitizedPath, entries, root: FILE_ROOT }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+        );
+      }
+
+      // Serve file directly
+      const ext = path.extname(fullPath).toLowerCase().slice(1);
+      if (!ALLOWED_EXTENSIONS.includes(ext)) {
+        throw new Error(`File type .${ext} is not allowed`);
+      }
+
+      if (fileInfo.size > MAX_FILE_SIZE) {
+        throw new Error(`File too large. Maximum size is ${MAX_FILE_SIZE} bytes`);
+      }
+
+      console.log(`GET: Serving file ${sanitizedPath} (${fileInfo.size} bytes)`);
+      const content = await Deno.readTextFile(fullPath);
+
+      // Return raw file content with appropriate content type
+      const contentType = ext === "json" ? "application/json" :
+                          ext === "xml" ? "application/xml" :
+                          ext === "csv" ? "text/csv" :
+                          ext === "tsv" ? "text/tab-separated-values" :
+                          "text/plain";
+
+      return new Response(content, {
+        headers: { ...corsHeaders, "Content-Type": contentType },
+        status: 200,
+      });
+    }
+
+    // Handle POST requests - original JSON API
     const body: BrowseRequest = await req.json();
     const { action, relativePath = "" } = body;
 

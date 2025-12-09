@@ -157,9 +157,12 @@ app.post("/fetch", async (c)=>{
     });
     let totalInserted = 0;
     // ----------------------------------------------------------------------------
-    // 2️⃣ If sample_url exists — ignore regions and use directly
+    // 2️⃣ Use base_url if available, otherwise fall back to sample_url
     // ----------------------------------------------------------------------------
-    if (config.sample_url && config.sample_url.trim() !== "") {
+    const hasBaseUrl = provider.base_url && provider.base_url.trim() !== "";
+    const hasSampleUrl = config.sample_url && config.sample_url.trim() !== "";
+
+    if (!hasBaseUrl && hasSampleUrl) {
       const url = config.sample_url;
       const regionId = "42"; // fixed demo region
       const zoneId = ""; // not used for sample mode
@@ -211,16 +214,8 @@ app.post("/fetch", async (c)=>{
         records
       ].filter(Boolean);
       console.log(`📚 Sample mode: ${records.length} records found`);
-      // 🧹 Clean existing rows for provider (region 42)
-      console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${regionId}`);
-      const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", regionId).select();
-      if (deleteError) {
-        console.warn("⚠️ Failed to clean existing rows:", deleteError);
-      } else {
-        console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows`);
-      }
 
-      // 🧩 Upsert new records
+      // 🧩 Prepare new records from feed
       const rows = records.map((item)=>({
           provider_id: "school_provider:news12_closings",
           region_id: regionId,
@@ -238,25 +233,64 @@ app.post("/fetch", async (c)=>{
           raw_data: item
         }));
 
-      console.log(`📝 Upserting ${rows.length} records...`);
-      console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
-        org: r.organization_name,
-        status: r.status_description,
-        day: r.status_day
-      })));
+      // Get current organization names from feed for comparison
+      const currentOrgNames = new Set(rows.map(r => `${r.organization_name}|${r.status_day}`));
 
-      const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
-        onConflict: "provider_id,organization_name,status_day",
-        ignoreDuplicates: false
-      }).select();
+      // If feed returns records, upsert them
+      if (rows.length > 0) {
+        console.log(`📝 Upserting ${rows.length} records...`);
+        console.log(`📋 Sample records:`, rows.slice(0, 2).map(r => ({
+          org: r.organization_name,
+          status: r.status_description,
+          day: r.status_day
+        })));
 
-      if (upsertError) {
-        console.error(`❌ Upsert error:`, upsertError);
-        throw upsertError;
+        const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+          onConflict: "provider_id,organization_name,status_day",
+          ignoreDuplicates: false
+        }).select();
+
+        if (upsertError) {
+          console.error(`❌ Upsert error:`, upsertError);
+          throw upsertError;
+        }
+
+        console.log(`✅ Sample mode: ${upsertedRows?.length || rows.length} records upserted`);
+        totalInserted = upsertedRows?.length || rows.length;
       }
 
-      console.log(`✅ Sample mode: ${upsertedRows?.length || rows.length} records upserted successfully`);
-      totalInserted = upsertedRows?.length || rows.length;
+      // 🧹 Delete stale records not in current feed (more efficient than delete-all)
+      console.log(`🧹 Checking for stale records in sample region=${regionId}...`);
+      const { data: existingRows, error: fetchError } = await supabase
+        .from("school_closings")
+        .select("id, organization_name, status_day")
+        .eq("provider_id", "school_provider:news12_closings")
+        .eq("region_id", regionId);
+
+      if (fetchError) {
+        console.warn(`⚠️ Failed to fetch existing records for comparison:`, fetchError);
+      } else if (existingRows) {
+        // Find records that exist in DB but not in current feed
+        const staleIds = existingRows
+          .filter(row => !currentOrgNames.has(`${row.organization_name}|${row.status_day}`))
+          .map(row => row.id);
+
+        if (staleIds.length > 0) {
+          console.log(`🗑️ Removing ${staleIds.length} stale records no longer in feed...`);
+          const { error: deleteError } = await supabase
+            .from("school_closings")
+            .delete()
+            .in("id", staleIds);
+
+          if (deleteError) {
+            console.warn(`⚠️ Failed to delete stale records:`, deleteError);
+          } else {
+            console.log(`✅ Deleted ${staleIds.length} stale records`);
+          }
+        } else {
+          console.log(`✅ No stale records to remove`);
+        }
+      }
     } else {
       // ----------------------------------------------------------------------------
       // 3️⃣ Live mode: use base_url + endpoint
@@ -373,21 +407,8 @@ app.post("/fetch", async (c)=>{
           records
         ].filter(Boolean);
         console.log(`📚 Region ${region_id}: ${records.length} records found`);
-        if (records.length === 0) {
-          console.log(`⏭️ Skipping region ${region_id} - no records to insert`);
-          continue;
-        }
 
-        // 🧹 Clean existing rows for same provider + region + zone
-        console.log(`🧹 Cleaning existing rows for provider=school_provider:news12_closings, region=${region_id}, zone=${zone_id}`);
-        const { data: deletedRows, error: deleteError } = await supabase.from("school_closings").delete().eq("provider_id", "school_provider:news12_closings").eq("region_id", region_id).eq("zone_id", zone_id).select();
-        if (deleteError) {
-          console.warn(`⚠️ Failed to clean old records for region ${region_id}, zone ${zone_id}:`, deleteError);
-        } else {
-          console.log(`🗑️ Deleted ${deletedRows?.length || 0} existing rows for region ${region_id}`);
-        }
-
-        // 🧩 Prepare and upsert new records
+        // 🧩 Prepare new records from feed
         const rows = records.map((item)=>({
             provider_id: "school_provider:news12_closings",
             region_id,
@@ -405,25 +426,67 @@ app.post("/fetch", async (c)=>{
             raw_data: item
           }));
 
-        console.log(`📝 Upserting ${rows.length} records for region ${region_id}...`);
-        console.log(`📋 Sample records to upsert:`, rows.slice(0, 2).map(r => ({
-          org: r.organization_name,
-          status: r.status_description,
-          day: r.status_day
-        })));
+        // Get current organization names from feed for comparison
+        const currentOrgNames = new Set(rows.map(r => `${r.organization_name}|${r.status_day}`));
 
-        const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
-          onConflict: "provider_id,organization_name,status_day",
-          ignoreDuplicates: false
-        }).select();
+        // If feed returns records, upsert them
+        if (rows.length > 0) {
+          console.log(`📝 Upserting ${rows.length} records for region ${region_id}...`);
+          console.log(`📋 Sample records:`, rows.slice(0, 2).map(r => ({
+            org: r.organization_name,
+            status: r.status_description,
+            day: r.status_day
+          })));
 
-        if (upsertError) {
-          console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
-          continue;
+          const { data: upsertedRows, error: upsertError } = await supabase.from("school_closings").upsert(rows, {
+            onConflict: "provider_id,organization_name,status_day",
+            ignoreDuplicates: false
+          }).select();
+
+          if (upsertError) {
+            console.error(`❌ Upsert error for region ${region_id}:`, upsertError);
+            continue;
+          }
+
+          console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${upsertedRows?.length || rows.length} records upserted`);
+          totalInserted += upsertedRows?.length || rows.length;
         }
 
-        console.log(`✅ Region ${region_id}, Zone ${zone_id}: ${upsertedRows?.length || rows.length} records upserted successfully`);
-        totalInserted += upsertedRows?.length || rows.length;
+        // 🧹 Delete stale records not in current feed for THIS specific region/zone
+        // Only affects records from this region/zone - never touches other regions
+        console.log(`🧹 Checking for stale records in region=${region_id}, zone=${zone_id}...`);
+        const { data: existingRows, error: fetchError } = await supabase
+          .from("school_closings")
+          .select("id, organization_name, status_day, is_manual")
+          .eq("provider_id", "school_provider:news12_closings")
+          .eq("region_id", region_id)
+          .eq("zone_id", zone_id);
+
+        if (fetchError) {
+          console.warn(`⚠️ Failed to fetch existing records for comparison:`, fetchError);
+        } else if (existingRows) {
+          // Find records that exist in DB but not in current feed
+          // Never delete manual entries (is_manual = true)
+          const staleIds = existingRows
+            .filter(row => !row.is_manual && !currentOrgNames.has(`${row.organization_name}|${row.status_day}`))
+            .map(row => row.id);
+
+          if (staleIds.length > 0) {
+            console.log(`🗑️ Removing ${staleIds.length} stale records no longer in feed...`);
+            const { error: deleteError } = await supabase
+              .from("school_closings")
+              .delete()
+              .in("id", staleIds);
+
+            if (deleteError) {
+              console.warn(`⚠️ Failed to delete stale records:`, deleteError);
+            } else {
+              console.log(`✅ Deleted ${staleIds.length} stale records`);
+            }
+          } else {
+            console.log(`✅ No stale records to remove`);
+          }
+        }
       }
     } // 👈 closes live mode else block
     // ----------------------------------------------------------------------------

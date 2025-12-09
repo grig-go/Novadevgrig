@@ -40,6 +40,7 @@ supabase/.temp/
 .env.development.local
 .env.test.local
 .env.production.local
+src/supabase/functions/.env
 
 # Supabase
 .temp/
@@ -50,14 +51,19 @@ volumes/
 docker/volumes/
 
 # testing
- /coverage
- /out/
+/coverage
+/out/
 
 # misc
- *.pem
+*.pem
 
 # vercel
- .vercel
+.vercel
 
 # typescript
 *.tsbuildinfo
+
+logs/file-server.pid
+logs/functions.pid
+logs/proxy.pid
+logs/vite.pid

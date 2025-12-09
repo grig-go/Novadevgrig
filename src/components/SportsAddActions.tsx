@@ -5,7 +5,7 @@ import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { ScrollArea } from "./ui/scroll-area";
 import { Users, Trophy, Plus, Loader2, CheckCircle2, Trash2, Download } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 
 interface SportsAddActionsProps {
@@ -37,11 +37,11 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       
       // Fetch leagues directly from sports_leagues database table
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/sports_leagues?select=id,name,country_name`,
+        getRestUrl('sports_leagues?select=id,name,country_name'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -94,11 +94,11 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       
       // Call backend to fetch and add all teams from this league
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/add-league`,
+        getEdgeFunctionUrl('sports_dashboard/sports/add-league'),
         {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -157,11 +157,11 @@ export function SportsAddActions({ onAddMultipleEntities, onRefresh }: SportsAdd
       
       // Call backend to remove all teams from this league
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/remove-league`,
+        getEdgeFunctionUrl('sports_dashboard/sports/remove-league'),
         {
           method: 'POST',
           headers: { 
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({

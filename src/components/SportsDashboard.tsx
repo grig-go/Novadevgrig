@@ -28,7 +28,7 @@ import {
   League
 } from "../types/sports";
 import { Activity, Users, User, Calendar, MapPin, TrendingUp, Trophy, Rss, RefreshCw } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { supabase } from "../utils/supabase/client";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
@@ -456,11 +456,11 @@ export function SportsDashboard({
     try {
       // Fetch providers using RPC pattern (same as Finance Dashboard)
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active&category=eq.sports`,
+        getRestUrl('data_providers_public?select=id,name,type,category,is_active&category=eq.sports'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -511,7 +511,7 @@ export function SportsDashboard({
       //           method: 'POST',
       //           headers: {
       //             'Content-Type': 'application/json',
-      //             Authorization: `Bearer ${publicAnonKey}`,
+      //             Authorization: `Bearer ${getSupabaseAnonKey()}`,
       //           },
       //           body: JSON.stringify({ providerId: provider.id }),
       //         }
@@ -558,9 +558,9 @@ export function SportsDashboard({
 
       // Step 2: Get current provider list
       const providersResponse = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-providers`,
+        getEdgeFunctionUrl('sports_dashboard/sports-providers'),
         {
-          headers: { Authorization: `Bearer ${publicAnonKey}` },
+          headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` },
         }
       );
 
@@ -589,12 +589,12 @@ export function SportsDashboard({
           console.log(`[Sports Initialize] Syncing provider ${provider.id} (${provider.name})`);
           
           const syncResponse = await fetch(
-            `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports-data/sync`,
+            getEdgeFunctionUrl('sports_dashboard/sports-data/sync'),
             {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${publicAnonKey}`,
+                Authorization: `Bearer ${getSupabaseAnonKey()}`,
               },
               body: JSON.stringify({ providerId: provider.id }),
             }
@@ -1266,9 +1266,9 @@ export function SportsDashboard({
                     
                     toast.info('Fetching standings...');
                     const response = await fetch(
-                      `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/standings/${leagueId}`,
+                      getEdgeFunctionUrl(`sports_dashboard/sports/standings/${leagueId}`),
                       {
-                        headers: { Authorization: `Bearer ${publicAnonKey}` }
+                        headers: { Authorization: `Bearer ${getSupabaseAnonKey()}` }
                       }
                     );
                     

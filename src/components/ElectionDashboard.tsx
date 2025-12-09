@@ -964,7 +964,7 @@ export function ElectionDashboard({ races, candidates = [], parties = [], onUpda
             ? 'hover:shadow-amber-500/10 hover:border-amber-600'
             : 'hover:shadow-gray-500/10'
         }`}
-        onClick={() => setShowOverridesDialog(false)}
+        onClick={() => setShowOverridesDialog(true)}
       >
         {summary.racesWithOverrides > 0 && (
           <motion.div

@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Database, Cloud, Wind, Droplets, Eye, AlertTriangle, Calendar, Clock } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { getSupabaseAnonKey, getEdgeFunctionUrl } from '../utils/supabase/config';
 
 interface WeatherLocation {
   id: string;
@@ -134,9 +134,9 @@ export function WeatherDataViewer() {
     setError(null);
 
     try {
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/weather_dashboard`;
+      const baseUrl = getEdgeFunctionUrl('weather_dashboard');
       const headers = {
-        'Authorization': `Bearer ${publicAnonKey}`,
+        'Authorization': `Bearer ${getSupabaseAnonKey()}`,
         'Content-Type': 'application/json',
       };
 

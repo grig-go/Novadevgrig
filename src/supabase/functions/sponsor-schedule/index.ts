@@ -62,11 +62,12 @@ interface SponsorSchedule {
   active: boolean;
   is_default: boolean;
   priority: number;
+  category: string | null;
 }
 
 // Timezone for schedule evaluation - configurable via environment variable
 // Falls back to America/New_York if not set
-const SCHEDULE_TIMEZONE = Deno.env.get("SCHEDULE_TIMEZONE") || "America/New_York";
+const SCHEDULE_TIMEZONE = Deno.env.get("TIMEZONE") || Deno.env.get("SCHEDULE_TIMEZONE") || "America/New_York";
 
 // Helper to get current time in the configured timezone
 const getNowInTimezone = (): { date: Date; timeString: string; dayOfWeek: number } => {
@@ -163,7 +164,8 @@ app.get("/health", (c) => {
 app.get("/:channelNameOrId", async (c) => {
   try {
     const channelNameOrId = c.req.param("channelNameOrId");
-    console.log(`[SPONSOR-SCHEDULE] GET active sponsor for channel: ${channelNameOrId}`);
+    const category = c.req.query("category"); // Optional category filter
+    console.log(`[SPONSOR-SCHEDULE] GET active sponsor for channel: ${channelNameOrId}${category ? `, category: ${category}` : ''}`);
 
     const supabase = getSupabase();
 
@@ -212,11 +214,22 @@ app.get("/:channelNameOrId", async (c) => {
 
     // Fetch all active schedules for this channel
     // Using filter with @> operator to check if channelId is in the channel_ids JSONB array
-    const { data: schedules, error: fetchError } = await supabase
+    let query = supabase
       .from("sponsor_schedules")
       .select("*")
       .eq("active", true)
-      .filter("channel_ids", "cs", `["${channelId}"]`)
+      .filter("channel_ids", "cs", `["${channelId}"]`);
+
+    // Apply category filter
+    if (category) {
+      // Specific category requested
+      query = query.eq("category", category);
+    } else {
+      // No category specified - return only General sponsors (null or empty category)
+      query = query.or("category.is.null,category.eq.");
+    }
+
+    const { data: schedules, error: fetchError } = await query
       .order("priority", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -254,7 +267,7 @@ app.get("/:channelNameOrId", async (c) => {
     console.log(`[SPONSOR-SCHEDULE] Found ${parsedSchedules.length} schedules:`);
     parsedSchedules.forEach(s => {
       const isActive = isScheduleActiveNow(s);
-      console.log(`  - ${s.name}: is_default=${s.is_default}, priority=${s.priority}, active_now=${isActive}`);
+      console.log(`  - ${s.name}: is_default=${s.is_default}, priority=${s.priority}, category=${s.category || 'general'}, active_now=${isActive}`);
       console.log(`    days_of_week: ${JSON.stringify(s.days_of_week)}`);
       console.log(`    time_ranges: ${JSON.stringify(s.time_ranges)}`);
       console.log(`    start_date: ${s.start_date}, end_date: ${s.end_date}`);
@@ -264,9 +277,17 @@ app.get("/:channelNameOrId", async (c) => {
     let activeSponsor = parsedSchedules.find(s => !s.is_default && isScheduleActiveNow(s));
 
     // If no scheduled sponsor is active, fall back to default
+    // When category filter is provided, fall back to default of that category
+    // When no category filter, fall back to "General" default (null/empty category)
     if (!activeSponsor) {
-      console.log(`[SPONSOR-SCHEDULE] No non-default schedule active, falling back to default`);
-      activeSponsor = parsedSchedules.find(s => s.is_default);
+      console.log(`[SPONSOR-SCHEDULE] No non-default schedule active, falling back to default for category: ${category || 'general'}`);
+      if (category) {
+        // Category specified - find default for that category
+        activeSponsor = parsedSchedules.find(s => s.is_default && s.category === category);
+      } else {
+        // No category specified - find "General" default (null or empty string category)
+        activeSponsor = parsedSchedules.find(s => s.is_default && (!s.category || s.category === ''));
+      }
     }
 
     if (!activeSponsor) {
@@ -372,7 +393,8 @@ app.get("/:channelNameOrId", async (c) => {
 app.get("/:channelNameOrId/today", async (c) => {
   try {
     const channelNameOrId = c.req.param("channelNameOrId");
-    console.log(`[SPONSOR-SCHEDULE] GET today's sponsors for channel: ${channelNameOrId}`);
+    const category = c.req.query("category"); // Optional category filter
+    console.log(`[SPONSOR-SCHEDULE] GET today's sponsors for channel: ${channelNameOrId}${category ? `, category: ${category}` : ''}`);
 
     const supabase = getSupabase();
 
@@ -420,11 +442,22 @@ app.get("/:channelNameOrId/today", async (c) => {
     const today = dayNames[dayOfWeek];
 
     // Fetch all active schedules for this channel
-    const { data: schedules, error: fetchError } = await supabase
+    let todayQuery = supabase
       .from("sponsor_schedules")
       .select("*")
       .eq("active", true)
-      .filter("channel_ids", "cs", `["${channelId}"]`)
+      .filter("channel_ids", "cs", `["${channelId}"]`);
+
+    // Apply category filter
+    if (category) {
+      // Specific category requested
+      todayQuery = todayQuery.eq("category", category);
+    } else {
+      // No category specified - return only General sponsors (null or empty category)
+      todayQuery = todayQuery.or("category.is.null,category.eq.");
+    }
+
+    const { data: schedules, error: fetchError } = await todayQuery
       .order("priority", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -869,14 +902,17 @@ app.all("*", (c) => {
     error: "Route not found",
     usage: {
       "GET /sponsor-schedule/:channelName": "Get currently active sponsor for channel (by name or UUID)",
+      "GET /sponsor-schedule/:channelName?category=X": "Get active sponsor filtered by category",
       "GET /sponsor-schedule/:channelName/today": "Get all sponsors scheduled for today on channel",
+      "GET /sponsor-schedule/:channelName/today?category=X": "Get today's sponsors filtered by category",
       "GET /sponsor-schedule/:channelName/images": "Get all image URLs for today's sponsors",
       "GET /sponsor-schedule/:channelName/all": "Get all schedules for channel (admin)",
       "GET /sponsor-schedule/health": "Health check"
     },
     examples: {
       "by_name": "/sponsor-schedule/WBRE",
-      "by_uuid": "/sponsor-schedule/550e8400-e29b-41d4-a716-446655440000"
+      "by_uuid": "/sponsor-schedule/550e8400-e29b-41d4-a716-446655440000",
+      "with_category": "/sponsor-schedule/WBRE?category=ticker"
     }
   }, 404);
 });

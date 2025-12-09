@@ -3,7 +3,7 @@ import { CheckCircle2, XCircle, Loader2, Activity, Database, AlertCircle } from 
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from '../utils/supabase/config';
 
 interface DataProvider {
   id: string;
@@ -35,11 +35,11 @@ export function BackendHealthCheck() {
     try {
       // Fetch providers using secure RPC pattern (same as Finance Dashboard)
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,category,is_active`,
+        `${getRestUrl('data_providers_public')?select=id,name,type,category,is_active')},
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -54,12 +54,12 @@ export function BackendHealthCheck() {
       const providersWithDetails: DataProvider[] = [];
       for (const provider of providerList) {
         const rpcResponse = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+          getRestUrl('rpc/get_provider_details'),
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
+              apikey: getSupabaseAnonKey(),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ p_id: provider.id }),

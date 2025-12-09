@@ -474,7 +474,8 @@ export default defineConfig(({ mode }) => {
       outDir: 'build',
     },
     server: {
-      port: 3000,
+      host: '0.0.0.0',
+      port: process.env.VITE_PORT ? parseInt(process.env.VITE_PORT) : 3000,
       open: true,
     },
   };

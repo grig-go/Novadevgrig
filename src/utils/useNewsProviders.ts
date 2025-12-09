@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { projectId, publicAnonKey } from './supabase/info';
+import { getRestUrl, getSupabaseAnonKey } from './supabase/config';
 
 export type NewsProvider = {
   id: string;
@@ -30,12 +30,13 @@ export function useNewsProviders() {
     (async () => {
       try {
         // Fetch news providers from data_providers_public (same pattern as Finance/Weather)
+        const anonKey = getSupabaseAnonKey();
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,type,is_active&category=eq.news`,
+          getRestUrl('data_providers_public?select=id,name,type,is_active&category=eq.news'),
           {
-            headers: { 
-              Authorization: `Bearer ${publicAnonKey}`,
-              apikey: publicAnonKey,
+            headers: {
+              Authorization: `Bearer ${anonKey}`,
+              apikey: anonKey,
             }
           }
         );

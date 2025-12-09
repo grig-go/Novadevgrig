@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { projectId, publicAnonKey } from './supabase/info';
+import { getEdgeFunctionUrl, getSupabaseAnonKey } from './supabase/config';
 
 export type Article = {
   id: string;
@@ -12,8 +12,8 @@ export type Article = {
   publishedAt: string;
 };
 
-// ✅ FIX: news-feed is a separate Edge Function (not under make-server-cbef71cf)
-const EDGE_BASE = `https://${projectId}.supabase.co/functions/v1/news-feed`;
+// news-feed is a separate Edge Function (not under make-server-cbef71cf)
+const EDGE_BASE = getEdgeFunctionUrl('news-feed');
 
 export function useNewsFeed(opts: {
   q?: string;
@@ -41,15 +41,17 @@ export function useNewsFeed(opts: {
     let abort = false;
     setLoading(true);
     setError(null);
-    
-    // ✅ FIX: Add required auth headers for Supabase Edge Functions
-    fetch(url, { 
+
+    const anonKey = getSupabaseAnonKey();
+
+    // Add required auth headers for Supabase Edge Functions
+    fetch(url, {
       method: 'GET',
-      headers: { 
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'apikey': publicAnonKey,
-        'Cache-Control': 'no-cache' 
-      } 
+      headers: {
+        'Authorization': `Bearer ${anonKey}`,
+        'apikey': anonKey,
+        'Cache-Control': 'no-cache'
+      }
     })
       .then(r => {
         if (!r.ok) {

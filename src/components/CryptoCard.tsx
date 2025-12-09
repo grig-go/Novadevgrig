@@ -4,7 +4,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { TrendingUp, TrendingDown, Coins, Trash2, Loader2, DollarSign, BarChart3 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { StockNameEdit } from "./StockNameEdit";
 
 interface CryptoData {
@@ -43,12 +43,12 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
   const handleCustomNameSave = async (customName: string | null) => {
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${crypto.cgId}/custom-name`,
+        getEdgeFunctionUrl('finance_dashboard/crypto/${crypto.cgId}/custom-name'),
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
           body: JSON.stringify({ customName }),
         }
@@ -80,11 +80,11 @@ export function CryptoCard({ crypto, onDelete, onUpdate }: CryptoCardProps) {
 
     try {
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/crypto/${crypto.cgId}`,
+        getEdgeFunctionUrl('finance_dashboard/crypto/${crypto.cgId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

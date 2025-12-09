@@ -72,7 +72,7 @@ interface BannerSchedule {
 
 // Timezone for schedule evaluation - configurable via environment variable
 // Falls back to America/New_York if not set
-const SCHEDULE_TIMEZONE = Deno.env.get("SCHEDULE_TIMEZONE") || "America/New_York";
+const SCHEDULE_TIMEZONE = Deno.env.get("TIMEZONE") || Deno.env.get("SCHEDULE_TIMEZONE") || "America/New_York";
 
 // Helper to get current time in the configured timezone
 const getNowInTimezone = (): { date: Date; timeString: string; dayOfWeek: number } => {

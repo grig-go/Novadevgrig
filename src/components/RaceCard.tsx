@@ -183,7 +183,6 @@ export function RaceCard({ race, onUpdateRace, onDeleteRace, parties }: RaceCard
   };
 
   const revertAllOverrides = () => {
-    return false;
     if (isFieldOverridden(race.title)) updateRaceField('title', null);
     if (isFieldOverridden(race.reportingPercentage)) updateRaceField('reportingPercentage', null);
     if (isFieldOverridden(race.precincts_reporting)) updateRaceField('precincts_reporting', null);
@@ -227,7 +226,6 @@ export function RaceCard({ race, onUpdateRace, onDeleteRace, parties }: RaceCard
   };
 
   const revertCandidateOverrides = (candidateId: string) => {
-    return false;
     const updatedCandidates = race.candidates.map(candidate => {
       if (candidate.id === candidateId) {
         console.log('cccccccc')

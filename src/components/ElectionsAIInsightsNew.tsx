@@ -14,7 +14,7 @@ import { Race, getFieldValue } from "../types/election";
 import { 
   Brain, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, X, Search, Trash2, Vote, AlertTriangle, Target, TrendingUp
 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { toast } from "sonner@2.0.3";
 import { motion } from "framer-motion";
 
@@ -126,10 +126,10 @@ export function ElectionAIInsights({
       try {
         setLoadingProvider(true);
         const response = await fetch(
-          `https://${projectId}.supabase.co/functions/v1/ai_provider/providers`,
+          getEdgeFunctionUrl('ai_provider/providers'),
           {
             headers: {
-              Authorization: `Bearer ${publicAnonKey}`,
+              Authorization: `Bearer ${getSupabaseAnonKey()}`,
             },
           }
         );
@@ -179,10 +179,10 @@ export function ElectionAIInsights({
     try {
       setLoadingInsights(true);
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/elections`,
+        getEdgeFunctionUrl('ai_insights/elections'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -369,11 +369,11 @@ export function ElectionAIInsights({
       });
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_provider/chat`,
+        getEdgeFunctionUrl('ai_provider/chat'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -442,11 +442,11 @@ export function ElectionAIInsights({
       setSavingInsight(true);
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/elections`,
+        getEdgeFunctionUrl('ai_insights/elections'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -489,11 +489,11 @@ export function ElectionAIInsights({
       console.log(`Attempting to delete election insight with ID: ${insightId}`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/ai_insights/elections/${insightId}`,
+        getEdgeFunctionUrl('ai_insights/elections/${insightId}'),
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );

@@ -6,7 +6,7 @@ import { Badge } from "./ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { toast } from "sonner@2.0.3";
 import { Search, Plus, TrendingUp, Loader2, DollarSign, AlertCircle, CheckCircle2, Building2 } from "lucide-react";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 
 interface StockSearchProps {
   onStockAdded?: () => void;
@@ -63,11 +63,11 @@ export function StockSearch({
       
       // First, get the Alpaca provider ID from the public view
       const listResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/data_providers_public?select=id,name,is_active&category=eq.finance&type=eq.alpaca`,
+        getRestUrl('data_providers_public?select=id,name,is_active&category=eq.finance&type=eq.alpaca'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -89,12 +89,12 @@ export function StockSearch({
       
       // Use secure RPC to get provider details with credentials
       const rpcResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+        getRestUrl('rpc/get_provider_details'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ p_id: provider.id }),
@@ -162,10 +162,10 @@ export function StockSearch({
       console.log(`🔍 [StockSearch] Searching for: "${searchTerm}"`);
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/search/stocks?q=${encodeURIComponent(searchTerm)}`,
+        getEdgeFunctionUrl('finance_dashboard/search/stocks?q=${encodeURIComponent(searchTerm)}'),
         {
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
           },
         }
       );
@@ -219,11 +219,11 @@ export function StockSearch({
       });
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/finance_dashboard/stocks`,
+        getEdgeFunctionUrl('finance_dashboard/stocks'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ 

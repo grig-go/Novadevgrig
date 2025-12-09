@@ -65,7 +65,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { supabase } from "../utils/supabase/client";
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from "../utils/supabase/config";
 import { copyToClipboard as copyTextToClipboard } from "../utils/clipboard";
 import { DashboardNavigation, type DashboardView } from "./DashboardNavigation";
 
@@ -212,17 +212,17 @@ export function FeedsDashboardWithSupabase({
       
       if (category && category !== "All") {
         // Use category-filtered RPC
-        url = `https://${projectId}.supabase.co/rest/v1/rpc/list_providers_with_status_category`;
+        url = getRestUrl('rpc/list_providers_with_status_category');
       } else {
         // Use all providers RPC
-        url = `https://${projectId}.supabase.co/rest/v1/rpc/list_providers_with_status_all`;
+        url = getRestUrl('rpc/list_providers_with_status_all');
       }
 
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          apikey: publicAnonKey,
+          Authorization: `Bearer ${getSupabaseAnonKey()}`,
+          apikey: getSupabaseAnonKey(),
           "Content-Type": "application/json",
         },
         body: category && category !== "All" 
@@ -269,12 +269,12 @@ export function FeedsDashboardWithSupabase({
     try {
       // Fetch full details using secure RPC function
       const rpcResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+        getRestUrl('rpc/get_provider_details'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ p_id: provider.id }),
@@ -364,12 +364,12 @@ export function FeedsDashboardWithSupabase({
       console.log('[Edit] Fetching leagues from backend endpoint');
       
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`,
+        getEdgeFunctionUrl('sports_dashboard/sports/sportmonks/soccer/leagues'),
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
           },
         }
       );
@@ -644,12 +644,12 @@ export function FeedsDashboardWithSupabase({
       
       // Call backend test endpoint
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/${edgeFunction}/test-provider`,
+        getEdgeFunctionUrl('${edgeFunction}/test-provider'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -731,12 +731,12 @@ export function FeedsDashboardWithSupabase({
     try {
       // Fetch full details using secure RPC function
       const rpcResponse = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/rpc/get_provider_details`,
+        getRestUrl('rpc/get_provider_details'),
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${publicAnonKey}`,
-            apikey: publicAnonKey,
+            Authorization: `Bearer ${getSupabaseAnonKey()}`,
+            apikey: getSupabaseAnonKey(),
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ p_id: provider.id }),
@@ -1311,11 +1311,11 @@ export function FeedsDashboardWithSupabase({
                         try {
                           console.log('[FetchLeagues] Fetching leagues from SportMonks...');
                           
-                          const endpoint = `https://${projectId}.supabase.co/functions/v1/sports_dashboard/sports/sportmonks/soccer/leagues`;
+                          const endpoint = getEdgeFunctionUrl('sports_dashboard/sports/sportmonks/soccer/leagues');
                           const response = await fetch(endpoint, {
                             headers: {
-                              'Authorization': `Bearer ${publicAnonKey}`,
-                              'apikey': publicAnonKey,
+                              'Authorization': `Bearer ${getSupabaseAnonKey()}`,
+                              'apikey': getSupabaseAnonKey(),
                             },
                           });
 

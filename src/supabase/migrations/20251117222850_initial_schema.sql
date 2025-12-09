@@ -11196,7 +11196,13 @@ with check ((auth.role() = 'authenticated'::text));
 using ((auth.role() = 'authenticated'::text))
 with check ((auth.role() = 'authenticated'::text));
 
-
+  create policy "Authenticated users - full access"
+  on "public"."template_settings"
+  as permissive
+  for all
+  to public
+using ((auth.role() = 'authenticated'::text))
+with check ((auth.role() = 'authenticated'::text));
 
   create policy "Allow all for authenticated users"
   on "public"."user_groups"

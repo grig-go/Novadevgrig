@@ -171,7 +171,9 @@ export interface Location {
   elevation_m: number | FieldOverride<number>;
   stationId?: string | FieldOverride<string>;
   provider_id?: string;
-  channel_id?: string;
+  provider_name?: string;
+  channel_id?: string; // Legacy single channel (for backward compatibility)
+  channel_ids?: string[]; // Multiple channel assignments
 }
 
 export interface WeatherData {

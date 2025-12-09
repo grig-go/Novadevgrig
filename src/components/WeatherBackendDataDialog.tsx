@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Loader2, RefreshCw } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { getSupabaseAnonKey, getEdgeFunctionUrl, getRestUrl } from '../utils/supabase/config';
 import { toast } from 'sonner@2.0.3';
 
 interface WeatherBackendDataDialogProps {
@@ -30,10 +30,10 @@ export function WeatherBackendDataDialog({
       console.log(`🔵 Fetching backend data for location ID: ${locationId}`);
       
       // Fetch data directly for this specific location
-      const baseUrl = `https://${projectId}.supabase.co/functions/v1/weather_dashboard`;
+      const baseUrl = getEdgeFunctionUrl('weather_dashboard');
       const response = await fetch(`${baseUrl}/locations/${locationId}`, {
         headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${getSupabaseAnonKey()}`,
         },
       });
 
@@ -53,7 +53,7 @@ export function WeatherBackendDataDialog({
       // Now fetch weather data for this location
       const weatherResponse = await fetch(`${baseUrl}/weather-data`, {
         headers: {
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${getSupabaseAnonKey()}`,
           'Content-Type': 'application/json',
         },
       });
