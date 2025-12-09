@@ -41,13 +41,8 @@ BEGIN
 END;
 $$;
 
--- Schedule the weather CSV sync to run every 15 minutes
--- Adjust the schedule as needed: '*/15 * * * *' = every 15 minutes
-SELECT cron.schedule(
-  'weather-csv-sync',           -- Job name
-  '*/15 * * * *',               -- Cron expression: every 15 minutes
-  $$SELECT sync_weather_csv()$$ -- SQL to execute
-);
+-- Note: cron.schedule() is called in a later migration (20251208000002_fix_cron_permissions.sql)
+-- to ensure proper permissions
 
 -- Add comment for documentation
 COMMENT ON FUNCTION sync_weather_csv() IS 'Syncs weather data from CSV file via the weather_dashboard edge function. Called by pg_cron every 15 minutes.';

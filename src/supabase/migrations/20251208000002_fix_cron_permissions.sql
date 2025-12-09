@@ -1,12 +1,16 @@
--- Grant permissions on the cron schema and job table
--- This fixes "permission denied for table job" errors during seeding
+-- Schedule cron jobs
+-- These are scheduled here (after functions are created) to ensure proper execution
 
--- Grant usage on the cron schema
-GRANT USAGE ON SCHEMA cron TO postgres;
+-- Schedule the weather CSV sync to run every 15 minutes
+SELECT cron.schedule(
+  'weather-csv-sync',
+  '*/15 * * * *',
+  $$SELECT sync_weather_csv()$$
+);
 
--- Grant all privileges on the job table
-GRANT ALL PRIVILEGES ON cron.job TO postgres;
-
--- Also grant to service_role for edge functions and other operations
-GRANT USAGE ON SCHEMA cron TO service_role;
-GRANT ALL PRIVILEGES ON cron.job TO service_role;
+-- Schedule the school closings sync to run every 5 minutes
+SELECT cron.schedule(
+  'school-closings-sync',
+  '*/5 * * * *',
+  $$SELECT sync_school_closings()$$
+);
