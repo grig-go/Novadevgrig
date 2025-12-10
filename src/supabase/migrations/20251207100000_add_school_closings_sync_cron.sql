@@ -42,12 +42,8 @@ BEGIN
 END;
 $$;
 
--- Schedule the school closings sync to run every 5 minutes
-SELECT cron.schedule(
-  'school-closings-sync',         -- Job name
-  '*/5 * * * *',                  -- Cron expression: every 5 minutes
-  $$SELECT sync_school_closings()$$ -- SQL to execute
-);
+-- Note: cron.schedule() is called in a later migration (20251208000002_fix_cron_permissions.sql)
+-- to ensure proper permissions
 
 -- Add comment for documentation
 COMMENT ON FUNCTION sync_school_closings() IS 'Syncs school closings data from XML feed via the school_closing edge function. Called by pg_cron every 5 minutes.';
