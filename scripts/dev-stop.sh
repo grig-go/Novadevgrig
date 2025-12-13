@@ -43,6 +43,7 @@ stop_service "Vite dev server" "vite"
 stop_service "Supabase functions" "functions"
 stop_service "File server" "file-server"
 stop_service "Legacy TLS proxy" "proxy"
+stop_service "Log rotation watcher" "logrotate"
 
 # Also kill any remaining processes by name (cleanup)
 pkill -f "Novadevgrig.*vite" 2>/dev/null || true
