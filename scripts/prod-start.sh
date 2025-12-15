@@ -9,6 +9,8 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUPABASE_DIR="$PROJECT_ROOT/src/supabase"
 LOG_DIR="$PROJECT_ROOT/logs"
 BUILD_DIR="$PROJECT_ROOT/build"
+LOGROTATE_CONF="$LOG_DIR/logrotate.conf"
+LOGROTATE_STATE="$LOG_DIR/logrotate.state"
 
 # Colors for output
 RED='\033[0;31m'
@@ -20,6 +22,61 @@ echo -e "${GREEN}🚀 Starting Nova App (Production Mode - Local)${NC}"
 
 # Create logs directory
 mkdir -p "$LOG_DIR"
+
+# Ensure logrotate is installed
+if ! command -v logrotate &> /dev/null; then
+    echo -e "${YELLOW}Installing logrotate...${NC}"
+    if command -v apt-get &> /dev/null; then
+        sudo apt-get update && sudo apt-get install -y logrotate
+    elif command -v yum &> /dev/null; then
+        sudo yum install -y logrotate
+    elif command -v pacman &> /dev/null; then
+        sudo pacman -S --noconfirm logrotate
+    elif command -v brew &> /dev/null; then
+        brew install logrotate
+    else
+        echo -e "${RED}Could not install logrotate. Please install it manually.${NC}"
+    fi
+fi
+
+# Create logrotate config (always regenerate to ensure correct path)
+cat > "$LOGROTATE_CONF" << EOF
+# Logrotate configuration for Nova App
+# Max 100MB per log, 500MB total (5 logs x 100MB max)
+
+$LOG_DIR/*.log {
+    size 100M
+    rotate 3
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
+
+# Run logrotate to check/rotate logs
+run_logrotate() {
+    if command -v logrotate &> /dev/null; then
+        logrotate -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
+    fi
+}
+
+# Initial log rotation check
+echo -e "${YELLOW}Checking log rotation...${NC}"
+run_logrotate
+echo -e "${GREEN}✓ Log rotation complete${NC}"
+
+# Start background logrotate watcher (every 60 seconds)
+start_logrotate_watcher() {
+    (
+        while true; do
+            sleep 60
+            logrotate -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
+        done
+    ) &
+    echo $! > "$LOG_DIR/logrotate.pid"
+}
 
 # Function to check if Supabase is running
 check_supabase() {
@@ -82,6 +139,13 @@ nohup serve "$BUILD_DIR" -l 5173 > "$LOG_DIR/serve.log" 2>&1 &
 echo $! > "$LOG_DIR/serve.pid"
 echo -e "${GREEN}✓ Production server started (PID: $(cat $LOG_DIR/serve.pid))${NC}"
 
+# Start logrotate watcher
+if command -v logrotate &> /dev/null; then
+    echo -e "${YELLOW}Starting log rotation watcher...${NC}"
+    start_logrotate_watcher
+    echo -e "${GREEN}✓ Log rotation watcher started (PID: $(cat $LOG_DIR/logrotate.pid))${NC}"
+fi
+
 # Wait a moment for services to start
 sleep 2
 
@@ -97,6 +161,7 @@ echo -e "  File Server: ${YELLOW}http://localhost:8001${NC}"
 echo -e "  TLS Proxy:   ${YELLOW}http://localhost:3000${NC}"
 echo ""
 echo -e "  Logs:        ${YELLOW}$LOG_DIR/${NC}"
+echo -e "  Max size:    ${YELLOW}100MB per log, 500MB total${NC}"
 echo ""
 echo -e "  Stop with:   ${YELLOW}npm run prod:stop${NC}"
 echo ""
