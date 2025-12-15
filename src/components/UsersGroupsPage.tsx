@@ -46,6 +46,7 @@ import {
   PopoverTrigger,
 } from "./ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { Separator } from "./ui/separator";
 import {
   Users,
   UserPlus,
@@ -139,6 +140,8 @@ export function UsersGroupsPage() {
   const [isNewUserDialogOpen, setIsNewUserDialogOpen] = useState(false);
   const [isNewGroupDialogOpen, setIsNewGroupDialogOpen] = useState(false);
   const [newGroup, setNewGroup] = useState<DisplayGroup | null>(null);
+  const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<DisplayGroup | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // New user state
@@ -499,6 +502,132 @@ export function UsersGroupsPage() {
     } catch (err) {
       console.error('Error creating group:', err);
       toast.error('Failed to create group');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Update existing group
+  const updateGroup = async () => {
+    if (!editingGroup || !editingGroup.name) return;
+
+    setIsSaving(true);
+    try {
+      // Update group details
+      const { error: groupError } = await supabase
+        .from('u_groups')
+        .update({
+          name: editingGroup.name,
+          description: editingGroup.description,
+          color: editingGroup.color,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingGroup.id);
+
+      if (groupError) throw groupError;
+
+      // Get permission IDs for the selected permission keys
+      const { data: allPermsData } = await supabase
+        .from('u_permissions')
+        .select('id, app_key, resource, action');
+
+      const permissionIdMap = new Map<string, string>();
+      (allPermsData || []).forEach((p: any) => {
+        const key = `${p.app_key}.${p.resource}.${p.action}`;
+        permissionIdMap.set(key, p.id);
+      });
+
+      // Delete existing group permissions
+      await supabase
+        .from('u_group_permissions')
+        .delete()
+        .eq('group_id', editingGroup.id);
+
+      // Insert new permissions
+      if (editingGroup.permissions.length > 0) {
+        const groupPermInserts = editingGroup.permissions
+          .map(permKey => {
+            const permId = permissionIdMap.get(permKey);
+            if (!permId) return null;
+            return {
+              group_id: editingGroup.id,
+              permission_id: permId,
+            };
+          })
+          .filter(Boolean);
+
+        if (groupPermInserts.length > 0) {
+          const { error: permError } = await supabase
+            .from('u_group_permissions')
+            .insert(groupPermInserts);
+
+          if (permError) throw permError;
+        }
+      }
+
+      // Update group members - get current members first
+      const { data: currentMembers } = await supabase
+        .from('u_group_members')
+        .select('user_id')
+        .eq('group_id', editingGroup.id);
+
+      const currentMemberIds = (currentMembers || []).map((m: any) => m.user_id);
+      const newMemberIds = editingGroup.members;
+
+      // Members to add
+      const membersToAdd = newMemberIds.filter(id => !currentMemberIds.includes(id));
+      // Members to remove
+      const membersToRemove = currentMemberIds.filter(id => !newMemberIds.includes(id));
+
+      // Add new members
+      if (membersToAdd.length > 0) {
+        const memberInserts = membersToAdd.map(userId => ({
+          group_id: editingGroup.id,
+          user_id: userId,
+        }));
+        await supabase.from('u_group_members').insert(memberInserts);
+      }
+
+      // Remove old members
+      if (membersToRemove.length > 0) {
+        await supabase
+          .from('u_group_members')
+          .delete()
+          .eq('group_id', editingGroup.id)
+          .in('user_id', membersToRemove);
+      }
+
+      setIsEditGroupDialogOpen(false);
+      setEditingGroup(null);
+      await fetchData();
+      toast.success('Group updated successfully');
+    } catch (err) {
+      console.error('Error updating group:', err);
+      toast.error('Failed to update group');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Delete group
+  const deleteGroup = async (groupId: string) => {
+    setIsSaving(true);
+    try {
+      // Delete group (will cascade to memberships and permissions)
+      const { error } = await supabase
+        .from('u_groups')
+        .delete()
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setIsEditGroupDialogOpen(false);
+      setEditingGroup(null);
+      await fetchData();
+      toast.success('Group deleted successfully');
+    } catch (err) {
+      console.error('Error deleting group:', err);
+      toast.error('Failed to delete group');
     } finally {
       setIsSaving(false);
     }
@@ -1022,6 +1151,59 @@ export function UsersGroupsPage() {
                       </div>
                     </div>
 
+                    {/* Permissions */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Permissions</label>
+                      <div className="border rounded-lg p-3 max-h-[200px] overflow-y-auto space-y-3">
+                        {/* Group by app_key */}
+                        {['system', 'nova', 'pulsar'].map(appKey => {
+                          const appPermissions = permissions.filter(p => p.app_key === appKey);
+                          if (appPermissions.length === 0) return null;
+                          return (
+                            <div key={appKey} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                  {appKey}
+                                </span>
+                                <Separator className="flex-1" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {appPermissions.map(perm => (
+                                  <label
+                                    key={perm.key}
+                                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
+                                  >
+                                    <Checkbox
+                                      checked={newGroup.permissions.includes(perm.key)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setNewGroup({
+                                            ...newGroup,
+                                            permissions: [...newGroup.permissions, perm.key]
+                                          });
+                                        } else {
+                                          setNewGroup({
+                                            ...newGroup,
+                                            permissions: newGroup.permissions.filter(p => p !== perm.key)
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    <span className="truncate" title={perm.description || perm.key}>
+                                      {perm.label}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {newGroup.permissions.length} permission(s) selected
+                      </p>
+                    </div>
+
                     {/* Actions */}
                     <div className="flex justify-end gap-2 pt-4 border-t">
                       <Button
@@ -1110,6 +1292,238 @@ export function UsersGroupsPage() {
                   </Button>
                 </div>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit Group Dialog */}
+          <Dialog open={isEditGroupDialogOpen} onOpenChange={(open) => {
+            setIsEditGroupDialogOpen(open);
+            if (!open) setEditingGroup(null);
+          }}>
+            <DialogContent className="max-w-2xl">
+              {editingGroup && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-3">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: editingGroup.color }}
+                      >
+                        <UsersRound className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Group Name"
+                          value={editingGroup.name}
+                          onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
+                          className="font-medium"
+                          disabled={editingGroup.is_system}
+                        />
+                      </div>
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="space-y-6 mt-4">
+                    {/* Description */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Description</label>
+                      <Textarea
+                        placeholder="Describe the purpose of this group..."
+                        value={editingGroup.description}
+                        onChange={(e) => setEditingGroup({ ...editingGroup, description: e.target.value })}
+                        rows={2}
+                        disabled={editingGroup.is_system}
+                      />
+                    </div>
+
+                    {/* Color Selection */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Group Color</label>
+                      <div className="grid grid-cols-8 gap-2">
+                        {colorOptions.map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => setEditingGroup({ ...editingGroup, color })}
+                            className="relative w-8 h-8 rounded-full hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                            style={{ backgroundColor: color }}
+                            disabled={editingGroup.is_system}
+                          >
+                            {editingGroup.color === color && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <CheckCircle className="w-4 h-4 text-white drop-shadow-md" />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Members */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Members ({editingGroup.members.length})</label>
+                      <div className="flex flex-wrap gap-2">
+                        {editingGroup.members.map(userId => {
+                          const user = users.find(u => u.id === userId);
+                          if (!user) return null;
+                          return (
+                            <Badge key={user.id} variant="secondary" className="gap-2 pr-1">
+                              <Avatar className="w-4 h-4">
+                                <AvatarImage src={user.avatar} alt={user.full_name} />
+                                <AvatarFallback>{getInitials(user.full_name)}</AvatarFallback>
+                              </Avatar>
+                              {user.full_name}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-4 w-4 p-0 hover:bg-transparent"
+                                onClick={() => setEditingGroup({
+                                  ...editingGroup,
+                                  members: editingGroup.members.filter(uId => uId !== userId)
+                                })}
+                              >
+                                <XCircle className="w-3 h-3" />
+                              </Button>
+                            </Badge>
+                          );
+                        })}
+                        <Select
+                          value=""
+                          onValueChange={(userId) => {
+                            if (!editingGroup.members.includes(userId)) {
+                              setEditingGroup({
+                                ...editingGroup,
+                                members: [...editingGroup.members, userId]
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-auto h-8 gap-1">
+                            <SelectValue placeholder="+ Add Member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {users.filter(u => !editingGroup.members.includes(u.id) && !u.is_superuser).map(user => (
+                              <SelectItem key={user.id} value={user.id}>
+                                <div className="flex items-center gap-2">
+                                  <Avatar className="w-5 h-5">
+                                    <AvatarImage src={user.avatar} alt={user.full_name} />
+                                    <AvatarFallback>{getInitials(user.full_name)}</AvatarFallback>
+                                  </Avatar>
+                                  {user.full_name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Permissions */}
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Permissions</label>
+                      <div className="border rounded-lg p-3 max-h-[200px] overflow-y-auto space-y-3">
+                        {/* Group by app_key */}
+                        {['system', 'nova', 'pulsar'].map(appKey => {
+                          const appPermissions = permissions.filter(p => p.app_key === appKey);
+                          if (appPermissions.length === 0) return null;
+                          return (
+                            <div key={appKey} className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                  {appKey}
+                                </span>
+                                <Separator className="flex-1" />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                {appPermissions.map(perm => (
+                                  <label
+                                    key={perm.key}
+                                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 p-1 rounded"
+                                  >
+                                    <Checkbox
+                                      checked={editingGroup.permissions.includes(perm.key)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          setEditingGroup({
+                                            ...editingGroup,
+                                            permissions: [...editingGroup.permissions, perm.key]
+                                          });
+                                        } else {
+                                          setEditingGroup({
+                                            ...editingGroup,
+                                            permissions: editingGroup.permissions.filter(p => p !== perm.key)
+                                          });
+                                        }
+                                      }}
+                                    />
+                                    <span className="truncate" title={perm.description || perm.key}>
+                                      {perm.label}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {editingGroup.permissions.length} permission(s) selected
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex justify-between items-center pt-4 border-t">
+                      {!editingGroup.is_system && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" className="gap-2 text-destructive">
+                              <Trash2 className="w-4 h-4" />
+                              Delete Group
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete Group</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Are you sure you want to delete <span className="font-medium">{editingGroup.name}</span>?
+                                This will remove all group memberships and permissions.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                onClick={() => deleteGroup(editingGroup.id)}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                      <div className="ml-auto flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsEditGroupDialogOpen(false);
+                            setEditingGroup(null);
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="default"
+                          className="gap-2"
+                          onClick={updateGroup}
+                          disabled={!editingGroup.name || isSaving}
+                        >
+                          {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                          Save Changes
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
@@ -1585,6 +1999,17 @@ export function UsersGroupsPage() {
                           </p>
                         </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingGroup({ ...group });
+                          setIsEditGroupDialogOpen(true);
+                        }}
+                        title="Edit Group"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Button>
                     </div>
                   </CardHeader>
                   <CardContent>
