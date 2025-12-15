@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,36 +23,33 @@ import {
   Shield,
   Calendar,
   Clock,
-  Bell,
   Globe,
-  Lock,
   Smartphone,
   Eye,
   EyeOff,
   Check,
   AlertCircle,
+  Crown,
+  Loader2,
 } from "lucide-react";
-import { User, Role, Permission } from "../types/users";
+import { toast } from "sonner@2.0.3";
+import { useAuth } from "../contexts/AuthContext";
+import { usePermissions } from "../hooks/usePermissions";
+import { supabase } from "../utils/supabase";
 
 interface AccountSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  currentUser: User;
-  roles: Role[];
-  permissions: Permission[];
-  onSave: (updatedUser: Partial<User>) => void;
 }
 
 export function AccountSettingsDialog({
   open,
   onOpenChange,
-  currentUser,
-  roles,
-  permissions,
-  onSave,
 }: AccountSettingsDialogProps) {
-  const [fullName, setFullName] = useState(currentUser.full_name);
-  const [email, setEmail] = useState(currentUser.email);
+  const { user } = useAuth();
+  const { isSuperuser, permissions: userPermissionKeys } = usePermissions();
+
+  const [fullName, setFullName] = useState("");
   const [theme, setTheme] = useState<"light" | "dark" | "system">("system");
   const [timezone, setTimezone] = useState("America/New_York");
   const [dateFormat, setDateFormat] = useState("MM/DD/YYYY");
@@ -62,18 +59,45 @@ export function AccountSettingsDialog({
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const currentRole = roles.find((role) => role.id === currentUser.role);
-  const userPermissions = permissions.filter((perm) =>
-    currentUser.permissions.includes(perm.key)
-  );
+  // Update form when user changes or dialog opens
+  useEffect(() => {
+    if (user && open) {
+      setFullName(user.full_name || "");
+    }
+  }, [user, open]);
 
-  const handleSave = () => {
-    onSave({
-      full_name: fullName,
-      email: email,
-    });
-    onOpenChange(false);
+  const handleSave = async () => {
+    if (!user) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('u_users')
+        .update({
+          full_name: fullName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast.success('Profile updated successfully');
+      onOpenChange(false);
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      toast.error('Failed to update profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!user) return null;
+
+  const getInitials = (name: string | null) => {
+    if (!name) return "?";
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase();
   };
 
   return (
@@ -108,12 +132,12 @@ export function AccountSettingsDialog({
                   {/* Avatar */}
                   <div className="flex items-center gap-4">
                     <Avatar className="w-20 h-20">
-                      <AvatarImage src={currentUser.avatar} alt={currentUser.full_name} />
+                      <AvatarImage
+                        src={user.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`}
+                        alt={user.full_name || user.email}
+                      />
                       <AvatarFallback>
-                        {currentUser.full_name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                        {getInitials(user.full_name)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="space-y-2">
@@ -142,7 +166,7 @@ export function AccountSettingsDialog({
                     </div>
                   </div>
 
-                  {/* Email */}
+                  {/* Email (Read-only) */}
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
                     <div className="flex items-center gap-2">
@@ -150,28 +174,13 @@ export function AccountSettingsDialog({
                       <Input
                         id="email"
                         type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Enter your email"
-                      />
-                    </div>
-                  </div>
-
-                  {/* User ID (Read-only) */}
-                  <div className="space-y-2">
-                    <Label>User ID</Label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        value={currentUser.id}
+                        value={user.email}
                         readOnly
                         className="bg-muted"
                       />
-                      <Button variant="outline" size="sm">
-                        Copy
-                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      This is your unique identifier and cannot be changed.
+                      Contact an administrator to change your email address.
                     </p>
                   </div>
                 </CardContent>
@@ -440,30 +449,12 @@ export function AccountSettingsDialog({
                         </div>
                         <div>
                           <p className="text-sm font-medium">Current Session</p>
-                          <p className="text-xs text-muted-foreground">Chrome • New York, US</p>
-                          <p className="text-xs text-muted-foreground">
-                            Last active: Just now
-                          </p>
+                          <p className="text-xs text-muted-foreground">Active now</p>
                         </div>
                       </div>
                       <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                         Active
                       </Badge>
-                    </div>
-
-                    <div className="flex items-start justify-between p-3 border rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <div className="p-2 bg-muted rounded">
-                          <Smartphone className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">Mobile App</p>
-                          <p className="text-xs text-muted-foreground">iOS • Last seen 2 hours ago</p>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm">
-                        Revoke
-                      </Button>
                     </div>
                   </div>
 
@@ -484,18 +475,52 @@ export function AccountSettingsDialog({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {/* Current Role */}
+                  {/* Account Type */}
                   <div className="space-y-2">
-                    <Label>Current Role</Label>
+                    <Label>Account Type</Label>
                     <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
-                      <Shield className="w-5 h-5 text-primary" />
+                      {isSuperuser ? (
+                        <Crown className="w-5 h-5 text-yellow-500" />
+                      ) : (
+                        <Shield className="w-5 h-5 text-primary" />
+                      )}
                       <div className="flex-1">
-                        <p className="font-medium">{currentRole?.name || currentUser.role}</p>
+                        <p className="font-medium">
+                          {isSuperuser ? "Superuser" : "Standard User"}
+                        </p>
                         <p className="text-sm text-muted-foreground">
-                          {currentRole?.permissions.length || 0} permissions assigned
+                          {isSuperuser
+                            ? "Full access to all features"
+                            : `${userPermissionKeys.length} permissions assigned`
+                          }
                         </p>
                       </div>
                       <Badge variant="secondary">Read-only</Badge>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Groups */}
+                  <div className="space-y-2">
+                    <Label>Groups</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {user.groups && user.groups.length > 0 ? (
+                        user.groups.map((group) => (
+                          <Badge
+                            key={group.id}
+                            variant="secondary"
+                            style={{
+                              backgroundColor: group.color ? `${group.color}20` : undefined,
+                              borderColor: group.color || undefined
+                            }}
+                          >
+                            {group.name}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground">No groups assigned</p>
+                      )}
                     </div>
                   </div>
 
@@ -506,20 +531,25 @@ export function AccountSettingsDialog({
                     <Label>Your Permissions</Label>
                     <ScrollArea className="h-[200px] rounded-lg border p-4">
                       <div className="space-y-2">
-                        {userPermissions.length > 0 ? (
-                          userPermissions.map((perm) => (
+                        {isSuperuser ? (
+                          <div className="flex items-start gap-2 p-2 rounded bg-yellow-50 dark:bg-yellow-900/20">
+                            <Crown className="w-4 h-4 text-yellow-500 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium">Superuser Access</p>
+                              <p className="text-xs text-muted-foreground">
+                                You have full access to all features and settings
+                              </p>
+                            </div>
+                          </div>
+                        ) : userPermissionKeys.length > 0 ? (
+                          userPermissionKeys.map((perm) => (
                             <div
-                              key={perm.key}
+                              key={perm}
                               className="flex items-start gap-2 p-2 rounded hover:bg-muted/50"
                             >
                               <Check className="w-4 h-4 text-green-600 mt-0.5" />
                               <div>
-                                <p className="text-sm font-medium">{perm.label}</p>
-                                {perm.description && (
-                                  <p className="text-xs text-muted-foreground">
-                                    {perm.description}
-                                  </p>
-                                )}
+                                <p className="text-sm font-medium font-mono">{perm}</p>
                               </div>
                             </div>
                           ))
@@ -552,19 +582,17 @@ export function AccountSettingsDialog({
                         Account Created
                       </p>
                       <p className="text-sm font-medium">
-                        {new Date(currentUser.created_at).toLocaleDateString()}
+                        {new Date(user.created_at).toLocaleDateString()}
                       </p>
                     </div>
 
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground flex items-center gap-2">
                         <Clock className="w-4 h-4" />
-                        Last Login
+                        Last Updated
                       </p>
                       <p className="text-sm font-medium">
-                        {currentUser.last_login
-                          ? new Date(currentUser.last_login).toLocaleDateString()
-                          : "Never"}
+                        {new Date(user.updated_at).toLocaleDateString()}
                       </p>
                     </div>
 
@@ -572,21 +600,21 @@ export function AccountSettingsDialog({
                       <p className="text-sm text-muted-foreground">Account Status</p>
                       <Badge
                         variant={
-                          currentUser.status === "Active"
+                          user.status === "active"
                             ? "default"
-                            : currentUser.status === "Pending"
+                            : user.status === "pending"
                             ? "secondary"
                             : "destructive"
                         }
                       >
-                        {currentUser.status}
+                        {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                       </Badge>
                     </div>
 
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">Groups</p>
                       <p className="text-sm font-medium">
-                        {currentUser.groups.length} group(s)
+                        {user.groups?.length || 0} group(s)
                       </p>
                     </div>
                   </div>
@@ -610,7 +638,7 @@ export function AccountSettingsDialog({
                         certain.
                       </p>
                     </div>
-                    <Button variant="destructive" size="sm">
+                    <Button variant="destructive" size="sm" disabled>
                       Delete Account
                     </Button>
                   </div>
@@ -624,7 +652,16 @@ export function AccountSettingsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save Changes</Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save Changes'
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
