@@ -88,6 +88,7 @@
     "dev:start": "./scripts/dev-start.sh",
     "dev:stop": "./scripts/dev-stop.sh",
     "prod:start": "./scripts/prod-start.sh",
-    "prod:stop": "./scripts/prod-stop.sh"
+    "prod:stop": "./scripts/prod-stop.sh",
+    "create-superuser": "npx tsx scripts/create-superuser.ts"
   }
 }
