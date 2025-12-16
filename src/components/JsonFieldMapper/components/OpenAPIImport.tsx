@@ -3,7 +3,7 @@ import { Button } from '../../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
-import { Alert, AlertDescription } from '../../ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
 import { Badge } from '../../ui/badge';
 import { Input } from '../../ui/input';
 import {
@@ -342,32 +342,28 @@ export const OpenAPIImport: React.FC<OpenAPIImportProps> = ({ onImport, onCancel
 
         {parseError && (
           <Alert className="bg-red-50 border-red-200">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-              <AlertDescription className="flex-1">{parseError}</AlertDescription>
-            </div>
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription>{parseError}</AlertDescription>
           </Alert>
         )}
 
         {importedSpec && (
           <div className="space-y-4 mt-4">
             <Alert className="bg-green-50 border-green-200">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="font-semibold">{importedSpec.info?.title || 'Schema'}</h4>
-                  <p className="text-sm mt-1">{importedSpec.info?.description}</p>
-                  <div className="flex gap-2 mt-3 flex-wrap">
-                    <Badge>Version: {importedSpec.info?.version || '1.0.0'}</Badge>
-                    <Badge variant="default">Type: {importedSpec.type.toUpperCase()}</Badge>
-                    {importedSpec.responseSchemas && (
-                      <Badge variant="secondary">
-                        {importedSpec.responseSchemas.length} endpoints found
-                      </Badge>
-                    )}
-                  </div>
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertTitle>{importedSpec.info?.title || 'Schema'}</AlertTitle>
+              <AlertDescription>
+                {importedSpec.info?.description}
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <Badge>Version: {importedSpec.info?.version || '1.0.0'}</Badge>
+                  <Badge variant="default">Type: {importedSpec.type.toUpperCase()}</Badge>
+                  {importedSpec.responseSchemas && (
+                    <Badge variant="secondary">
+                      {importedSpec.responseSchemas.length} endpoints found
+                    </Badge>
+                  )}
                 </div>
-              </div>
+              </AlertDescription>
             </Alert>
 
             <Collapsible open={showPreview} onOpenChange={setShowPreview}>

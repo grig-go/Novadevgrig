@@ -6,7 +6,7 @@ import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { Badge } from '../ui/badge';
-import { Alert, AlertDescription } from '../ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import {
   ArrowRight,
   Info,
@@ -355,12 +355,10 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
       case 'trim':
         return (
           <Alert className="bg-blue-50 border-blue-200">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-              <AlertDescription className="flex-1">
-                This transformation will be applied directly without additional configuration.
-              </AlertDescription>
-            </div>
+            <Info className="h-4 w-4 text-blue-600" />
+            <AlertDescription>
+              This transformation will be applied directly without additional configuration.
+            </AlertDescription>
           </Alert>
         );
 
@@ -436,12 +434,10 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
       default:
         return (
           <Alert className="bg-yellow-50 border-yellow-200">
-            <div className="flex items-start gap-2">
-              <Info className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <AlertDescription className="flex-1">
-                Configuration options for {selectedTransform} are not yet implemented.
-              </AlertDescription>
-            </div>
+            <Info className="h-4 w-4 text-yellow-600" />
+            <AlertDescription>
+              Configuration options for {selectedTransform} are not yet implemented.
+            </AlertDescription>
           </Alert>
         );
     }
@@ -496,21 +492,19 @@ const TransformationBuilder: React.FC<TransformationBuilderProps> = ({
           {selectedTransform !== 'ai-transform' && (
             <div className="transform-preview">
               <Alert className="bg-blue-50 border-blue-200">
-                <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <strong className="text-sm block mb-2">Example:</strong>
-                    <div className="flex items-center gap-2 text-sm flex-wrap">
-                      <span>Input:</span>
-                      <Badge variant="outline">Sample Value</Badge>
-                      <ArrowRight className="h-3 w-3" />
-                      <span>Output:</span>
-                      <Badge variant="default">
-                        {getTransformPreview(selectedTransform, transformOptions, 'Sample Value')}
-                      </Badge>
-                    </div>
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertTitle>Example</AlertTitle>
+                <AlertDescription>
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
+                    <span>Input:</span>
+                    <Badge variant="outline">Sample Value</Badge>
+                    <ArrowRight className="h-3 w-3" />
+                    <span>Output:</span>
+                    <Badge variant="default">
+                      {getTransformPreview(selectedTransform, transformOptions, 'Sample Value')}
+                    </Badge>
                   </div>
-                </div>
+                </AlertDescription>
               </Alert>
             </div>
           )}

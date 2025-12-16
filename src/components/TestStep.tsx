@@ -513,10 +513,8 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
             {/* Error Message */}
             {!testResult.success && testResult.error && (
               <Alert variant="destructive">
-                <div className="flex gap-3">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  <AlertDescription>{testResult.error}</AlertDescription>
-                </div>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{testResult.error}</AlertDescription>
               </Alert>
             )}
 
@@ -654,12 +652,10 @@ export const TestStep: React.FC<TestStepProps> = ({ formData, onSaveTest }) => {
 
       {/* Info Alert */}
       <Alert>
-        <div className="flex gap-3">
-          <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <AlertDescription>
-            Test your API endpoint before deploying. This will execute the endpoint with your configured data sources and transformations.
-          </AlertDescription>
-        </div>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Test your API endpoint before deploying. This will execute the endpoint with your configured data sources and transformations.
+        </AlertDescription>
       </Alert>
     </div>
   );

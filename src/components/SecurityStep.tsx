@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Switch } from './ui/switch';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Eye, EyeOff, Plus, Trash2, Key, AlertCircle, Loader2, CheckCircle } from 'lucide-react';
 import { supabase } from '../utils/supabase/client';
 import { useToast } from './ui/use-toast';
@@ -605,12 +605,10 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
                   {apiKeys.length === 0 ? (
                     <Alert>
-                      <div className="flex gap-3">
-                        <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <AlertDescription>
-                          No API keys configured. Generate at least one key to enable authentication.
-                        </AlertDescription>
-                      </div>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        No API keys configured. Generate at least one key to enable authentication.
+                      </AlertDescription>
                     </Alert>
                   ) : (
                     <div className="space-y-2">
@@ -728,12 +726,10 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
                 {basicAuthUsers.length === 0 ? (
                   <Alert>
-                    <div className="flex gap-3">
-                      <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                      <AlertDescription>
-                        No users configured. Add at least one username/password pair.
-                      </AlertDescription>
-                    </div>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      No users configured. Add at least one username/password pair.
+                    </AlertDescription>
                   </Alert>
                 ) : (
                   <div className="space-y-2">
@@ -771,12 +767,10 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
               </CardHeader>
               <CardContent>
                 <Alert>
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                    <AlertDescription>
-                      OAuth 2.0 configuration will be available in a future update.
-                    </AlertDescription>
-                  </div>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    OAuth 2.0 configuration will be available in a future update.
+                  </AlertDescription>
                 </Alert>
               </CardContent>
             </Card>
@@ -790,12 +784,10 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
               </CardHeader>
               <CardContent>
                 <Alert>
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                    <AlertDescription>
-                      Custom authentication configuration will be available in a future update.
-                    </AlertDescription>
-                  </div>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Custom authentication configuration will be available in a future update.
+                  </AlertDescription>
                 </Alert>
               </CardContent>
             </Card>
@@ -846,21 +838,19 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
                 {testResult && (
                   <Alert className={testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
-                    <div className="flex gap-3">
-                      {testResult.success ? (
-                        <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-                      )}
-                      <div className={testResult.success ? 'text-green-900' : 'text-red-900'}>
-                        <strong className="text-sm">
-                          {testResult.success ? 'Authentication Successful' : 'Authentication Failed'}
-                        </strong>
-                        <pre className="mt-2 text-xs overflow-auto">
-                          {JSON.stringify(testResult, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
+                    {testResult.success ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                    )}
+                    <AlertTitle className={testResult.success ? 'text-green-900' : 'text-red-900'}>
+                      {testResult.success ? 'Authentication Successful' : 'Authentication Failed'}
+                    </AlertTitle>
+                    <AlertDescription className={testResult.success ? 'text-green-900' : 'text-red-900'}>
+                      <pre className="mt-2 text-xs overflow-auto">
+                        {JSON.stringify(testResult, null, 2)}
+                      </pre>
+                    </AlertDescription>
                   </Alert>
                 )}
               </CardContent>
@@ -905,17 +895,13 @@ export const SecurityStep = forwardRef<SecurityStepRef, SecurityStepProps>(({
 
       {/* Security Note */}
       <Alert className="bg-blue-50 border-blue-200">
-        <div className="flex gap-3">
-          <Key className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-blue-900">
-            <strong className="text-sm">Security Note</strong>
-            <p className="text-sm mt-1">
-              {authEnabled
-                ? 'Authentication is enabled. Only requests with valid credentials will be able to access this agent.'
-                : 'This agent will be publicly accessible without authentication. Enable authentication to protect sensitive data.'}
-            </p>
-          </div>
-        </div>
+        <Key className="h-4 w-4 text-blue-600" />
+        <AlertTitle className="text-blue-900">Security Note</AlertTitle>
+        <AlertDescription className="text-blue-900">
+          {authEnabled
+            ? 'Authentication is enabled. Only requests with valid credentials will be able to access this agent.'
+            : 'This agent will be publicly accessible without authentication. Enable authentication to protect sensitive data.'}
+        </AlertDescription>
       </Alert>
     </div>
   );

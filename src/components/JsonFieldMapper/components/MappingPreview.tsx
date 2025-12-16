@@ -73,27 +73,25 @@ export const MappingPreview: React.FC<MappingPreviewProps> = ({
       {/* Validation Status */}
       {validationResult && (
         <Alert className={validationResult.valid ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}>
-          <div className="flex items-start gap-2">
+          {validationResult.valid ? (
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          ) : (
+            <AlertCircle className="h-4 w-4 text-yellow-600" />
+          )}
+          <AlertDescription>
             {validationResult.valid ? (
-              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
+              'Configuration is valid and ready to use!'
             ) : (
-              <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <>
+                <strong>Configuration Issues:</strong>
+                <ul className="mt-2 list-disc list-inside">
+                  {validationResult.errors.map((error: string, i: number) => (
+                    <li key={i}>{error}</li>
+                  ))}
+                </ul>
+              </>
             )}
-            <AlertDescription className="flex-1">
-              {validationResult.valid ? (
-                'Configuration is valid and ready to use!'
-              ) : (
-                <>
-                  <strong>Configuration Issues:</strong>
-                  <ul className="mt-2 list-disc list-inside">
-                    {validationResult.errors.map((error: string, i: number) => (
-                      <li key={i}>{error}</li>
-                    ))}
-                  </ul>
-                </>
-              )}
-            </AlertDescription>
-          </div>
+          </AlertDescription>
         </Alert>
       )}
 

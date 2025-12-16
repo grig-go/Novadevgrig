@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Code, Copy, Download, Info } from 'lucide-react';
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { useToast } from './ui/use-toast';
 
 interface CurlCommandGeneratorProps {
@@ -370,15 +370,11 @@ print(response.json())`;
 
         {endpoint.authentication?.required && (
           <Alert className="mt-4 bg-yellow-50 border-yellow-200">
-            <div className="flex gap-3">
-              <Info className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div className="text-yellow-900">
-                <strong className="text-sm">Authentication Required</strong>
-                <p className="text-sm mt-1">
-                  {getAuthInstructions(endpoint.authentication)}
-                </p>
-              </div>
-            </div>
+            <Info className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-900">Authentication Required</AlertTitle>
+            <AlertDescription className="text-yellow-900">
+              {getAuthInstructions(endpoint.authentication)}
+            </AlertDescription>
           </Alert>
         )}
       </CardContent>

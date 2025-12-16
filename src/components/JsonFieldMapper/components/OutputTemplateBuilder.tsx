@@ -573,13 +573,11 @@ export const OutputTemplateBuilder: React.FC<OutputTemplateBuilderProps> = ({
           {editMode === 'visual' ? (
             <>
               <Alert className="bg-blue-50 border-blue-200 mb-4">
-                <div className="flex items-start gap-2">
-                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                  <AlertDescription className="flex-1">
-                    Define your JSON output structure. Click field names to edit them.
-                    Press Enter to save or Escape to cancel editing.
-                  </AlertDescription>
-                </div>
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription>
+                  Define your JSON output structure. Click field names to edit them.
+                  Press Enter to save or Escape to cancel editing.
+                </AlertDescription>
               </Alert>
 
               {/* Action Buttons */}

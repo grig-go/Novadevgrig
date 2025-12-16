@@ -1118,65 +1118,63 @@ export const FieldMappingCanvas: React.FC<FieldMappingCanvasProps> = ({
   return (
     <div className="field-mapping-canvas space-y-4" ref={canvasRef}>
       <Alert className="bg-blue-50 border-blue-200">
-        <div className="flex items-start gap-2">
-          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-2" />
-          <AlertDescription className="flex-1">
-            <div className="flex justify-between items-center">
-              <div>
-                Drag fields from sources to output fields. Fields with [*] can be configured with specific indices.
-                {debugMode && <strong className="text-red-600 ml-2">DEBUG MODE ON - Check Console</strong>}
-              </div>
-              <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant={debugMode ? 'destructive' : 'ghost'}
-                onClick={() => setDebugMode(!debugMode)}
-              >
-                Debug
-              </Button>
-              <Separator orientation="vertical" className="h-6" />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant={viewMode === 'side-by-side' ? 'default' : 'ghost'}
-                      onClick={() => setViewMode('side-by-side')}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Grid className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Side-by-side view</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant={viewMode === 'floating' ? 'default' : 'ghost'}
-                      onClick={() => setViewMode('floating')}
-                      className="h-8 w-8 p-0"
-                    >
-                      <Layers className="w-4 h-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Floating output panel</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <Separator orientation="vertical" className="h-6" />
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={showMiniMap}
-                  onCheckedChange={setShowMiniMap}
-                />
-                <Label className="text-xs">Mini Map</Label>
-              </div>
-              </div>
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              Drag fields from sources to output fields. Fields with [*] can be configured with specific indices.
+              {debugMode && <strong className="text-red-600 ml-2">DEBUG MODE ON - Check Console</strong>}
             </div>
-          </AlertDescription>
-        </div>
+            <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={debugMode ? 'destructive' : 'ghost'}
+              onClick={() => setDebugMode(!debugMode)}
+            >
+              Debug
+            </Button>
+            <Separator orientation="vertical" className="h-6" />
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant={viewMode === 'side-by-side' ? 'default' : 'ghost'}
+                    onClick={() => setViewMode('side-by-side')}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Grid className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Side-by-side view</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant={viewMode === 'floating' ? 'default' : 'ghost'}
+                    onClick={() => setViewMode('floating')}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Layers className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Floating output panel</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <Separator orientation="vertical" className="h-6" />
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={showMiniMap}
+                onCheckedChange={setShowMiniMap}
+              />
+              <Label className="text-xs">Mini Map</Label>
+            </div>
+            </div>
+          </div>
+        </AlertDescription>
       </Alert>
 
       <div className="flex gap-4 min-h-[600px]" style={{ position: 'relative' }}>

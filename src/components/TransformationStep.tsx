@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -290,16 +290,12 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
     return (
       <div className="transformation-step">
         <Alert className="bg-yellow-50 border-yellow-200">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-semibold">Sample Data Required</h4>
-              <AlertDescription className="mt-1">
-                Please go back to the "Output Format" step and click "Test & Discover All" to load sample data first.
-                This will enable field selection for transformations.
-              </AlertDescription>
-            </div>
-          </div>
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertTitle>Sample Data Required</AlertTitle>
+          <AlertDescription>
+            Please go back to the "Output Format" step and click "Test & Discover All" to load sample data first.
+            This will enable field selection for transformations.
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -308,13 +304,11 @@ const TransformationStep: React.FC<TransformationStepProps> = ({
   return (
     <div className="transformation-step space-y-5">
       <Alert className="bg-blue-50 border-blue-200 mb-4">
-        <div className="flex items-start gap-2">
-          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <AlertDescription className="flex-1">
-            Apply transformations to your data before output. Transform text, dates, numbers,
-            and create computed fields.
-          </AlertDescription>
-        </div>
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription>
+          Apply transformations to your data before output. Transform text, dates, numbers,
+          and create computed fields.
+        </AlertDescription>
       </Alert>
 
       <div className="transformations-container">

@@ -282,39 +282,35 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
     if (!data) {
       return (
         <Alert className="bg-yellow-50 border-yellow-200">
-          <div className="flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <AlertDescription>
-                No sample data available. Test this data source first to discover available fields.
-                {onTestDataSource && source && (
-                  <Button
-                    className="mt-2"
-                    size="sm"
-                    onClick={() => testDataSource(source)}
-                    disabled={testingSource === sourceId}
-                  >
-                    {testingSource === sourceId ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                        Testing...
-                      </>
-                    ) : sampleData[sourceId] ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Re-test
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4 mr-2" />
-                        Test & Discover
-                      </>
-                    )}
-                  </Button>
+          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertDescription>
+            No sample data available. Test this data source first to discover available fields.
+            {onTestDataSource && source && (
+              <Button
+                className="mt-2"
+                size="sm"
+                onClick={() => testDataSource(source)}
+                disabled={testingSource === sourceId}
+              >
+                {testingSource === sourceId ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : sampleData[sourceId] ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Re-test
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    Test & Discover
+                  </>
                 )}
-              </AlertDescription>
-            </div>
-          </div>
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
       );
     }

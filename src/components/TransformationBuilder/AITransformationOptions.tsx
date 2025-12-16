@@ -3,7 +3,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Alert, AlertDescription } from '../ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Switch } from '../ui/switch';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -428,18 +428,16 @@ const AITransformationOptions: React.FC<AITransformationOptionsProps> = ({
 
       {/* Usage Info */}
       <Alert className="bg-blue-50 border-blue-200">
-        <div className="flex gap-3">
-          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-blue-900">
-            <strong className="text-sm">AI Transformation Usage:</strong>
-            <ul className="mt-2 ml-4 text-sm space-y-1 list-disc">
-              <li>Each transformation calls Claude API (costs apply)</li>
-              <li>Use caching to reduce repeated API calls</li>
-              <li>Provide clear prompts and examples for best results</li>
-              <li>Test thoroughly before applying to production data</li>
-            </ul>
-          </div>
-        </div>
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertTitle className="text-blue-900">AI Transformation Usage</AlertTitle>
+        <AlertDescription className="text-blue-900">
+          <ul className="mt-2 ml-4 text-sm space-y-1 list-disc">
+            <li>Each transformation calls Claude API (costs apply)</li>
+            <li>Use caching to reduce repeated API calls</li>
+            <li>Provide clear prompts and examples for best results</li>
+            <li>Test thoroughly before applying to production data</li>
+          </ul>
+        </AlertDescription>
       </Alert>
     </div>
   );

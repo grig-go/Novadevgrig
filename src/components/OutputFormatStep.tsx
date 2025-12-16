@@ -1334,15 +1334,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                   ) : (
                     <div className="space-y-4">
                       <Alert className="bg-green-50 border-green-200">
-                        <div className="flex items-start gap-2">
-                          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1">
-                            <p className="font-semibold">Schema Imported</p>
-                            <p className="text-sm mt-1">
-                              Your OpenAPI/Swagger schema has been imported. You can now use it to define your output structure.
-                            </p>
-                          </div>
-                        </div>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertTitle>Schema Imported</AlertTitle>
+                        <AlertDescription>
+                          Your OpenAPI/Swagger schema has been imported. You can now use it to define your output structure.
+                        </AlertDescription>
                       </Alert>
 
                       <div className="flex gap-3">
@@ -1360,13 +1356,11 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
 
                       {/* TODO: Show field mapping interface for imported schema */}
                       <Alert className="bg-blue-50 border-blue-200">
-                        <div className="flex items-start gap-2">
-                          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                          <AlertDescription className="flex-1">
-                            Field mapping interface for imported schemas is coming soon.
-                            For now, you can use the Advanced Field Mapping mode to manually configure your output.
-                          </AlertDescription>
-                        </div>
+                        <Info className="h-4 w-4 text-blue-600" />
+                        <AlertDescription>
+                          Field mapping interface for imported schemas is coming soon.
+                          For now, you can use the Advanced Field Mapping mode to manually configure your output.
+                        </AlertDescription>
                       </Alert>
                     </div>
                   )}
@@ -1581,27 +1575,25 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
                             {isExpanded && mapping.enabled && (
                               <div className="space-y-4 mt-4 border-t pt-4">
                                 {!hasFields ? (
-                                  <Alert className="flex items-start gap-2">
-                                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                                    <div className="flex-1">
-                                      <AlertTitle>Field discovery needed</AlertTitle>
-                                      <AlertDescription>
-                                        Test this data source first to discover available fields.
-                                        <Button
-                                          className="mt-2"
-                                          size="sm"
-                                          onClick={() => testDataSource(source)}
-                                          disabled={testingSource === source.id}
-                                        >
-                                          {testingSource === source.id ? (
-                                            <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                          ) : (
-                                            <Search className="w-4 h-4 mr-2" />
-                                          )}
-                                          Test & Discover
-                                        </Button>
-                                      </AlertDescription>
-                                    </div>
+                                  <Alert>
+                                    <AlertCircle className="h-4 w-4" />
+                                    <AlertTitle>Field discovery needed</AlertTitle>
+                                    <AlertDescription>
+                                      Test this data source first to discover available fields.
+                                      <Button
+                                        className="mt-2"
+                                        size="sm"
+                                        onClick={() => testDataSource(source)}
+                                        disabled={testingSource === source.id}
+                                      >
+                                        {testingSource === source.id ? (
+                                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                        ) : (
+                                          <Search className="w-4 h-4 mr-2" />
+                                        )}
+                                        Test & Discover
+                                      </Button>
+                                    </AlertDescription>
                                   </Alert>
                                 ) : (
                                   <>
