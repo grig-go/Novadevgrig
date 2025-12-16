@@ -367,7 +367,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Sign out
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    // Clear React state immediately
+    setState(prev => ({
+      ...prev,
+      user: null,
+      session: null,
+      isAuthenticated: false,
+      isSuperuser: false,
+      isAdmin: false,
+      isPending: false,
+    }));
+    setChannelAccess([]);
+
+    // Always clear all Supabase localStorage keys to ensure clean logout
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    // Also call official signOut to clear server-side session
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Ignore errors - localStorage is already cleared
+    }
   }, []);
 
   // Refresh user data (e.g., after permission changes)

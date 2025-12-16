@@ -6,8 +6,9 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Loader2, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { Loader2, Eye, EyeOff, LogIn, AlertCircle, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../hooks/useTheme';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -21,6 +22,7 @@ interface LoginPageProps {
 
 export function LoginPage({ appName = 'Nova', onLoginSuccess }: LoginPageProps) {
   const { signIn, isLoading: authLoading } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -59,7 +61,22 @@ export function LoginPage({ appName = 'Nova', onLoginSuccess }: LoginPageProps) 
   const isLoading = authLoading || isSubmitting;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
+      {/* Theme toggle button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={toggleTheme}
+        className="absolute top-4 right-4"
+        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {theme === 'dark' ? (
+          <Sun className="h-5 w-5" />
+        ) : (
+          <Moon className="h-5 w-5" />
+        )}
+      </Button>
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
