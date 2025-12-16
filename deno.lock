@@ -58,7 +58,7 @@
         "npm:@radix-ui/react-toggle-group@^1.1.2",
         "npm:@radix-ui/react-toggle@^1.1.2",
         "npm:@radix-ui/react-tooltip@^1.1.8",
-        "npm:@supabase/supabase-js@^2.76.1",
+        "npm:@supabase/supabase-js@^2.78.0",
         "npm:@tailwindcss/postcss@^4.1.17",
         "npm:@tailwindcss/vite@^4.1.17",
         "npm:@types/d3@^7.4.3",
