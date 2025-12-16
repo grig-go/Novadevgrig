@@ -1174,16 +1174,12 @@ const OutputFormatStep: React.FC<OutputFormatStepProps> = ({
               {jsonConfigMode === 'advanced' && (
                 <div className="mt-4">
                   <Alert className="bg-blue-50 border-blue-200 mb-4">
-                    <div className="flex items-start gap-2">
-                      <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="font-semibold">Advanced Field Mapping</p>
-                        <p className="text-sm mt-1">
-                          Create a custom JSON structure by mapping fields from your data sources.
-                          Add transformations, conditions, and define exactly how your output should look.
-                        </p>
-                      </div>
-                    </div>
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertTitle>Advanced Field Mapping</AlertTitle>
+                    <AlertDescription>
+                      Create a custom JSON structure by mapping fields from your data sources.
+                      Add transformations, conditions, and define exactly how your output should look.
+                    </AlertDescription>
                   </Alert>
 
                   <JsonFieldMapper

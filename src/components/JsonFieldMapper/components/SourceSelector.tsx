@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card';
 import { Label } from '../../ui/label';
 import { Checkbox } from '../../ui/checkbox';
 import { Badge } from '../../ui/badge';
-import { Alert, AlertDescription } from '../../ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '../../ui/alert';
 import { RadioGroup, RadioGroupItem } from '../../ui/radio-group';
 import {
   ChevronDown,
@@ -406,13 +406,11 @@ export const SourceSelector: React.FC<SourceSelectorProps> = ({
   return (
     <div className="source-selector space-y-4">
       <Alert className="bg-blue-50 border-blue-200">
-        <div className="flex items-start gap-2">
-          <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <AlertDescription className="flex-1">
-            Select one or more data sources to map their fields to your output structure.
-            You can combine data from multiple sources into a single API response.
-          </AlertDescription>
-        </div>
+        <Info className="h-4 w-4 text-blue-600" />
+        <AlertDescription>
+          Select one or more data sources to map their fields to your output structure.
+          You can combine data from multiple sources into a single API response.
+        </AlertDescription>
       </Alert>
 
       {/* Source Selection */}

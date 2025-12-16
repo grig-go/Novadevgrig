@@ -4198,7 +4198,7 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
   return (
     <Dialog open={open} onOpenChange={(isOpen: boolean) => { if (!isOpen) handleClose(); }}>
       <DialogContent
-        className="max-w-90vw sm:max-w-90vw max-h-[90vh] overflow-y-auto"
+        className="max-w-[90vw] sm:max-w-[90vw] max-h-[90vh] overflow-y-auto"
         onInteractOutside={(e: Event) => {
           // Prevent closing on overlay click in create mode
           if (!editAgent) {
@@ -4263,6 +4263,14 @@ export function AgentWizard({ open, onClose, onSave, editAgent, availableFeeds =
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={handleClose}>
               Cancel
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              disabled={currentStepIndex === 0}
+            >
+              <ChevronLeft className="w-4 h-4 mr-2" />
+              Back
             </Button>
             {currentStepIndex < steps.length - 1 ? (
               <Button onClick={handleNext} disabled={!isStepValid() || isSavingDataSources}>
