@@ -23,8 +23,18 @@ echo -e "${GREEN}🚀 Starting Nova App (Production Mode - Local)${NC}"
 # Create logs directory
 mkdir -p "$LOG_DIR"
 
-# Ensure logrotate is installed
-if ! command -v logrotate &> /dev/null; then
+# Find logrotate binary (check common locations)
+LOGROTATE_BIN=""
+if command -v logrotate &> /dev/null; then
+    LOGROTATE_BIN="logrotate"
+elif [ -x /usr/sbin/logrotate ]; then
+    LOGROTATE_BIN="/usr/sbin/logrotate"
+elif [ -x /sbin/logrotate ]; then
+    LOGROTATE_BIN="/sbin/logrotate"
+fi
+
+# Install logrotate if not found
+if [ -z "$LOGROTATE_BIN" ]; then
     echo -e "${YELLOW}Installing logrotate...${NC}"
     if command -v apt-get &> /dev/null; then
         sudo apt-get update && sudo apt-get install -y logrotate
@@ -36,6 +46,12 @@ if ! command -v logrotate &> /dev/null; then
         brew install logrotate
     else
         echo -e "${RED}Could not install logrotate. Please install it manually.${NC}"
+    fi
+    # Re-check after install
+    if command -v logrotate &> /dev/null; then
+        LOGROTATE_BIN="logrotate"
+    elif [ -x /usr/sbin/logrotate ]; then
+        LOGROTATE_BIN="/usr/sbin/logrotate"
     fi
 fi
 
@@ -57,8 +73,8 @@ EOF
 
 # Run logrotate to check/rotate logs
 run_logrotate() {
-    if command -v logrotate &> /dev/null; then
-        logrotate -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
+    if [ -n "$LOGROTATE_BIN" ]; then
+        "$LOGROTATE_BIN" -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
     fi
 }
 
@@ -72,7 +88,7 @@ start_logrotate_watcher() {
     (
         while true; do
             sleep 60
-            logrotate -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
+            "$LOGROTATE_BIN" -s "$LOGROTATE_STATE" "$LOGROTATE_CONF" 2>/dev/null || true
         done
     ) &
     echo $! > "$LOG_DIR/logrotate.pid"
@@ -140,7 +156,7 @@ echo $! > "$LOG_DIR/serve.pid"
 echo -e "${GREEN}✓ Production server started (PID: $(cat $LOG_DIR/serve.pid))${NC}"
 
 # Start logrotate watcher
-if command -v logrotate &> /dev/null; then
+if [ -n "$LOGROTATE_BIN" ]; then
     echo -e "${YELLOW}Starting log rotation watcher...${NC}"
     start_logrotate_watcher
     echo -e "${GREEN}✓ Log rotation watcher started (PID: $(cat $LOG_DIR/logrotate.pid))${NC}"

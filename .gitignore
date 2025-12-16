@@ -63,7 +63,5 @@ docker/volumes/
 # typescript
 *.tsbuildinfo
 
-logs/file-server.pid
-logs/functions.pid
-logs/proxy.pid
-logs/vite.pid
+# Logs directory
+logs/

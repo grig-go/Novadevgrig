@@ -16,6 +16,9 @@ import { DashboardCardRenderer, getDashboardCardsData } from "./components/Dashb
 import { UsersGroupsPage } from "./components/UsersGroupsPage";
 import { AIConnectionsDashboard } from "./components/AIConnectionsDashboard";
 import { TopMenuBar } from "./components/TopMenuBar";
+import { ProtectedRoute } from "./components/auth";
+import { useAuth } from "./contexts/AuthContext";
+import { usePermissions } from "./hooks/usePermissions";
 import type { Race, CandidateProfile, Party } from "./types";
 import type { FinanceSecurityWithSnapshot } from "./types/finance";
 import type { SportsEntityWithOverrides, SportsView } from "./types/sports";
@@ -704,13 +707,7 @@ export default function App() {
         );
       case 'users-groups':
         return (
-          <UsersGroupsPage
-            users={usersData.users}
-            groups={usersData.groups}
-            roles={usersData.roles}
-            permissions={usersData.permissions}
-            lastUpdated={usersData.lastUpdated}
-          />
+          <UsersGroupsPage />
         );
       case 'ai-connections':
         return (
@@ -753,24 +750,26 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <TopMenuBar 
-        onNavigate={(view) => handleNavigate(view as AppView)} 
-        currentUser={usersData.users[0]} 
-        roles={usersData.roles}
-        permissions={usersData.permissions}
-        onUpdateUser={handleUpdateUser}
-        dashboardConfig={dashboardConfig}
-      />
-      <div className="container mx-auto px-4 py-8">
-        {currentView !== 'home' && currentView !== 'users-groups' && currentView !== 'feeds' && currentView !== 'ai-connections' && renderNavigation()}
-        {renderContent()}
+    <ProtectedRoute appName="Nova">
+      <div className="min-h-screen bg-background">
+        <TopMenuBar
+          onNavigate={(view) => handleNavigate(view as AppView)}
+          currentUser={usersData.users[0]}
+          roles={usersData.roles}
+          permissions={usersData.permissions}
+          onUpdateUser={handleUpdateUser}
+          dashboardConfig={dashboardConfig}
+        />
+        <div className="container mx-auto px-4 py-8">
+          {currentView !== 'home' && currentView !== 'users-groups' && currentView !== 'feeds' && currentView !== 'ai-connections' && renderNavigation()}
+          {renderContent()}
+        </div>
+        <DashboardConfigDialog
+          open={showDashboardConfig}
+          onOpenChange={setShowDashboardConfig}
+        />
+        <Toaster />
       </div>
-      <DashboardConfigDialog
-        open={showDashboardConfig}
-        onOpenChange={setShowDashboardConfig}
-      />
-      <Toaster />
-    </div>
+    </ProtectedRoute>
   );
 }
