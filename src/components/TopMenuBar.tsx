@@ -14,30 +14,28 @@ import {
   Bot,
   Rss,
   Tv,
+  Shield,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
-import { User, Role, Permission } from "../types/users";
 import { SharedTopMenuBar, BrandingConfig, MenuDropdown } from "./shared/SharedTopMenuBar";
 import { supabase } from "../utils/supabase/client";
+import { useAuth } from "../contexts/AuthContext";
+import { usePermissions } from "../hooks/usePermissions";
 
 interface TopMenuBarProps {
   onNavigate: (view: string) => void;
-  currentUser?: User;
-  roles?: Role[];
-  permissions?: Permission[];
-  onUpdateUser?: (updatedUser: Partial<User>) => void;
   dashboardConfig?: any[];
 }
 
-export function TopMenuBar({ 
-  onNavigate, 
-  currentUser, 
-  roles = [], 
-  permissions = [],
-  onUpdateUser,
+export function TopMenuBar({
+  onNavigate,
   dashboardConfig = []
 }: TopMenuBarProps) {
+  // Auth hooks
+  const { user: authUser, signOut } = useAuth();
+  const { isAdmin, isSuperuser, canReadPage, canWritePage } = usePermissions();
+
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof document !== 'undefined') {
       return document.documentElement.classList.contains('dark');
@@ -45,13 +43,18 @@ export function TopMenuBar({
     return false;
   });
   const [showAccountSettings, setShowAccountSettings] = useState(false);
-  const [apps, setApps] = useState<Array<{ 
-    id: string; 
-    name: string; 
-    app_url: string; 
+  const [apps, setApps] = useState<Array<{
+    id: string;
+    name: string;
+    app_url: string;
     sort_order: number;
     app_key: string;
   }>>([]);
+
+  // Handle sign out
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   // Fetch apps from backend
   useEffect(() => {
@@ -74,12 +77,6 @@ export function TopMenuBar({
     document.documentElement.classList.toggle('dark');
   };
 
-  const handleUpdateUser = (updatedUser: Partial<User>) => {
-    if (onUpdateUser) {
-      onUpdateUser(updatedUser);
-    }
-  };
-  
   // Helper function to check if a dashboard is visible
   const isDashboardVisible = (dashboardId: string) => {
     // If no config, show all dashboards (default behavior)
@@ -131,14 +128,14 @@ export function TopMenuBar({
     ],
   } : undefined;
 
-  // Tools Menu Configuration
+  // Tools Menu Configuration - filter based on permissions
   const toolsMenuItems = [
-    { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents'), dashboardId: 'agents' },
-    { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds'), dashboardId: null },
-    { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media'), dashboardId: 'media_library' },
-    { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels'), dashboardId: null },
+    { id: 'agents', label: 'Agents', icon: Bot, onClick: () => onNavigate('agents'), dashboardId: 'agents', pageKey: 'agents' },
+    { id: 'feeds', label: 'Data Feeds', icon: Rss, onClick: () => onNavigate('feeds'), dashboardId: null, pageKey: 'feeds' },
+    { id: 'media', label: 'Media Library', icon: ImageIcon, onClick: () => onNavigate('media'), dashboardId: 'media_library', pageKey: 'media' },
+    { id: 'channels', label: 'Channels', icon: Tv, onClick: () => onNavigate('channels'), dashboardId: null, pageKey: 'channels', adminOnly: true },
   ];
-  
+
   const toolsMenu: MenuDropdown = {
     id: 'tools',
     label: 'Tools',
@@ -146,16 +143,51 @@ export function TopMenuBar({
     sections: [
       {
         items: toolsMenuItems.filter(item => {
-          // Always show items that don't have a dashboard association
-          if (!item.dashboardId) {
-            return true;
+          // Check admin-only items
+          if (item.adminOnly && !isAdmin && !isSuperuser) {
+            return false;
           }
-          // Filter based on dashboard visibility
-          return isDashboardVisible(item.dashboardId);
+          // Check page permissions
+          if (item.pageKey && !canReadPage(item.pageKey)) {
+            return false;
+          }
+          // Check dashboard visibility
+          if (item.dashboardId && !isDashboardVisible(item.dashboardId)) {
+            return false;
+          }
+          return true;
         }),
       },
     ],
   };
+
+  // Build settings menu items based on permissions
+  const settingsMenuItems = [
+    {
+      id: 'account-settings',
+      label: 'Account Settings',
+      icon: UserIcon,
+      onClick: () => setShowAccountSettings(true)
+    },
+  ];
+
+  // Only show admin items if user is admin or superuser
+  if (isAdmin || isSuperuser) {
+    settingsMenuItems.push(
+      {
+        id: 'users-groups',
+        label: 'Users and Groups',
+        icon: Users,
+        onClick: () => onNavigate('users-groups')
+      },
+      {
+        id: 'ai-connections',
+        label: 'AI Connections',
+        icon: Zap,
+        onClick: () => onNavigate('ai-connections')
+      }
+    );
+  }
 
   // Settings Menu Configuration
   const settingsMenu: MenuDropdown = {
@@ -163,6 +195,18 @@ export function TopMenuBar({
     label: 'Settings',
     icon: Settings,
     sections: [
+      // Show user info if authenticated
+      ...(authUser ? [{
+        label: isSuperuser ? 'Superuser' : (isAdmin ? 'Administrator' : 'User'),
+        items: [
+          {
+            id: 'user-email',
+            label: authUser.email,
+            icon: isSuperuser ? Shield : UserIcon,
+            disabled: true
+          },
+        ],
+      }] : []),
       {
         label: 'Preferences',
         items: [
@@ -170,40 +214,16 @@ export function TopMenuBar({
         ],
       },
       {
-        items: [
-          { 
-            id: 'account-settings', 
-            label: 'Account Settings', 
-            icon: UserIcon,
-            onClick: () => setShowAccountSettings(true) 
-          },
-          { 
-            id: 'users-groups', 
-            label: 'Users and Groups', 
-            icon: Users,
-            onClick: () => onNavigate('users-groups') 
-          },
-          { 
-            id: 'dashboard-prefs', 
-            label: 'Dashboard Preferences', 
-            icon: Settings,
-            disabled: true 
-          },
-          { 
-            id: 'ai-connections', 
-            label: 'AI Connections', 
-            icon: Zap,
-            onClick: () => onNavigate('ai-connections') 
-          },
-        ],
+        items: settingsMenuItems,
       },
       {
         items: [
-          { 
-            id: 'sign-out', 
-            label: 'Sign Out', 
+          {
+            id: 'sign-out',
+            label: 'Sign Out',
             icon: LogOut,
-            variant: 'destructive' as const 
+            variant: 'destructive' as const,
+            onClick: handleSignOut
           },
         ],
       },
@@ -244,16 +264,10 @@ export function TopMenuBar({
       darkMode={darkMode}
       onDarkModeToggle={toggleDarkMode}
       accountSettingsDialog={
-        currentUser ? (
-          <AccountSettingsDialog
-            open={showAccountSettings}
-            onOpenChange={setShowAccountSettings}
-            currentUser={currentUser}
-            roles={roles}
-            permissions={permissions}
-            onSave={handleUpdateUser}
-          />
-        ) : undefined
+        <AccountSettingsDialog
+          open={showAccountSettings}
+          onOpenChange={setShowAccountSettings}
+        />
       }
     />
   );
