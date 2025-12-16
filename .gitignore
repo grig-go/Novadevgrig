@@ -45,6 +45,7 @@ src/supabase/functions/.env
 # Supabase
 .temp/
 .branches/
+src/supabase/.temp/cli-latest
 
 # Docker volumes
 volumes/
@@ -65,3 +66,4 @@ docker/volumes/
 
 # Logs directory
 logs/
+
