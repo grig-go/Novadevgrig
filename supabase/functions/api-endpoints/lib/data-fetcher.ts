@@ -170,7 +170,7 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
   // Add authentication headers
   if (isNovaElectionUrl) {
     // For transformed nova-election URLs, use Supabase anon key
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const anonKey = Deno.env.get("JWT_ANON_KEY") ?? "";
     if (anonKey) {
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
@@ -178,7 +178,7 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
     }
   } else if (isNovaWeatherUrl) {
     // For transformed nova-weather URLs, use Supabase anon key
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const anonKey = Deno.env.get("JWT_ANON_KEY") ?? "";
     if (anonKey) {
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
@@ -186,7 +186,7 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
     }
   } else if (isNovaFinanceUrl) {
     // For transformed nova-finance URLs, use Supabase anon key
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const anonKey = Deno.env.get("JWT_ANON_KEY") ?? "";
     if (anonKey) {
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
@@ -194,7 +194,7 @@ async function fetchFromAPI(source: DataSource, queryParams: Record<string, stri
     }
   } else if (isNovaSportsUrl) {
     // For transformed nova-sports URLs, use Supabase anon key
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const anonKey = Deno.env.get("JWT_ANON_KEY") ?? "";
     if (anonKey) {
       headers["Authorization"] = `Bearer ${anonKey}`;
       headers["apikey"] = anonKey;
