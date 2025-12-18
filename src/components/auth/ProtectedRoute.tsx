@@ -61,8 +61,8 @@ export function ProtectedRoute({
     return <SystemLocked appName={appName} />;
   }
 
-  // Show login if not authenticated
-  if (!isAuthenticated) {
+  // Show login if not authenticated (bypass in dev mode via VITE_ENV=DEV)
+  if (!isAuthenticated && (import.meta as any).env?.VITE_ENV !== 'DEV') {
     return <LoginPage appName={appName} />;
   }
 
